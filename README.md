@@ -58,7 +58,9 @@ security concerns before building.
 
 ### 1. `aur-sleuth` (Standalone Audit)
 
-This is the primary mode for in-depth security analysis. It clones the target AUR package and performs one or more audits based on the specified audit level. It does not build the package.
+This is the primary mode for in-depth security analysis. It clones the
+target AUR package and performs one or more audits based on the specified
+audit level. It does not build the package.
 
 **Usage:**
 ```bash
@@ -91,11 +93,14 @@ The audit process is subject to a session data limit (default: 100KB) to manage 
   aur-sleuth --audit hardcore yay
   ```
 
-After the audit completes, if it is deemed safe, the tool will print the path to the temporary directory. You can then inspect the files and, if you choose to proceed, run `makepkg` manually from within that directory.
+After the audit completes, if it is deemed safe, the tool will print the
+path to the temporary directory. You can then inspect the files and, if you
+choose to proceed, run `makepkg` manually from within that directory.
 
 ### 2. `aur-sleuth-makepkg-wrapper` (Wrapper Mode)
 
-This mode is for integrating the audit into your existing `makepkg` workflow, for example with a AUR helper like `yay`.
+This mode is for integrating the audit into your existing `makepkg`
+workflow, for example with a AUR helper like `yay`.
 
 **With `yay`:**
 

@@ -1,0 +1,46 @@
+#    -*- mode: org -*-
+
+
+Archived entries from file /home/mgalgs/src/makepkg-checkwrapper/TODO.org
+
+
+* DONE --audit=agentic
+:PROPERTIES:
+:ARCHIVE_TIME: 2025-08-03 Sun 01:58
+:ARCHIVE_FILE: ~/src/makepkg-checkwrapper/TODO.org
+:ARCHIVE_CATEGORY: TODO
+:ARCHIVE_TODO: DONE
+:END:
+
+#+begin_example
+  > Let's add a new flag --audit=agentic, and give the LLM some tool calls:
+
+  - listdir
+  - readfile
+
+  In this mode, we'll instruct the LLM that it's performing a security audit and tell it what tools it has available and ask it to go to town. It still needs to produce a report with
+  the xml tags for us to parse.
+
+  We should always give it the intial directory listing since presumably it's always going to want to at least do one directory listing at the top-level. Let's just provide that up
+  front.
+
+  This was inspired by the following session, where I'm trying to make sure that this tool would have actually caught the recent google-chrome-stable vulnerability.
+
+  ```
+  > ./aur-sleuth --audit=sources google-chrome-stable
+  Created temporary directory: /tmp/aur-sleuth-rmn9jrhe
+  Cloning https://aur.archlinux.org/google-chrome-stable.git...
+  Running makepkg --nobuild to download sources...
+
+  --- Auditing Source Files ---
+  [AUDIT] Checking source file: /tmp/aur-sleuth-rmn9jrhe/src/eula_text.html (53070 bytes)
+  ERROR: Could not audit source file /tmp/aur-sleuth-rmn9jrhe/src/eula_text.html: mismatched tag: line 24, column 2
+
+  AUDIT FAILED. See reasons above.
+  Cleaning up temporary directory: /tmp/aur-sleuth-rmn9jrhe
+  ```
+
+  Hopefully the agent would be smart enough to not even bother "auditing" the eula_text.html, but would instead hone in on the shell script, which contains the malicious curl command.
+
+  Standard agentic loop, keep it clean.
+#+end_example
