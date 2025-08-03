@@ -1,0 +1,436 @@
+#!/usr/bin/env -S uv --quiet run --script
+# -*- mode: python -*-
+# /// script
+# requires-python = "==3.12"
+# dependencies = [
+#     "openai",
+# ]
+# ///
+
+import os
+import sys
+import argparse
+import tempfile
+import shutil
+import subprocess
+from pathlib import Path
+import xml.etree.ElementTree as ET
+from openai import OpenAI, APIError
+
+# Default configuration
+DEFAULT_MODEL = "qwen/qwen3-30b-a3b-instruct-2507"
+MODEL = os.environ.get("OPENAI_MODEL", os.environ.get("MODEL", DEFAULT_MODEL))
+SESSION_AUDIT_LIMIT_BYTES = 100 * 1024  # 100KB
+
+
+class AuditSession:
+    """Tracks the state of an audit session."""
+
+    def __init__(self, limit_bytes):
+        self.limit_bytes = limit_bytes
+        self.bytes_processed = 0
+        self.limit_reached = False
+
+    def add_bytes(self, num_bytes):
+        """Adds bytes to the processed total and checks if the limit is reached."""
+        if self.limit_reached:
+            return
+        self.bytes_processed += num_bytes
+        if self.bytes_processed >= self.limit_bytes:
+            self.limit_reached = True
+            print(
+                f"WARN: Session audit limit of {self.limit_bytes} bytes reached.",
+                file=sys.stderr,
+            )
+
+
+def get_api_key():
+    """Get API key from OPENAI_API_KEY environment variable"""
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        print("ERROR: OPENAI_API_KEY environment variable not set", file=sys.stderr)
+        sys.exit(1)
+    return api_key
+
+
+def get_base_url():
+    """Get API endpoint from OPENAI_BASE_URL, with fallback to OpenRouter"""
+    base_url = os.environ.get("OPENAI_BASE_URL")
+    if base_url:
+        if not base_url.endswith("/v1"):
+            base_url += "/v1"
+        return base_url
+    print("WARN: OPENAI_BASE_URL not set, using OpenRouter as fallback")
+    return "https://openrouter.ai/api/v1"
+
+
+def audit_pkgbuild(pkgbuild_path, client, makepkg_args=None, standalone=False):
+    """Audits a PKGBUILD file with an LLM."""
+    LOG_FILE = "/tmp/aur-sleuth-debug.log"
+    if makepkg_args is None:
+        makepkg_args = ["/usr/bin/makepkg"] + sys.argv[1:]
+    try:
+        with open(pkgbuild_path, "r") as f:
+            pkgbuild_content = f.read()
+    except FileNotFoundError:
+        print(f"ERROR: PKGBUILD not found at: {pkgbuild_path}", file=sys.stderr)
+        return "UNSAFE"
+    except Exception as e:
+        print(f"ERROR: Failed to read PKGBUILD: {e}", file=sys.stderr)
+        return "UNSAFE"
+
+    prompt = f"""You are a security expert tasked with auditing a PKGBUILD file from the Arch User Repository (AUR).
+This file is used to build packages on Arch Linux systems. Recently, there have been supply chain attacks where
+malicious code was inserted into AUR packages in subtle ways.
+
+Please carefully analyze the following PKGBUILD file and identify any potential security issues, including but not limited to:
+1. Suspicious network requests or downloads from non-standard sources
+2. Obfuscated code or unusual encoding
+3. Unexpected file operations or system modifications
+4. Use of potentially dangerous commands like eval, base64, curl, wget in unexpected contexts
+5. Anything that deviates from standard packaging practices
+
+Respond with a security assessment in the following XML format:
+<security_assessment>
+<decision>SAFE or UNSAFE</decision>
+<reason>
+[Your detailed analysis here. If UNSAFE, explain exactly what is problematic and why.]
+</reason>
+</security_assessment>
+
+PKGBUILD CONTENT:
+```
+{pkgbuild_content}
+```"""
+    print(f"Auditing PKGBUILD with {MODEL}...")
+
+    with open(LOG_FILE, "a") as log_f:
+        log_f.write(
+            "--- LLM REQUEST ---\
+"
+        )
+        log_f.write(prompt)
+        log_f.write("\n\n")
+
+    try:
+        response = client.chat.completions.create(
+            model=MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.0,
+            top_p=0.1,
+        )
+        assessment = response.choices[0].message.content
+        with open(LOG_FILE, "a") as log_f:
+            log_f.write(
+                "--- LLM RESPONSE ---\
+"
+            )
+            log_f.write(assessment)
+            log_f.write("\n\n")
+
+        root = ET.fromstring(assessment)
+        decision = root.find("decision").text.strip().upper()
+        reason = root.find("reason").text.strip()
+
+        print("\n--- Security Assessment ---")
+        print(f"Decision: {decision}")
+        print(f"Reason: {reason}")
+        print("---------------------------\n")
+
+        if standalone:
+            return decision
+
+        if decision == "UNSAFE":
+            print("AUDIT FAILED: Potential security issues detected.", file=sys.stderr)
+            sys.exit(1)
+        elif decision == "SAFE":
+            print("AUDIT PASSED: No obvious security issues detected.")
+            print("Proceeding with makepkg execution...")
+            os.execv("/usr/bin/makepkg", makepkg_args)
+        else:
+            print(
+                f"ERROR: Unknown decision '{decision}' in LLM response.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+    except (APIError, ET.ParseError, AttributeError) as e:
+        print(f"ERROR: LLM response processing failed: {e}", file=sys.stderr)
+        if standalone:
+            return "UNSAFE"
+        sys.exit(1)
+    return "UNSAFE"  # Should not be reached
+
+
+def do_pkgbuild_audit(tmpdir, client, session):
+    print("\n--- Auditing PKGBUILD ---")
+    pkgbuild_path = Path(tmpdir) / "PKGBUILD"
+    session.add_bytes(pkgbuild_path.stat().st_size)
+    return audit_pkgbuild(pkgbuild_path, client, standalone=True) == "SAFE"
+
+
+def do_sources_audit(tmpdir, client, session):
+    print("\n--- Auditing Source Files ---")
+    src_dir = Path(tmpdir) / "src"
+    if not src_dir.exists():
+        print("No 'src' directory found, skipping source audit.")
+        return True
+
+    for root, _, files in os.walk(src_dir):
+        if session.limit_reached:
+            break
+        for file in files:
+            if session.limit_reached:
+                break
+            file_path = Path(root) / file
+            if (
+                "text"
+                in subprocess.run(
+                    ["file", file_path], capture_output=True, text=True
+                ).stdout
+            ):
+                if not audit_source_file(file_path, client, session):
+                    return False
+    print("--- Source File Audit Complete ---")
+    return True
+
+
+def do_changelog_audit(tmpdir, client, session):
+    print("\n--- Auditing Git Commit History ---")
+    log_process = subprocess.Popen(
+        ["git", "log", "-p", "--pretty=fuller"],
+        stdout=subprocess.PIPE,
+        text=True,
+        cwd=tmpdir,
+    )
+    current_commit_diff = ""
+    for line in iter(log_process.stdout.readline, ""):
+        if session.limit_reached:
+            break
+        session.add_bytes(len(line.encode("utf-8")))
+        if line.startswith("commit ") and current_commit_diff:
+            if not audit_git_commit(current_commit_diff, client):
+                return False
+            current_commit_diff = ""
+        current_commit_diff += line
+    if current_commit_diff and not session.limit_reached:
+        if not audit_git_commit(current_commit_diff, client):
+            return False
+    log_process.stdout.close()
+    log_process.wait()
+    print("--- Git Commit History Audit Complete ---")
+    return True
+
+
+def audit_source_file(file_path, client, session):
+    """Audits a source file with an LLM."""
+    if session.limit_reached:
+        return True
+
+    try:
+        file_size = file_path.stat().st_size
+        session.add_bytes(file_size)
+        if session.limit_reached:
+            return True
+
+        print(f"[AUDIT] Checking source file: {file_path} ({file_size} bytes)")
+        with open(file_path, "r", errors="ignore") as f:
+            content = f.read()
+
+        prompt = f"""You are a security expert analyzing a source file from an AUR package.
+The file path is {file_path}. Please identify any potential security issues, such as:
+- Suspicious network calls (curl, wget)
+- Obfuscated or malicious code
+- Unexpected file system operations
+- Backdoors, remote code execution vulnerabilities, or data exfiltration.
+
+Respond with a security assessment in the following XML format:
+<security_assessment>
+<decision>SAFE or UNSAFE</decision>
+<reason>
+[Your detailed analysis here. If UNSAFE, explain exactly what is problematic and why.]
+</reason>
+</security_assessment>
+
+FILE CONTENT:
+```
+{content}
+```"""
+
+        response = client.chat.completions.create(
+            model=MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.0,
+            top_p=0.1,
+        )
+        assessment = response.choices[0].message.content
+        root = ET.fromstring(assessment)
+        decision = root.find("decision").text.strip().upper()
+        if decision == "UNSAFE":
+            reason = root.find("reason").text.strip()
+            print(f"AUDIT FAILED for {file_path}: {reason}", file=sys.stderr)
+            return False
+        return True
+
+    except (APIError, ET.ParseError, AttributeError, OSError) as e:
+        print(f"ERROR: Could not audit source file {file_path}: {e}", file=sys.stderr)
+        return False
+
+
+def audit_git_commit(commit_diff, client):
+    """Audits a git commit diff with an LLM."""
+    print(
+        f"[AUDIT] Checking git commit diff (size: {len(commit_diff.encode('utf-8'))} bytes)..."
+    )
+
+    prompt = f"""You are a security expert analyzing a git commit diff from an AUR package.
+Please identify any potential security issues, such as:
+- Suspicious changes to download URLs or checksums.
+- Introduction of malicious or obfuscated code.
+- Addition of backdoors or vulnerabilities.
+- Any changes that seem out of place for the package's purpose.
+
+Respond with a security assessment in the following XML format:
+<security_assessment>
+<decision>SAFE or UNSAFE</decision>
+<reason>
+[Your detailed analysis here. If UNSAFE, explain exactly what is problematic and why.]
+</reason>
+</security_assessment>
+
+GIT DIFF:
+```
+{commit_diff}
+```"""
+
+    try:
+        response = client.chat.completions.create(
+            model=MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.0,
+            top_p=0.1,
+        )
+        assessment = response.choices[0].message.content
+        root = ET.fromstring(assessment)
+        decision = root.find("decision").text.strip().upper()
+        if decision == "UNSAFE":
+            reason = root.find("reason").text.strip()
+            print(f"AUDIT FAILED for git commit: {reason}", file=sys.stderr)
+            return False
+        return True
+    except (APIError, ET.ParseError, AttributeError) as e:
+        print(f"ERROR: Could not audit git commit: {e}", file=sys.stderr)
+        return False
+
+
+def run_aur_sleuth_audit(package_name, audit_levels, client):
+    """Runs the specified security audits for aur-sleuth."""
+    tmpdir = tempfile.mkdtemp(prefix="aur-sleuth-")
+    print(f"Created temporary directory: {tmpdir}")
+    status = "error"
+    original_cwd = os.getcwd()
+    try:
+        print(f"Cloning https://aur.archlinux.org/{package_name}.git...")
+        subprocess.run(
+            ["git", "clone", f"https://aur.archlinux.org/{package_name}.git", tmpdir],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        os.chdir(tmpdir)
+
+        session = AuditSession(limit_bytes=SESSION_AUDIT_LIMIT_BYTES)
+
+        if "sources" in audit_levels or "hardcore" in audit_levels:
+            print("Running makepkg --nobuild to download sources...")
+            subprocess.run(
+                ["makepkg", "--nobuild"], check=True, capture_output=True, text=True
+            )
+
+        audit_ok = True
+        if "PKGBUILD" in audit_levels or "hardcore" in audit_levels:
+            if not do_pkgbuild_audit(tmpdir, client, session):
+                audit_ok = False
+        if audit_ok and ("changelog" in audit_levels or "hardcore" in audit_levels):
+            if not do_changelog_audit(tmpdir, client, session):
+                audit_ok = False
+        if audit_ok and ("sources" in audit_levels or "hardcore" in audit_levels):
+            if not do_sources_audit(tmpdir, client, session):
+                audit_ok = False
+
+        if audit_ok:
+            print("\nAudit passed. You may inspect the files and run makepkg manually.")
+            print(f"Temporary directory: {tmpdir}")
+            status = "success"
+        else:
+            print("\nAUDIT FAILED. See reasons above.", file=sys.stderr)
+
+    except (subprocess.CalledProcessError, Exception) as e:
+        print(f"ERROR: An unexpected error occurred: {e}", file=sys.stderr)
+    finally:
+        os.chdir(original_cwd)
+        if status == "error" and os.path.exists(tmpdir):
+            print(f"Cleaning up temporary directory: {tmpdir}")
+            shutil.rmtree(tmpdir)
+
+
+if __name__ == "__main__":
+    invocation_name = Path(sys.argv[0]).name
+    base_url = get_base_url()
+    default_headers = {}
+    if "openrouter.ai" in base_url:
+        default_headers = {
+            "HTTP-Referer": "https://github.com/mgalgs/aur-sleuth",
+            "X-Title": "aur-sleuth",
+        }
+
+    client = OpenAI(
+        api_key=get_api_key(), base_url=base_url, default_headers=default_headers
+    )
+
+    if invocation_name == "aur-sleuth":
+        parser = argparse.ArgumentParser(
+            description="Run a security audit on an AUR package."
+        )
+        parser.add_argument("package_name", help="Name of the AUR package.")
+        parser.add_argument(
+            "--audit",
+            nargs="+",
+            default=["PKGBUILD"],
+            choices=["PKGBUILD", "changelog", "sources", "hardcore"],
+            help="Specify audit level(s).",
+        )
+        args = parser.parse_args()
+        run_aur_sleuth_audit(args.package_name, args.audit, client)
+    elif invocation_name == "aur-sleuth-makepkg-wrapper":
+        parser = argparse.ArgumentParser(
+            description="Wrapper for makepkg to audit PKGBUILD."
+        )
+        parser.add_argument(
+            "-p",
+            "--pkgbuild",
+            dest="pkgbuild_path",
+            default="PKGBUILD",
+            help="Path to PKGBUILD.",
+        )
+        args, makepkg_args = parser.parse_known_args()
+
+        # Arguments that indicate a non-build action where we should skip the audit
+        skip_audit_flags = ["--verifysource", "--nobuild", "--geninteg", "-o", "-g"]
+
+        # Check if any of the skip flags are in the arguments passed to the wrapper
+        if any(flag in makepkg_args for flag in skip_audit_flags):
+            # If so, just execute makepkg without an audit
+            os.execv("/usr/bin/makepkg", ["/usr/bin/makepkg"] + makepkg_args)
+        else:
+            # Otherwise, proceed with the audit
+            pkgbuild_path = Path(args.pkgbuild_path).resolve()
+            # Re-add the main makepkg command to the arguments list
+            makepkg_args.insert(0, "/usr/bin/makepkg")
+            audit_pkgbuild(pkgbuild_path, client, makepkg_args)
+    else:
+        print(
+            f"ERROR: Unknown invocation name '{invocation_name}'. Please invoke as 'aur-sleuth' or 'aur-sleuth-makepkg-wrapper'.",
+            file=sys.stderr,
+        )
+        sys.exit(1)

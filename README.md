@@ -1,93 +1,157 @@
-# makepkg-checkwrapper
+# aur-sleuth
 
-A security wrapper for `makepkg` that audits PKGBUILD files using an LLM before building packages.
+An LLM-powered security auditing tool for Arch User Repository (AUR) packages.
+
+`aur-sleuth` can be invoked in two ways:
+
+1. As `aur-sleuth`: A standalone tool for in-depth security analysis of an AUR package.
+2. As `aur-sleuth-makepkg-wrapper`: A wrapper for `makepkg` that
+   automatically audits `PKGBUILD` files before building. This enables
+   integration with `yay` via the `--makepkg` option (see [Usage](#Usage)).
 
 ## Purpose
 
 Recently, there have been supply chain security breaches where malicious
 code was inserted into AUR packages in subtle ways. This tool helps detect
-such issues by using an LLM to analyze PKGBUILD files and install scripts
-for potential security concerns before building.
+such issues by using an LLM to analyze AUR packages for potential
+security concerns before building.
 
 ## Installation
 
 1. Clone this repository:
    ```bash
-   git clone https://github.com/mgalgs/makepkg-checkwrapper.git
-   cd makepkg-checkwrapper
+   git clone https://github.com/mgalgs/aur-sleuth.git
+   cd aur-sleuth
    ```
 
 2. Install dependencies:
    ```bash
    # For Arch Linux
-   sudo pacman -S curl jq
+   sudo pacman -S uv
 
-   # For other distributions, install equivalent packages
+   # For other distributions:
+   # Install uv from https://github.com/astral-sh/uv
    ```
 
-3. Install the script:
+3. Install the script.
+
+   **System-wide installation (requires sudo):**
    ```bash
-   sudo install -m755 makepkg-checkwrapper /usr/local/bin/makepkg-checkwrapper
+   sudo make install
    ```
+   This will install `aur-sleuth` and a symlink `aur-sleuth-makepkg-wrapper` to `/usr/local/bin`.
+
+   **User-local installation (no sudo required):**
+   ```bash
+   make install PREFIX=$HOME/.local
+   ```
+   This will install the scripts to `$HOME/.local/bin`. Make sure this directory is in your `PATH`.
 
 4. Set up your API key:
    ```bash
-   # For OpenRouter (default)
-   export OPENROUTER_API_KEY="your-openrouter-api-key"
-
-   # For OpenAI
-   export OPENAI_API_KEY="your-openai-api-key"
+   export OPENAI_API_KEY="your-api-key"
+   export OPENAI_BASE_URL="your-base-url"
+   export OPENAI_MODEL="your-model"
    ```
 
 ## Usage
 
-### With yay
+### 1. `aur-sleuth` (Standalone Audit)
 
-Configure yay to use the wrapper:
+This is the primary mode for in-depth security analysis. It clones the target AUR package and performs one or more audits based on the specified audit level. It does not build the package.
 
+**Usage:**
 ```bash
-yay --makepkg /usr/local/bin/makepkg-checkwrapper --save
+aur-sleuth [options] <package-name>
 ```
 
-Then use yay normally:
+**Options:**
+`--audit <level>`: Specify the audit level. You can provide one or more levels.
+- `PKGBUILD` (default): Audits only the `PKGBUILD` file.
+- `changelog`: Audits the recent git commit history.
+- `sources`: Downloads and audits all text-based source files.
+- `hardcore`: Performs all audits (`PKGBUILD`, `changelog`, `sources`).
+
+The audit process is subject to a session data limit (default: 100KB) to manage API usage.
+
+**Examples:**
+
+- **Default audit (PKGBUILD):**
+  ```bash
+  aur-sleuth google-chrome-stable
+  ```
+
+- **Audit the changelog and sources:**
+  ```bash
+  aur-sleuth --audit changelog sources nvim-packer-update
+  ```
+
+- **Run the most comprehensive audit:**
+  ```bash
+  aur-sleuth --audit hardcore yay
+  ```
+
+After the audit completes, if it is deemed safe, the tool will print the path to the temporary directory. You can then inspect the files and, if you choose to proceed, run `makepkg` manually from within that directory.
+
+### 2. `aur-sleuth-makepkg-wrapper` (Wrapper Mode)
+
+This mode is for integrating the audit into your existing `makepkg` workflow, for example with a AUR helper like `yay`.
+
+**With `yay`:**
+
+Configure `yay` to use the wrapper.
+
+```bash
+yay --makepkg /usr/local/bin/aur-sleuth-makepkg-wrapper --save
+```
+
+Then use `yay` as you normally would:
 
 ```bash
 yay -S package-name
 ```
 
-### Direct usage
+**Direct Usage:**
 
-You can also use the wrapper directly:
+You can also invoke the wrapper directly, passing `makepkg` arguments to it:
 
 ```bash
-makepkg-checkwrapper -si
+# In a directory with a PKGBUILD
+aur-sleuth-makepkg-wrapper -si
 ```
 
 ## Configuration
 
-The wrapper can be configured with environment variables:
+The tool can be configured with environment variables:
 
-- `LLM_PROVIDER`: LLM provider to use (default: "openrouter")
-- `MODEL`: Model to use (default: "qwen/qwen3-30b-a3b-instruct-2507")
-- `OPENROUTER_API_KEY`: API key for OpenRouter
-- `OPENAI_API_KEY`: API key for OpenAI
+- `OPENAI_API_KEY`: Your API key. This is required.
+- `OPENAI_BASE_URL`: The API endpoint. Defaults to OpenRouter if not set.
+- `MODEL`: The model to use. Defaults to `qwen/qwen3-30b-a3b-instruct-2507`.
 
-Example:
+**Example:**
 
+To use OpenAI's official API:
 ```bash
-export LLM_PROVIDER="openai"
+export OPENAI_API_KEY="your-openai-api-key"
+export OPENAI_BASE_URL="https://api.openai.com/v1"
 export MODEL="gpt-4-turbo"
-export OPENAI_API_KEY="your-api-key"
+
 yay -S package-name
+```
+
+To use a custom OpenRouter model:
+```bash
+export OPENAI_API_KEY="your-openrouter-key" # OpenRouter uses the OPENAI_API_KEY variable
+export MODEL="anthropic/claude-3-haiku"
+
+aur-sleuth some-package
 ```
 
 ## How it works
 
-1. When invoked, the script first identifies the PKGBUILD file to be used
-2. It reads the PKGBUILD content and sends it to the configured LLM
-3. The LLM analyzes the PKGBUILD for potential security issues
-4. If issues are detected, the script will warn you and abort
-5. If no issues are found, it proceeds with the normal makepkg execution
+The script checks how it was invoked (`sys.argv[0]`).
+1.  **`aur-sleuth`:** It runs the in-depth audit on the specified package.
+2.  **`aur-sleuth-makepkg-wrapper`:** It acts as a wrapper around `makepkg`, auditing the `PKGBUILD` in the current directory before building.
 
 ## Security Considerations
 
