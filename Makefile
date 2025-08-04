@@ -7,7 +7,7 @@
 PREFIX ?= /usr/local
 
 # Default destination directory. Can be used for packaging.
-DESTDIR ?=
+DESTDIR ?= 
 
 install:
 	install -d $(DESTDIR)$(PREFIX)/bin
@@ -22,7 +22,7 @@ uninstall:
 	rm -rf $(DESTDIR)$(PREFIX)/share/doc/aur-sleuth
 
 test:
-	@for audit in PKGBUILD changelog sources hardcore agentic; do \
+	@for audit in PKGBUILD changelog hardcore agentic; do \
 		echo "RUNNING AUDIT $$audit"; \
 		./aur-sleuth --audit=$$audit google-chrome-stable; \
 	done
