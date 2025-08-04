@@ -21,4 +21,10 @@ uninstall:
 	rm -f $(DESTDIR)$(PREFIX)/bin/aur-sleuth-makepkg-wrapper
 	rm -rf $(DESTDIR)$(PREFIX)/share/doc/aur-sleuth
 
-.PHONY: install uninstall
+test:
+	@for audit in PKGBUILD changelog sources hardcore agentic; do \
+		echo "RUNNING AUDIT $$audit"; \
+		./aur-sleuth --audit=$$audit google-chrome-stable; \
+	done
+
+.PHONY: install uninstall test
