@@ -4,27 +4,37 @@
 # requires-python = "==3.12"
 # dependencies = [
 #     "openai",
+#     "rich",
 # ]
 # ///
 
-import os
-import sys
+from collections import defaultdict
+from enum import Enum
+from pathlib import Path
+from typing import Dict, Iterable, List, Tuple, Optional, NamedTuple
+from urllib.parse import urlparse
+import abc
 import argparse
-import tempfile
+import logging
+import os
+import pprint
 import shutil
 import subprocess
-from pathlib import Path
-import logging
+import sys
+import tempfile
 import xml.etree.ElementTree as ET
-from openai import OpenAI, APIError
 
-# Default configuration
-DEFAULT_MODEL = "qwen/qwen3-30b-a3b-instruct-2507"
-MODEL = os.environ.get("OPENAI_MODEL", os.environ.get("MODEL", DEFAULT_MODEL))
-SESSION_AUDIT_LIMIT_BYTES = 100 * 1024  # 100KB
-LOG_FILE = "/tmp/aur-sleuth-debug.log"
+from openai import OpenAI, APIError
+from rich import box
+from rich.console import Console, Group
+from rich.live import Live
+from rich.panel import Panel
+from rich.spinner import Spinner
+from rich.text import Text
+
 
 # --- Logging Setup ---
+LOG_FILE = "/tmp/aur-sleuth-debug.log"
 # Clear the log file at the start of a run
 if os.path.exists(LOG_FILE):
     os.remove(LOG_FILE)
@@ -39,55 +49,369 @@ logger = logging.getLogger("aur-sleuth")
 # --- End Logging Setup ---
 
 
-class AuditSession:
-    """Tracks the state of an audit session."""
+class Report:
+    def __init__(self, report_path: Path):
+        self.report_path = report_path
 
-    def __init__(self, limit_bytes, client):
-        self.limit_bytes = limit_bytes
-        self.bytes_processed = 0
-        self.limit_reached = False
+    def __enter__(self):
+        self.file = open(self.report_path, "w", encoding="utf-8")
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self.file:
+            self.file.close()
+
+    def write(self, text: str, end: str = "\n", stdout=False):
+        """Writes text to the report file."""
+        if not hasattr(self, "file"):
+            raise RuntimeError("Report file is not open. Use __entry__ to open it.")
+        self.file.write(text + end)
+        self.file.flush()
+        if stdout:
+            print(text, end=end)
+
+
+class SafeStatus(Enum):
+    SAFE = 1
+    UNSAFE = 2
+    SKIPPED = 3
+
+    def get_color(self):
+        return {
+            self.SAFE: "green",
+            self.UNSAFE: "red",
+            self.SKIPPED: "yellow",
+        }[self]
+
+    def get_icon(self):
+        return {
+            self.SAFE: "✔",
+            self.UNSAFE: "✖",
+            self.SKIPPED: "!",
+        }[self]
+
+
+class AuditResult(NamedTuple):
+    file_path: Optional[Path]
+    status: SafeStatus
+    summary: str
+    details: str = ""
+
+    def __str__(self):
+        deets = f" / {self.details}" if self.details else ""
+        fpath = f"{self.file_path}: " if self.file_path else ""
+        return f"{fpath}[{self.status.name}] {self.summary}{deets}"
+
+    def report_text(self, use_color=True) -> str:
+        content = f"## {self.file_path or self.summary}\n\n"
+
+        if use_color:
+            color = self.status.get_color()
+            content += f"Status: [{color}] {self.status.name}[/{color}]\n\n"
+        else:
+            content += f"Status: {self.status.name}\n\n"
+
+        content += f"Summary: {self.summary}\n\n"
+
+        if self.details:
+            content += f"Details:\n\n{self.details}\n\n"
+
+        return content
+
+
+def partition_results_by_status(
+    results: List[AuditResult],
+) -> Dict[SafeStatus, List[AuditResult]]:
+    results_by_status: dict[SafeStatus, List[AuditResult]] = defaultdict(list)
+
+    for result in results or []:
+        results_by_status[result.status].append(result)
+
+    return results_by_status
+
+
+def generate_report_text(
+    report_path: Path,
+    results_by_status: Dict[SafeStatus, List[AuditResult]],
+    use_color: bool = False,
+) -> str:
+    content = ""
+    nunsafe = len(results_by_status[SafeStatus.UNSAFE])
+    if nunsafe > 0:
+        content += f"# Issues ({nunsafe} total)\n\n"
+        for issue in results_by_status[SafeStatus.UNSAFE]:
+            content += issue.report_text(use_color=use_color) + "---\n"
+
+    nskips = len(results_by_status[SafeStatus.SKIPPED])
+    if nskips > 0:
+        skipped_files = ", ".join(
+            (r.file_path.name if r.file_path else "?")
+            for r in results_by_status[SafeStatus.SKIPPED]
+        )
+        content += f"\n(Skipped {nskips} file{'' if nskips == 1 else 's'}: {skipped_files})\n"
+
+    content += f"\nFull audit report can be found in {report_path}"
+
+    return content
+
+
+# --- TUI Setup ---
+class ConsoleUI(abc.ABC):
+    """Base class for terminal user interfaces."""
+
+    def __init__(self, report: Report):
+        raise NotImplementedError("Subclasses must implement __init__.")
+
+    def update_status(self, text):
+        """Updates the status text."""
+        raise NotImplementedError("Subclasses must implement update_status.")
+
+    def finalize_step(self, message, success=True, status: Optional[SafeStatus] = None):
+        """Finalizes a step with a message."""
+        raise NotImplementedError("Subclasses must implement finalize_step.")
+
+    def show_summary(
+        self, report_path: Path, audit_results: Optional[List[AuditResult]] = None
+    ):
+        """Displays the final audit summary."""
+        raise NotImplementedError("Subclasses must implement show_summary.")
+
+    @property
+    def has_color(self):
+        return False
+
+
+class TUIPlain(ConsoleUI):
+    def __init__(self, report: Report):
+        self.report = report
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        pass
+
+    def update_status(self, text):
+        self.report.write(text, stdout=True)
+
+    def finalize_step(self, message, success=True, status: Optional[SafeStatus] = None):
+        icon = status.get_icon()
+        self.report.write(f"{icon} {message}", stdout=True)
+
+    def show_summary(
+        self, report_path: Path, audit_results: Optional[List[AuditResult]] = None
+    ):
+        results_by_status = partition_results_by_status(audit_results or [])
+
+        overall_status = (
+            SafeStatus.UNSAFE
+            if len(results_by_status[SafeStatus.UNSAFE]) > 0
+            else SafeStatus.SAFE
+        )
+
+        content = generate_report_text(report_path, results_by_status, use_color=False)
+
+        recommended_action = (
+            " -- DO NOT INSTALL!" if overall_status == SafeStatus.UNSAFE else ""
+        )
+        self.report.write(
+            f"Audit complete! Result: {overall_status.name}{recommended_action}",
+            stdout=True,
+        )
+        self.report.write(content, stdout=True)
+
+
+class TUI(ConsoleUI):
+    """Handles the terminal user interface."""
+
+    def __init__(self, report: Report):
+        self.console = Console()
+        self.live = None
+        self.spinner = Spinner("dots", text="")
+        self.report = report
+        self.history = []
+
+    def __enter__(self):
+        self.live = Live(
+            self._get_renderable(),
+            console=self.console,
+            screen=False,
+            auto_refresh=True,
+        )
+        self.live.start()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self.live:
+            self.live.stop()
+            # Clear the line where the spinner was
+            self.console.print("\r", end="")
+
+    @property
+    def has_color(self):
+        return True
+
+    def _get_renderable(self):
+        """Constructs the renderable to be displayed in the Live object."""
+        renderables = []
+        if self.history:
+            history_text = Text.from_markup("\n".join(self.history))
+            history_panel = Panel(history_text, box=box.ROUNDED, title="Audit Log")
+            renderables.append(history_panel)
+
+        renderables.append(self.spinner)
+        return Group(*renderables)
+
+    def update_status(self, text):
+        """Updates the status text within the live display."""
+        if not self.live or not self.live.is_started:
+            raise RuntimeError("TUI is not started. Call __enter__() first.")
+        self.report.write(text)
+        self.spinner.text = Text(f" {text}", style="bold blue")
+        self.live.update(self._get_renderable())
+
+    def finalize_step(self, message, success=True, status: Optional[SafeStatus] = None):
+        """Adds a message to the history and updates the display."""
+        status = status or SafeStatus.SAFE
+        icon = status.get_icon()
+        color = status.get_color()
+
+        self.history.append(f"[{color}]{icon}[/{color}] {message}")
+        self.report.write(message)
+        # Update the live display with the new history
+        self.live.update(self._get_renderable())
+
+    def show_summary(
+        self, report_path: Path, audit_results: Optional[List[AuditResult]] = None
+    ):
+        """Displays the final audit summary in a box."""
+        if self.live and self.live.is_started:
+            # Trash the spinner
+            self.spinner = Text("")
+            self.live.update(self._get_renderable())
+            self.live.stop()
+
+        results_by_status = partition_results_by_status(audit_results or [])
+        overall_status = (
+            SafeStatus.UNSAFE
+            if len(results_by_status[SafeStatus.UNSAFE]) > 0
+            else SafeStatus.SAFE
+        )
+        result_color = overall_status.get_color()
+
+        recommended_action = (
+            " -- DO NOT INSTALL!" if overall_status == SafeStatus.UNSAFE else ""
+        )
+        title = f"Audit complete! Result: [{result_color}]{overall_status.name}{recommended_action}[/{result_color}]"
+
+        content = generate_report_text(report_path, results_by_status, use_color=True)
+
+        self.report.write(content)
+
+        panel = Panel(content, title=title, box=box.ROUNDED, expand=False)
+        self.console.print(panel)
+
+
+# --- End TUI Setup ---
+
+
+# Default configuration
+DEFAULT_MODEL = "qwen/qwen3-30b-a3b-instruct-2507"
+MODEL = os.environ.get("OPENAI_MODEL", os.environ.get("MODEL", DEFAULT_MODEL))
+SESSION_AUDIT_LIMIT_TOKENS = 100_000  # 100k tokens for the entire session
+IGNORED_DIRS = [".git"]
+
+SYSTEM_PROMPTS = {
+    "general_security_auditor": lambda: (
+        """You are an agentic security auditor. Your goal is to inspect the source code and AUR build files in this package to find any potential vulnerabilities, malicious code, or supply chain attack vectors."""
+    ),
+    "file_auditor": lambda package_name: (
+        f"""You are a security expert tasked with auditing a file from a package distributed via the Arch User Repository (AUR).
+This file is part of the {package_name} package for Arch Linux systems. Recently, there have been supply chain attacks where
+malicious code was inserted into AUR packages in subtle ways. You need to detect any potential security issues in this file.
+
+Please carefully analyze the following file and identify any potential security issues, including but not limited to:
+1. Suspicious network requests or downloads from non-standard sources
+2. Obfuscated code or unusual encoding
+3. Unexpected file operations or system modifications
+4. Use of potentially dangerous commands like eval, base64, curl, wget in unexpected contexts
+5. Anything that deviates from standard packaging practices
+"""
+    ),
+}
+
+
+class LLM:
+    """LLM interface"""
+
+    def __init__(
+        self,
+        limit_tokens,
+        client,
+        model=MODEL,
+        system_prompt=None,
+        temperature=0.0,
+        top_p=0.1,
+    ):
+        self.limit_tokens = limit_tokens
+        self.tokens_processed = 0
         self.client = client
         self.prompt_tokens = 0
         self.completion_tokens = 0
+        self.history = []
+        self.model = model
+        self.temperature = temperature
+        self.top_p = top_p
+        if system_prompt:
+            self.init_chat(system_prompt)
 
-    def add_bytes(self, num_bytes):
-        """Adds bytes to the processed total and checks if the limit is reached."""
-        if self.limit_reached:
-            return
-        self.bytes_processed += num_bytes
-        if self.bytes_processed >= self.limit_bytes:
-            self.limit_reached = True
-            print(
-                f"WARN: Session audit limit of {self.limit_bytes} bytes reached.",
-                file=sys.stderr,
-            )
+    @property
+    def limit_reached(self):
+        return self.tokens_processed >= self.limit_tokens
 
-    def audit_prompt(self, **kwargs):
-        """Makes an audit call to the LLM and tracks token usage."""
+    def add_tokens(self, num_tokens):
+        """
+        Adds tokens to the processed total and checks if the limit is reached.
+        """
+        self.tokens_processed += num_tokens
+
+    def init_chat(self, system_prompt):
+        """Initializes a chat session with a system prompt."""
+        logger.debug("Initializing chat session with system prompt: %s", system_prompt)
+        self.history = [{"role": "system", "content": system_prompt}]
+
+    def push_user_message(self, content):
+        """Adds a user message to the chat history."""
+        logger.debug("Pushing user message to chat history: %s", content)
+        self.history.append({"role": "user", "content": content})
+
+    def chat(self, user_prompt):
+        """Makes an LLM call and tracks token usage."""
+        if not self.history:
+            raise ValueError("Chat session not initialized. Call init_chat first.")
+
+        self.push_user_message(user_prompt)
+
+        kwargs = {
+            "model": self.model,
+            "messages": self.history,
+            "temperature": self.temperature,
+            "top_p": self.top_p,
+        }
         response = self.client.chat.completions.create(**kwargs)
         if response.usage:
             self.prompt_tokens += response.usage.prompt_tokens
             self.completion_tokens += response.usage.completion_tokens
-        return response
-
-    def get_llm_assessment(self, prompt_content):
-        """Gets a security assessment from the LLM."""
-        response = self.audit_prompt(
-            model=MODEL,
-            messages=[{"role": "user", "content": prompt_content}],
-            temperature=0.0,
-            top_p=0.1,
-        )
-        return response.choices[0].message.content
-
-    def print_token_usage(self):
-        """Prints the total token usage for the session."""
-        total_tokens = self.prompt_tokens + self.completion_tokens
-        print("\n--- Token Usage ---")
-        print(f"Prompt tokens: {self.prompt_tokens}")
-        print(f"Completion tokens: {self.completion_tokens}")
-        print(f"Total tokens: {total_tokens}")
-        print("--------------------")
+            self.add_tokens(self.prompt_tokens + self.completion_tokens)
+        rsp_msg = response.choices[0].message
+        self.history.append(rsp_msg)
+        logger.debug("--- BEGIN LLM REQUEST ---")
+        logger.debug("%s", pprint.pformat(self.history[-2]))
+        logger.debug("--- END LLM REQUEST ---")
+        logger.debug("--- BEGIN LLM RESPONSE ---")
+        logger.debug("%s", pprint.pformat(self.history[-1]))
+        logger.debug("--- END LLM RESPONSE ---")
+        return rsp_msg.content
 
 
 def get_api_key():
@@ -110,423 +434,534 @@ def get_base_url():
     return "https://openrouter.ai/api/v1"
 
 
-def audit_pkgbuild(pkgbuild_path, session, makepkg_args=None, standalone=False):
-    """Audits a PKGBUILD file with an LLM."""
-    if makepkg_args is None:
-        makepkg_args = ["/usr/bin/makepkg"] + sys.argv[1:]
+def file_is_plain_text(file_path: Path) -> bool:
+    """Detects if a file is text or binary by sampling its content."""
     try:
-        with open(pkgbuild_path, "r") as f:
-            pkgbuild_content = f.read()
-    except FileNotFoundError:
-        print(f"ERROR: PKGBUILD not found at: {pkgbuild_path}", file=sys.stderr)
-        return "UNSAFE"
+        with open(file_path, "rb") as f:
+            # Read a chunk of data (first 1024 bytes is usually enough)
+            chunk = f.read(1024)
+            if not chunk:  # Empty file
+                return True
+
+            # If null byte is present, likely binary
+            if b"\x00" in chunk:
+                return False
+
+            # Optionally: count printable chars vs. non-printable
+            # Using heuristic: if >30% are non-printable, consider binary
+            nontext_ratio = sum(
+                1 for b in chunk if b < 32 and b not in (9, 10, 13)
+            ) / len(chunk)
+            if nontext_ratio > 0.3:
+                return False
+
+            return True
     except Exception as e:
-        print(f"ERROR: Failed to read PKGBUILD: {e}", file=sys.stderr)
-        return "UNSAFE"
+        logger.error(f"Failed to detect file type for {file_path}: {e}")
+        return False
 
-    prompt = f"""You are a security expert tasked with auditing a PKGBUILD file from the Arch User Repository (AUR).
-This file is used to build packages on Arch Linux systems. Recently, there have been supply chain attacks where
-malicious code was inserted into AUR packages in subtle ways.
 
-Please carefully analyze the following PKGBUILD file and identify any potential security issues, including but not limited to:
-1. Suspicious network requests or downloads from non-standard sources
-2. Obfuscated code or unusual encoding
-3. Unexpected file operations or system modifications
-4. Use of potentially dangerous commands like eval, base64, curl, wget in unexpected contexts
-5. Anything that deviates from standard packaging practices
+def audit_file(
+    report: Report, package_name: str, file_path: Path, client: OpenAI, tui: ConsoleUI
+) -> AuditResult:
+    """Audits a single source file with an LLM."""
 
-Respond with a security assessment in the following XML format:
+    # If the file is binary or too large, skip it
+    is_plain_text = file_is_plain_text(file_path)
+    if not is_plain_text:
+        # TODO: Take a look at binary files?
+        return AuditResult(
+            file_path, SafeStatus.SKIPPED, f"Skipping binary file: {file_path.name}"
+        )
+
+    try:
+        with open(file_path, "r") as f:
+            file_content = f.read()
+    except FileNotFoundError:
+        return AuditResult(
+            file_path, SafeStatus.UNSAFE, f"File not found at: {file_path}"
+        )
+    except Exception as e:
+        return AuditResult(file_path, SafeStatus.UNSAFE, f"Failed to read file: {e}")
+
+    llm_pkgbuild_auditor = LLM(
+        limit_tokens=SESSION_AUDIT_LIMIT_TOKENS,
+        client=client,
+        system_prompt=SYSTEM_PROMPTS["file_auditor"](package_name),
+    )
+    prompt = f"""Respond with a security assessment in the following XML format:
 <security_assessment>
 <decision>SAFE or UNSAFE</decision>
-<reason>
-[Your detailed analysis here. If UNSAFE, explain exactly what is problematic and why.]
-</reason>
+<details>
+[Your detailed analysis here in markdown format. If UNSAFE, show a short snippet of the problematic code and explain exactly what is problematic and why. Keep it to 4 paragraphs or fewer.]
+</details>
+<summary>
+[Brief summary of your analysis (12 words or less)]
+</summary>
 </security_assessment>
 
-<PKGBUILD>
-{pkgbuild_content}
-</PKGBUILD>"""
-    print(f"Auditing PKGBUILD with {MODEL}...")
+<file name="{file_path.name}">
+{file_content}
+</file>"""
+    tui.update_status(f"Auditing {file_path.name} with {MODEL}...")
 
     logger.info("--- LLM REQUEST ---")
     logger.debug(prompt)
 
     try:
-        assessment = session.get_llm_assessment(prompt)
+        assessment = llm_pkgbuild_auditor.chat(prompt)
 
         logger.info("--- LLM RESPONSE ---")
         logger.debug(assessment)
+        report.write(f"LLM auditresponse for {file_path.name}:\n{assessment}\n")
 
         root = ET.fromstring(assessment)
-        decision = root.find("decision").text.strip().upper()
-        reason = root.find("reason").text.strip()
 
-        print("\n--- Security Assessment ---")
-        print(f"Decision: {decision}")
-        print(f"Reason: {reason}")
-        print("---------------------------\n")
-
-        if standalone:
-            return decision
-
-        if decision == "UNSAFE":
-            print("AUDIT FAILED: Potential security issues detected.", file=sys.stderr)
-            sys.exit(1)
-        elif decision == "SAFE":
-            print("AUDIT PASSED: No obvious security issues detected.")
-            print("Proceeding with makepkg execution...")
-            os.execv("/usr/bin/makepkg", makepkg_args)
-        else:
-            print(
-                f"ERROR: Unknown decision '{decision}' in LLM response.",
-                file=sys.stderr,
+        decision_el = root.find("decision")
+        if decision_el is None or decision_el.text is None:
+            raise RuntimeError(
+                "Malformed LLM response: <decision> element not found or empty."
             )
-            sys.exit(1)
+        decision = decision_el.text.strip().upper()
+
+        details_el = root.find("details")
+        if details_el is None or details_el.text is None:
+            raise RuntimeError(
+                "Malformed LLM response: <details> element not found or empty."
+            )
+        details = details_el.text.strip()
+
+        summary_el = root.find("summary")
+        if summary_el is None or summary_el.text is None:
+            raise RuntimeError(
+                "Malformed LLM response: <summary> element not found or empty."
+            )
+        summary = summary_el.text.strip()
+
+        safestatus = SafeStatus.SAFE if decision == "SAFE" else SafeStatus.UNSAFE
+        return AuditResult(file_path, safestatus, summary, details)
 
     except (APIError, ET.ParseError, AttributeError) as e:
-        print(f"ERROR: LLM response processing failed: {e}", file=sys.stderr)
-        if standalone:
-            return "UNSAFE"
-        sys.exit(1)
-    return "UNSAFE"  # Should not be reached
+        tui.finalize_step(f"LLM response processing failed: {e}", success=False)
+        return AuditResult(file_path, SafeStatus.UNSAFE, str(e))
 
 
-def do_pkgbuild_audit(tmpdir, session):
-    print("\n--- Auditing PKGBUILD ---")
-    pkgbuild_path = Path(tmpdir) / "PKGBUILD"
-    session.add_bytes(pkgbuild_path.stat().st_size)
-    return audit_pkgbuild(pkgbuild_path, session, standalone=True) == "SAFE"
-
-
-def do_changelog_audit(tmpdir, session):
-    print("\n--- Auditing Git Commit History ---")
-    log_process = subprocess.Popen(
-        ["git", "log", "-p", "--pretty=fuller"],
-        stdout=subprocess.PIPE,
-        text=True,
-        cwd=tmpdir,
+def gen_user_prompt_for_agentic_audit(
+    required_review_files, other_pkg_files, already_reviewed_files
+):
+    required_review_files_str = "\n".join(f"- {f}" for f in required_review_files)
+    other_pkg_files_str = "\n".join(
+        f"- {f}" for f in other_pkg_files if f not in required_review_files
     )
-    current_commit_diff = ""
-    for line in iter(log_process.stdout.readline, ""):
-        if session.limit_reached:
-            break
-        session.add_bytes(len(line.encode("utf-8")))
-        if line.startswith("commit ") and current_commit_diff:
-            if not audit_git_commit(current_commit_diff, session):
-                return False
-            current_commit_diff = ""
-        current_commit_diff += line
-    if current_commit_diff and not session.limit_reached:
-        if not audit_git_commit(current_commit_diff, session):
-            return False
-    log_process.stdout.close()
-    log_process.wait()
-    print("--- Git Commit History Audit Complete ---")
-    return True
+    already_reviewed_files_str = "\n".join(f"- {f}" for f in already_reviewed_files)
+
+    return f"""
+The following files MUST be reviewed before making a decision:
+<required_review_files>
+{required_review_files_str}
+</required_review_files>
+
+The following files have already been reviewed:
+<already_reviewed_files>
+{already_reviewed_files_str}
+</already_reviewed_files>
+
+The following files are available for review:
+<other_pkg_files>
+{other_pkg_files_str}
+</other_pkg_files>
+
+You may now continue the review by selecting a file to read from the <required_review_files> or <other_pkg_files> sections. Please ensure you have read all files in <required_review_files> before making a final decision. You should also review all relevant files in <other_pkg_files> that you deem necessary or relevant.
+
+You can now use the 'readfile' tool to read the content of any file you want to inspect, or output your final decision if you're done auditing files.
+"""
 
 
-def audit_git_commit(commit_diff, session):
-    """Audits a git commit diff with an LLM."""
-    print(
-        f"[AUDIT] Checking git commit diff (size: {len(commit_diff.encode('utf-8'))} bytes)..."
-    )
+def is_remote_url(source):
+    # Common remote URL schemes
+    remote_schemes = {
+        "http",
+        "https",
+        "ftp",
+        "ftps",
+        "git",
+        "ssh",
+        "sftp",
+        "rsync",
+        "scp",
+    }
 
-    prompt = f"""You are a security expert analyzing a git commit diff from an AUR package.
-Please identify any potential security issues, such as:
-- Suspicious changes to download URLs or checksums.
-- Introduction of malicious or obfuscated code.
-- Addition of backdoors or vulnerabilities.
-- Any changes that seem out of place for the package's purpose.
+    parsed = urlparse(source)
+    return parsed.scheme in remote_schemes
 
-Respond with a security assessment in the following XML format:
-<security_assessment>
-<decision>SAFE or UNSAFE</decision>
-<reason>
-[Your detailed analysis here. If UNSAFE, explain exactly what is problematic and why.]
-</reason>
-</security_assessment>
 
-<git_diff>
-{commit_diff}
-</git_diff>"""
-
+def download_sources(tui: ConsoleUI):
+    tui.update_status("Running makepkg --nobuild to download sources for agent...")
     try:
-        assessment = session.get_llm_assessment(prompt)
-        root = ET.fromstring(assessment)
-        decision = root.find("decision").text.strip().upper()
-        if decision == "UNSAFE":
-            reason = root.find("reason").text.strip()
-            print(f"AUDIT FAILED for git commit: {reason}", file=sys.stderr)
-            return False
-        return True
-    except (APIError, ET.ParseError, AttributeError) as e:
-        print(f"ERROR: Could not audit git commit: {e}", file=sys.stderr)
-        return False
-
-
-def do_agentic_audit(tmpdir, session):
-    """Performs an agentic security audit on the package contents."""
-    print("\n--- Performing Agentic Security Audit ---")
-    workdir = Path(tmpdir).resolve()
-
-    try:
-        # Use ls -R to get a recursive listing.
-        initial_listing = subprocess.check_output(
-            ["ls", "-R"],
-            cwd=workdir,
-            text=True,
-            stderr=subprocess.STDOUT,
-        )
-    except subprocess.CalledProcessError as e:
-        print(f"ERROR: Failed to list directory {workdir}: {e.output}", file=sys.stderr)
-        return False
-
-    system_prompt = f"""You are an agentic security auditor. Your goal is to inspect the files in the current directory to find any potential vulnerabilities, malicious code, or supply chain attack vectors.
-
-    You have access to the following tools:
-    <tools>
-      <tool>
-        <name>listdir</name>
-        <description>List files and directories.</description>
-        <parameters>
-          <parameter>
-            <name>path</name>
-            <type>string</type>
-            <description>The path to the directory to list. Use '.' for the current directory. This is equivalent to 'ls -F'.</description>
-          </parameter>
-        </parameters>
-      </tool>
-      <tool>
-        <name>readfile</name>
-        <description>Read the content of a file.</description>
-        <parameters>
-          <parameter>
-            <name>path</name>
-            <type>string</type>
-            <description>The path to the file to read.</description>
-          </parameter>
-        </parameters>
-      </tool>
-    </tools>
-
-    To use a tool, you MUST respond with an XML block like this, and nothing else:
-    <tool_call>
-      <name>tool_name</name>
-      <parameters>
-        <path>path/to/file_or_dir</path>
-      </parameters>
-    </tool_call>
-
-    After you have finished your investigation, you MUST respond with a final security assessment in the following format:
-    <security_assessment>
-      <decision>SAFE or UNSAFE</decision>
-      <reason>
-      [Your detailed analysis here. If UNSAFE, explain exactly what is problematic and why, including the path to the problematic file(s).]
-      </reason>
-    </security_assessment>
-
-    The investigation starts now. The current working directory is the root of the cloned AUR package. Here is the initial recursive directory listing:
-    <tool_result>
-      <name>initial_listing</name>
-      <output>
-{initial_listing}
-      </output>
-    </tool_result>
-    """
-
-    messages = [{"role": "system", "content": system_prompt}]
-    max_tool_calls = 15
-    tool_calls = 0
-
-    while tool_calls < max_tool_calls:
-        tool_calls += 1
-        if session.limit_reached:
-            print("WARN: Audit session limit reached, stopping agent.", file=sys.stderr)
-            # Ask for a final decision based on info gathered so far.
-            messages.append(
-                {
-                    "role": "user",
-                    "content": "Session byte limit reached. Please make a final decision based on the information you have gathered so far.",
-                }
-            )
-
-        try:
-            response = session.audit_prompt(
-                model=MODEL,
-                messages=messages,
-                temperature=0.0,
-                top_p=0.1,
-            )
-            response_content = response.choices[0].message.content
-            messages.append({"role": "assistant", "content": response_content})
-
-            if "<security_assessment>" in response_content:
-                print("Agent has concluded the audit.")
-                # Clean up the response content to ensure it's valid XML
-                assessment_text = response_content[
-                    response_content.find("<security_assessment>") :
-                ]
-                root = ET.fromstring(assessment_text)
-                decision = root.find("decision").text.strip().upper()
-                reason = root.find("reason").text.strip()
-                print("\n--- Agent Security Assessment ---")
-                print(f"Decision: {decision}")
-                print(f"Reason: {reason}")
-                print("---------------------------------\n")
-                return decision == "SAFE"
-
-            if (
-                session.limit_reached
-            ):  # If limit was reached, we forced a decision. Don't process tool calls.
-                print(
-                    "ERROR: Agent did not provide a final assessment after session limit was reached.",
-                    file=sys.stderr,
-                )
-                return False
-
-            tool_call_root = ET.fromstring(response_content)
-            if tool_call_root.tag != "tool_call":
-                print(
-                    f"ERROR: Unexpected agent response: {response_content}",
-                    file=sys.stderr,
-                )
-                return False
-
-            tool_name_elem = tool_call_root.find("name")
-            tool_path_elem = tool_call_root.find("parameters/path")
-
-            if tool_name_elem is None or tool_path_elem is None:
-                print(
-                    f"ERROR: Malformed tool call: {response_content}", file=sys.stderr
-                )
-                return False
-
-            tool_name = tool_name_elem.text.strip()
-            tool_path_param = tool_path_elem.text.strip()
-
-            # Prevent directory traversal.
-            # The agent should work inside the temp dir.
-            requested_path = (workdir / tool_path_param).resolve()
-            if workdir not in requested_path.parents and requested_path != workdir:
-                tool_output = f"ERROR: Attempted directory traversal: {tool_path_param}"
-                print(tool_output, file=sys.stderr)
-            else:
-                tool_output = ""
-                if tool_name == "listdir":
-                    print(f"Agent action: listdir {tool_path_param}")
-                    try:
-                        tool_output = subprocess.check_output(
-                            ["ls", "-F", str(requested_path)],
-                            text=True,
-                            stderr=subprocess.STDOUT,
-                        )
-                    except subprocess.CalledProcessError as e:
-                        tool_output = f"ERROR: {e.output}"
-                elif tool_name == "readfile":
-                    print(f"Agent action: readfile {tool_path_param}")
-                    try:
-                        if not requested_path.is_file():
-                            raise FileNotFoundError(f"Not a file: {tool_path_param}")
-                        file_size = requested_path.stat().st_size
-                        session.add_bytes(file_size)
-                        if session.limit_reached:
-                            tool_output = (
-                                "ERROR: Session audit limit reached. Cannot read file."
-                            )
-                        else:
-                            with open(requested_path, "r", errors="ignore") as f:
-                                tool_output = f.read()
-                    except Exception as e:
-                        tool_output = f"ERROR: {e}"
-                else:
-                    tool_output = f"ERROR: Unknown tool '{tool_name}'"
-
-            tool_result_message = f"""<tool_result>
-<name>{tool_name}</name>
-<output>
-{tool_output}
-</output>
-</tool_result>"""
-            messages.append({"role": "user", "content": tool_result_message})
-
-        except (APIError, ET.ParseError, AttributeError) as e:
-            print(f"ERROR: Agentic audit failed: {e}", file=sys.stderr)
-            # For debugging, show the last message from the assistant
-            if messages and messages[-1]["role"] == "assistant":
-                print("Last assistant message:", file=sys.stderr)
-                print(messages[-1]["content"], file=sys.stderr)
-            return False
-        except Exception as e:
-            print(
-                f"ERROR: An unexpected error occurred in the agent loop: {e}",
-                file=sys.stderr,
-            )
-            return False
-
-    print(f"ERROR: Agent exceeded max tool calls ({max_tool_calls}).", file=sys.stderr)
-    return False
-
-
-def run_aur_sleuth_audit(package_name, audit_levels, client):
-    """Runs the specified security audits for aur-sleuth."""
-    tmpdir = tempfile.mkdtemp(prefix="aur-sleuth-")
-    print(f"Created temporary directory: {tmpdir}")
-    status = "error"
-    original_cwd = os.getcwd()
-    session = AuditSession(limit_bytes=SESSION_AUDIT_LIMIT_BYTES, client=client)
-    try:
-        print(f"Cloning https://aur.archlinux.org/{package_name}.git...")
         subprocess.run(
-            ["git", "clone", f"https://aur.archlinux.org/{package_name}.git", tmpdir],
+            ["makepkg", "--nobuild"],
             check=True,
             capture_output=True,
             text=True,
         )
-        os.chdir(tmpdir)
+        tui.finalize_step("makepkg --nobuild successful")
+        return True
+    except subprocess.CalledProcessError as e:
+        tui.finalize_step(
+            "makepkg --nobuild failed.",
+            success=False,
+        )
+        logger.error(f"makepkg --nobuild failed: {e.stderr}")
+        return False
 
-        audit_ok = True
-        if "agentic" in audit_levels:
-            print("\nRunning makepkg --nobuild to download sources for agent...")
-            try:
-                subprocess.run(
-                    ["makepkg", "--nobuild"], check=True, capture_output=True, text=True
-                )
-            except subprocess.CalledProcessError as e:
-                print(
-                    "makepkg --nobuild failed, continuing with only PKGBUILD.",
-                    file=sys.stderr,
-                )
-                print(e.stderr, file=sys.stderr)
 
-            audit_ok = do_agentic_audit(tmpdir, session)
+def get_source_listing(
+    pkgdir: Path, tui: ConsoleUI
+) -> Tuple[Optional[List[Path]], Optional[List[Path]]]:
+    required_review_files = [Path("PKGBUILD")]
+    other_pkg_files = []
+    seen_files = {Path("PKGBUILD").resolve()}
+
+    # Use `makepkg --printsrcinfo` to get the PKGBUILD source files. These are always
+    # required to be reviewed.
+    tui.update_status("Running makepkg --printsrcinfo to get source files for agent...")
+    try:
+        output = subprocess.run(
+            ["makepkg", "--printsrcinfo"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        for line in output.stdout.splitlines():
+            line = line.strip()
+            if "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            key = key.strip()
+            value = value.strip()
+            if key == "source":
+                pfile = Path(value)
+                if is_remote_url(value):
+                    # Just use the basename since it should be downloaded to pkgdir
+                    pfile = Path(pfile.name)
+                if pfile.resolve() not in seen_files:
+                    required_review_files.append(pfile)
+                    seen_files.add(pfile.resolve())
+        tui.finalize_step("makepkg --printsrcinfo successful")
+    except subprocess.CalledProcessError as e:
+        tui.finalize_step(
+            "makepkg --printsrcinfo failed.",
+            success=False,
+        )
+        logger.error(f"makepkg --printsrcinfo failed: {e.stderr}")
+        return None, None
+
+    # Create a recursive directory listing to pass to the audit agent
+    for root, dirs, files in os.walk(pkgdir):
+        rel_root = Path(os.path.relpath(root, pkgdir))
+        for ignoramus in IGNORED_DIRS:
+            if ignoramus in dirs:
+                dirs.remove(ignoramus)
+        for f in files:
+            pkg_file = rel_root / f
+            if pkg_file.resolve() in seen_files:
+                continue
+            other_pkg_files.append(pkg_file)
+            seen_files.add(pkg_file.resolve())
+
+    return required_review_files, other_pkg_files
+
+
+def decide_next_files_to_review(
+    report: Report,
+    package_name: str,
+    client: OpenAI,
+    other_pkg_files: List[Path],
+    already_reviewed_files: List[Path],
+    num_additional_files_to_review: int,
+) -> List[Path]:
+    files_to_consider = [f for f in other_pkg_files if f not in already_reviewed_files]
+    if len(files_to_consider) <= num_additional_files_to_review:
+        return files_to_consider
+
+    llm = LLM(
+        limit_tokens=SESSION_AUDIT_LIMIT_TOKENS,
+        client=client,
+        system_prompt=SYSTEM_PROMPTS["general_security_auditor"](),
+    )
+    prompt = f"""
+To continue the audit of the {package_name} package, please select {num_additional_files_to_review} more source files to review from the package directory listing below.
+
+Do not select any files that have already been reviewed.
+
+<already_reviewed_files>
+{"- ".join(str(f) for f in already_reviewed_files)}
+</already_reviewed_files>
+
+<listing>
+{"- ".join(str(f) for f in files_to_consider)}
+</listing>
+
+Respond with a list of file paths, one path per line, with NO other additional text or formatting.
+"""
+    response = llm.chat(prompt)
+    if not response:
+        raise RuntimeError("Failed to get response from LLM for file selection.")
+
+    report.write(f"LLM response for file selection:\n{response}")
+
+    files_to_review = []
+    for line in response.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            file_path = Path(line)
+            if file_path not in other_pkg_files:
+                logger.warning("Invalid file path in LLM response: %s", line)
+                continue
+            files_to_review.append(file_path)
+        except ValueError:
+            logger.warning("Invalid file path in LLM response: %s", line)
+
+    return files_to_review
+
+
+def do_agentic_audit(
+    tui: ConsoleUI, report: Report, package_name: str, client: OpenAI, pkgdir: Path
+) -> List[AuditResult]:
+    """Performs an agentic security audit on the package contents."""
+
+    if not download_sources(tui):
+        msg = "makepkg --nobuild failed, unable to download sources."
+        report.write(msg)
+        return [AuditResult(None, SafeStatus.SKIPPED, msg)]
+
+    required_review_files, other_pkg_files = get_source_listing(pkgdir, tui)
+
+    if required_review_files is None or other_pkg_files is None:
+        msg = "Failed to get source files for agentic audit."
+        report.write(msg)
+        return [AuditResult(None, SafeStatus.SKIPPED, msg)]
+
+    already_reviewed_files = []
+    num_additional_files_to_review = 10
+    audit_results: List[AuditResult] = []
+
+    tui.update_status("Starting agentic audit...")
+
+    tui.update_status("Reviewing required files...")
+    for f in required_review_files:
+        f_abs = f.resolve()
+        f_rel = f_abs.relative_to(pkgdir)
+        tui.update_status(f"Reviewing {f_rel}...")
+        result = audit_file(report, package_name, f_abs, client, tui)
+        status_txt = "Status: "
+        if tui.has_color:
+            color = result.status.get_color()
+            status_txt += f"[{color}]{result.status.name}[/{color}] -- {result.summary}"
         else:
-            if "PKGBUILD" in audit_levels or "hardcore" in audit_levels:
-                audit_ok = do_pkgbuild_audit(tmpdir, session)
-            if audit_ok and ("changelog" in audit_levels or "hardcore" in audit_levels):
-                audit_ok = do_changelog_audit(tmpdir, session)
-        else:
-            print("Invalid audit type")
-            audit_ok = False
+            status_txt += f"{result.status.name} -- {result.summary}"
 
-        if audit_ok:
-            print("\nAudit passed. You may inspect the files and run makepkg manually.")
-            print(f"Temporary directory: {tmpdir}")
-            status = "success"
-        else:
-            print("\nAUDIT FAILED. See reasons above.", file=sys.stderr)
+        tui.finalize_step(f"Reviewed {f_rel}. {status_txt}", status=result.status)
+        already_reviewed_files.append(f)
+        audit_results.append(result)
 
-    except (subprocess.CalledProcessError, Exception) as e:
-        print(f"ERROR: An unexpected error occurred: {e}", file=sys.stderr)
+    tui.finalize_step("Reviewed all required files.")
+
+    tui.update_status("Deciding which files to review next...")
+    files_to_review = decide_next_files_to_review(
+        report,
+        package_name,
+        client,
+        other_pkg_files,
+        already_reviewed_files,
+        num_additional_files_to_review,
+    )
+    tui.finalize_step(
+        f"Decided to review {len(files_to_review)} additional files: {', '.join(str(f) for f in files_to_review)}"
+    )
+
+    tui.update_status("Reviewing additional files...")
+    for f in files_to_review:
+        f_abs = f.resolve()
+        f_rel = f_abs.relative_to(pkgdir)
+        tui.update_status(f"Reviewing {f_rel}...")
+        result = audit_file(report, package_name, f_abs, client, tui)
+        status_txt = "Status: "
+        if tui.has_color:
+            color = result.status.get_color()
+            status_txt += f"[{color}]{result.status.name}[/{color}] -- {result.summary}"
+        else:
+            status_txt += f"{result.status.name} -- {result.summary}"
+
+        tui.finalize_step(f"Reviewed {f_rel}. {status_txt}", status=result.status)
+        audit_results.append(result)
+
+    tui.finalize_step("Reviewed additional files.")
+
+    return audit_results
+
+
+def run_aur_sleuth_audit(
+    tui: ConsoleUI,
+    report: Report,
+    package_name: str,
+    client: OpenAI,
+    pkgdir: Path,
+) -> int:
+    """Runs the specified security audits for aur-sleuth."""
+    report_file = report.report_path
+    audit_results = []
+    audit_ok = True
+
+    try:
+        tui.update_status(f"Analyzing {package_name}")
+
+        os.chdir(pkgdir)
+
+        audit_results = do_agentic_audit(tui, report, package_name, client, pkgdir)
+
+        tui.show_summary(report_file, audit_results)
+
+    except subprocess.CalledProcessError as e:
+        msg = f"An unexpected error occurred: {e}"
+        tui.finalize_step(msg, success=False)
+        audit_results.append(AuditResult(None, SafeStatus.SKIPPED, msg))
+        tui.show_summary(report_file, audit_results)
+    except Exception as e:
+        msg = f"An unexpected error occurred: {e}"
+        logger.error(msg, exc_info=True)
+        tui.finalize_step(msg, success=False)
+        audit_results.append(AuditResult(None, SafeStatus.SKIPPED, msg))
+        tui.show_summary(report_file, audit_results)
+        raise
     finally:
-        session.print_token_usage()
-        os.chdir(original_cwd)
-        if status == "error" and os.path.exists(tmpdir):
-            print(f"Cleaning up temporary directory: {tmpdir}")
-            shutil.rmtree(tmpdir)
+        # Write full report
+        results_by_status = partition_results_by_status(audit_results)
+        overall_status = (
+            SafeStatus.UNSAFE
+            if len(results_by_status[SafeStatus.UNSAFE]) > 0
+            else SafeStatus.SAFE
+        )
+        report.write(f"Final Status: {overall_status.name}\n\n")
+        if results_by_status[SafeStatus.UNSAFE]:
+            audit_ok = False
+            report.write("Issues Found:\n")
+            for issue in results_by_status[SafeStatus.UNSAFE]:
+                report.write(str(issue) + "\n")
+        else:
+            report.write("No issues found.\n")
+
+        if results_by_status[SafeStatus.SKIPPED]:
+            report.write("\nAudit Skips:" + "\n")
+            for skip in results_by_status[SafeStatus.SKIPPED]:
+                report.write(str(skip) + "\n")
+
+    return 0 if audit_ok else 1
 
 
-if __name__ == "__main__":
-    invocation_name = Path(sys.argv[0]).name
+def download_package_to_tmpdir(
+    tui: ConsoleUI,
+    tmpdir_parent: Path,
+    package_name: str,
+    clone_url: Optional[str] = None,
+) -> Path:
+
+    # Create a temp directory inside it
+    tmpdir = tempfile.mkdtemp(prefix="aur-sleuth-", dir=tmpdir_parent)
+
+    tui.update_status(
+        f"Cloning https://aur.archlinux.org/{package_name}.git to {tmpdir}..."
+    )
+    clone_url = clone_url or f"https://aur.archlinux.org/{package_name}.git"
+    subprocess.run(
+        ["git", "clone", clone_url, tmpdir],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    tui.finalize_step(f"Cloned repository to {tmpdir}")
+    return Path(tmpdir).resolve()
+
+
+def sleuth_main(client: OpenAI) -> int:
+    parser = argparse.ArgumentParser(
+        description="Run a security audit on an AUR package."
+    )
+    parser.add_argument("package_name", help="Name of the AUR package.")
+    parser.add_argument(
+        "--clone-url",
+        default=None,
+        help="Optional custom clone URL for the AUR package. Defaults to https://aur.archlinux.org/{package_name}.git.",
+    )
+    parser.add_argument(
+        "--output",
+        default=None,
+        help="Output format. Supported formats: rich, plain. Defaults to rich.",
+    )
+    args = parser.parse_args()
+
+    original_cwd = os.getcwd()
+
+    TuiCls = TUIPlain if args.output == "plain" else TUI
+
+    # Create the base parent directory
+    tmpdir_parent = Path(tempfile.gettempdir()) / "aur-sleuth"
+    os.makedirs(tmpdir_parent, exist_ok=True)
+
+    report_file = tmpdir_parent / f"aur-sleuth-report-{args.package_name}.txt"
+
+    with Report(report_file) as report:
+        with TuiCls(report) as tui:
+            pkgdir = download_package_to_tmpdir(
+                tui, Path(tmpdir_parent), args.package_name, args.clone_url
+            )
+            retval = run_aur_sleuth_audit(
+                tui, report, args.package_name, client, pkgdir
+            )
+
+    os.chdir(original_cwd)
+    if os.path.exists(pkgdir):
+        shutil.rmtree(pkgdir)
+
+    return retval
+
+
+def wrapper_main(client: OpenAI) -> int:
+    parser = argparse.ArgumentParser(
+        description="Wrapper for makepkg to audit PKGBUILD."
+    )
+    parser.add_argument(
+        "-p",
+        "--pkgbuild",
+        dest="pkgbuild_path",
+        default="PKGBUILD",
+        help="Path to PKGBUILD.",
+    )
+    args, makepkg_args = parser.parse_known_args()
+
+    # Arguments that indicate a non-build action where we should skip the audit
+    skip_audit_flags = ["--verifysource", "--nobuild", "--geninteg", "-o", "-g"]
+
+    # Check if any of the skip flags are in the arguments passed to the wrapper
+    if any(flag in makepkg_args for flag in skip_audit_flags):
+        # If so, just execute makepkg without an audit
+        os.execv("/usr/bin/makepkg", ["/usr/bin/makepkg"] + makepkg_args)
+        return 0
+
+    # Otherwise, proceed with the audit
+    retval = run_aur_sleuth_audit(package_name, client, args.clone_url)
+    if retval != 0:
+        print("Security audit failed. Exiting makepkg wrapper.")
+        return retval
+
+    print("Security audit passed. Proceeding with makepkg execution...")
+    os.execv("/usr/bin/makepkg", makepkg_args)
+
+
+def get_openai_client() -> OpenAI:
     base_url = get_base_url()
     default_headers = {}
     if "openrouter.ai" in base_url:
@@ -535,55 +970,30 @@ if __name__ == "__main__":
             "X-Title": "aur-sleuth",
         }
 
-    client = OpenAI(
+    return OpenAI(
         api_key=get_api_key(), base_url=base_url, default_headers=default_headers
     )
 
+
+def main():
+    invocation_name = Path(sys.argv[0]).name
+    client = get_openai_client()
+
     if invocation_name == "aur-sleuth":
-        parser = argparse.ArgumentParser(
-            description="Run a security audit on an AUR package."
-        )
-        parser.add_argument("package_name", help="Name of the AUR package.")
-        parser.add_argument(
-            "--audit",
-            nargs="+",
-            default=["PKGBUILD"],
-            choices=["PKGBUILD", "changelog", "hardcore", "agentic"],
-            help="Specify audit level(s). 'agentic' runs a special agent-based audit.",
-        )
-        args = parser.parse_args()
-        run_aur_sleuth_audit(args.package_name, args.audit, client)
+        sys.exit(sleuth_main(client))
     elif invocation_name == "aur-sleuth-makepkg-wrapper":
-        parser = argparse.ArgumentParser(
-            description="Wrapper for makepkg to audit PKGBUILD."
-        )
-        parser.add_argument(
-            "-p",
-            "--pkgbuild",
-            dest="pkgbuild_path",
-            default="PKGBUILD",
-            help="Path to PKGBUILD.",
-        )
-        args, makepkg_args = parser.parse_known_args()
-
-        # Arguments that indicate a non-build action where we should skip the audit
-        skip_audit_flags = ["--verifysource", "--nobuild", "--geninteg", "-o", "-g"]
-
-        # Check if any of the skip flags are in the arguments passed to the wrapper
-        if any(flag in makepkg_args for flag in skip_audit_flags):
-            # If so, just execute makepkg without an audit
-            os.execv("/usr/bin/makepkg", ["/usr/bin/makepkg"] + makepkg_args)
-        else:
-            # Otherwise, proceed with the audit
-            session = AuditSession(limit_bytes=SESSION_AUDIT_LIMIT_BYTES, client=client)
-            pkgbuild_path = Path(args.pkgbuild_path).resolve()
-            # Re-add the main makepkg command to the arguments list
-            makepkg_args.insert(0, "/usr/bin/makepkg")
-            audit_pkgbuild(pkgbuild_path, session, makepkg_args)
-            session.print_token_usage()
+        sys.exit(wrapper_main(client))
     else:
         print(
             f"ERROR: Unknown invocation name '{invocation_name}'. Please invoke as 'aur-sleuth' or 'aur-sleuth-makepkg-wrapper'.",
             file=sys.stderr,
         )
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\nAudit interrupted by user.", file=sys.stderr)
         sys.exit(1)

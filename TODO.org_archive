@@ -79,3 +79,104 @@ Just use python logging framework and send it to the tmp debug log file.
 Currently we only flush the logs at the end, but sometimes things get
 hung before that. We should configure `logging` to get logs right
 away.
+
+* DONE Streamline UI
+:PROPERTIES:
+:ARCHIVE_TIME: 2025-08-11 Mon 15:27
+:ARCHIVE_FILE: ~/src/aur-sleuth/TODO.org
+:ARCHIVE_CATEGORY: TODO
+:ARCHIVE_TODO: DONE
+:END:
+Currently we're writing quite a bit to stdout. Instead of sending the full
+audit to stdout we should write it to a log file (different than the debug
+log file, which is already quite noisy), and provide a rich, TUI display to
+the user.
+
+We'll assume that users have a modern terminal installed with plenty of
+support for everything we need to make a responsive terminal user
+interface.
+
+Here's how I imagine the output:
+
+```
+./aur-sleuth --audit=agentic google-chrome-stable
+
+,----
+| {spinner} Analyzing google-chrome-stable
+`----
+[{Status details}]
+```
+
+(but with a full box, this is just a mockup)
+
+And rather than pushing stdout, we would refresh the content inside the box
+with current status:
+
+```
+,----
+| {spinner} Auditing PKGBUILD...
+`----
+[0 issues found, 2 files left to process]
+```
+
+And when a single "box action" is completed we add some newlines to
+"finalize" that box and push it up.
+
+(imagine an issue was found there and then we move on to install.sh)
+
+
+```
+,----
+| X PKGBUILD Audit failure
+| {3 sentence description of failure}
+`----
+
+,----
+| {spinner} Auditing install.sh...
+`----
+[1 issue found, 1 file left to process]
+```
+
+
+```
+,----
+| Audit complete! Result: FAIL
+|
+| Issues found:
+|   - {3 sentence description of first issue}
+|
+| Full audit report can be found in /tmp/aur-sleuth-report.txt
+`----
+```
+
+
+A success would just be:
+
+```
+,----
+| Audit complete! Result: SUCCESS
+|
+| Full audit report can be found in /tmp/aur-sleuth-report.txt
+`----
+```
+
+* DONE Send recursive file listing to agent and remove listdir tool
+:PROPERTIES:
+:ARCHIVE_TIME: 2025-08-11 Mon 23:17
+:ARCHIVE_FILE: ~/src/aur-sleuth/TODO.org
+:ARCHIVE_CATEGORY: TODO
+:ARCHIVE_TODO: DONE
+:END:
+Agent can decide which files (possibly all) to read
+
+In order to maintain its own state, I think the agent is going to need a
+"WriteFile" tool to keep a checklist of files it needs to review. Or do you
+think it will be able to keep it in its context? I worry that it will
+forget since it could be reading some huge files, so the history of files
+it has already read is going to fall out of context. It's almost like
+during the code review portion it would be a "recursive" agentic LLM call,
+don't need the full audit conversation history to perform a code review of
+a single file. And the audit conversation history only needs to record the
+outcome of the review in its context, not the code listing or the code
+review / audit report. What's the canonical/proper way to handle this in an
+agentic LLM loop?
