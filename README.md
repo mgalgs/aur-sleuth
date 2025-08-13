@@ -9,6 +9,12 @@ An LLM-powered security auditing tool for Arch User Repository (AUR) packages.
    automatically audits `PKGBUILD` files before building. This enables
    integration with `yay` via the `--makepkg` option (see [Usage](#Usage)).
 
+## Screenshot
+
+Here it is in action catching the infamous [`google-chrome-stable` malicious package](https://www.reddit.com/r/archlinux/comments/1me632m/is_this_another_aur_infect_package/):
+
+![Screenshot](./screenshot.png)
+
 ## Purpose
 
 Recently, there have been supply chain security breaches where malicious
