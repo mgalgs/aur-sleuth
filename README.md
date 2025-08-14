@@ -3,7 +3,15 @@
 An LLM-powered security auditing tool for Arch User Repository (AUR) packages.
 
 `aur-sleuth` performs in-depth security analysis of an AUR package either as a
-standalone tool, or as a `makepkg` wrapper (e.g. `yay --makepkg=aur-sleuth-makepkg-wrapper <package>`).
+standalone tool, or as a `makepkg` wrapper:
+
+```bash
+# Audit a package without building or installing
+aur-sleuth package-name
+
+# Audit a package then build and install with yay if it passes the audit
+yay --makepkg aur-sleuth-makepkg-wrapper package-name
+```
 
 ## Features
 
@@ -155,13 +163,13 @@ workflow, for example with a AUR helper like `yay`.
 Audit a package, then install if it passes:
 
 ```bash
-yay --makepkg /usr/local/bin/aur-sleuth-makepkg-wrapper package-name
+yay --makepkg aur-sleuth-makepkg-wrapper package-name
 ```
 
 You can persist the `--makepkg` setting like so:
 
 ```bash
-yay --makepkg /usr/local/bin/aur-sleuth-makepkg-wrapper --save
+yay --makepkg aur-sleuth-makepkg-wrapper --save
 ```
 
 Then you no longer have to pass `--makepkg` to each invocation of `yay`. Just use it
