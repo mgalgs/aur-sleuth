@@ -26,6 +26,11 @@ import tempfile
 import time
 import xml.etree.ElementTree as ET
 
+# Threading imports for parallel execution
+import threading
+import concurrent.futures
+from threading import Lock, Thread
+
 from openai import OpenAI, APIError
 from rich import box
 from rich.console import Console, Group
@@ -43,7 +48,7 @@ if os.path.exists(LOG_FILE):
 
 logging.basicConfig(
     level=logging.DEBUG,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    format="%(asctime)s - %(name)s - %(levelname)s - %(threadName)s - %(message)s",
     filename=LOG_FILE,
     filemode="a",
 )
@@ -54,23 +59,25 @@ logger = logging.getLogger("aur-sleuth")
 class Report:
     def __init__(self, report_path: Path):
         self.report_path = report_path
+        self._lock = Lock()
 
     def __enter__(self):
         self.file = open(self.report_path, "w", encoding="utf-8")
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        if self.file:
-            self.file.close()
+        self.file.close()
 
     def write(self, text: str, end: str = "\n", stdout=False):
         """Writes text to the report file."""
         if not hasattr(self, "file"):
             raise RuntimeError("Report file is not open. Use __entry__ to open it.")
-        self.file.write(text + end)
-        self.file.flush()
-        if stdout:
-            print(text, end=end)
+
+        with self._lock:
+            self.file.write(text + end)
+            self.file.flush()
+            if stdout:
+                print(text, end=end)
 
 
 class SafeStatus(Enum):
@@ -508,7 +515,6 @@ def audit_file(
     file_path: Path,
     pkgdir: Path,
     client: OpenAI,
-    tui: ConsoleUI,
 ) -> AuditResult:
     """Audits a single source file with an LLM."""
 
@@ -556,7 +562,6 @@ def audit_file(
 <file name="{file_path.name}">
 {file_content}
 </file>"""
-    tui.update_status(f"Auditing {file_path.name} with {model}...")
 
     logger.debug("--- LLM REQUEST ---")
     logger.debug(prompt)
@@ -595,7 +600,6 @@ def audit_file(
         return AuditResult(file_path, pkgdir, safestatus, summary, details)
 
     except (APIError, ET.ParseError, AttributeError) as e:
-        tui.finalize_step(f"LLM response processing failed: {e}", success=False)
         return AuditResult(file_path, pkgdir, SafeStatus.UNSAFE, str(e))
 
 
@@ -737,7 +741,6 @@ def get_source_listing(
 def decide_next_files_to_review(
     report: Report,
     package_name: str,
-    client: OpenAI,
     other_pkg_files: List[Path],
     already_reviewed_files: List[Path],
     num_additional_files_to_review: int,
@@ -745,6 +748,8 @@ def decide_next_files_to_review(
     files_to_consider = [f for f in other_pkg_files if f not in already_reviewed_files]
     if len(files_to_consider) <= num_additional_files_to_review:
         return files_to_consider
+
+    client = get_openai_client()
 
     llm = LLM(
         limit_tokens=SESSION_AUDIT_LIMIT_TOKENS,
@@ -790,8 +795,83 @@ Respond with a list of file paths, one path per line, with NO other additional t
     return files_to_review
 
 
+def audit_files(
+    tui: ConsoleUI,
+    report: Report,
+    package_name: str,
+    pkgdir: Path,
+    files_to_audit: List[Path],
+    processing_description: str = "files",
+) -> List[AuditResult]:
+    """Audit a list of files in parallel."""
+    processing_files = []
+    processing_files_lock = Lock()
+    total_count = len(files_to_audit)
+    completed_count = 0
+    audit_results: List[AuditResult] = []
+
+    max_jobs = int(os.environ.get("MAX_LLM_JOBS", "3"))
+
+    def _update_status():
+        files_str = ", ".join(processing_files)
+        progress_str = f"[{completed_count + 1}/{total_count}]"
+        tui.update_status(f"{progress_str} Reviewing {files_str}...")
+
+    def add_file_to_processing(f):
+        with processing_files_lock:
+            processing_files.append(str(f))
+            _update_status()
+
+    def remove_file_from_processing(f):
+        with processing_files_lock:
+            processing_files.remove(str(f))
+            _update_status()
+
+    def audit_file_thread_fn(f):
+        """Wrapper function for parallel execution with thread-specific clients."""
+        f_abs = f.resolve()
+        f_rel = f_abs.relative_to(pkgdir)
+        thread_client = get_openai_client()
+
+        add_file_to_processing(f_rel)
+        result = audit_file(report, package_name, f_abs, pkgdir, thread_client)
+
+        return (f, result)
+
+    # Review files in parallel
+    tui.update_status(f"Reviewing {processing_description}...")
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_jobs) as executor:
+        future_to_file = {
+            executor.submit(audit_file_thread_fn, f): f for f in files_to_audit
+        }
+
+        for future in concurrent.futures.as_completed(future_to_file):
+            f, result = future.result()
+            f_abs = f.resolve()
+            f_rel = f_abs.relative_to(pkgdir)
+
+            completed_count += 1
+            remove_file_from_processing(f_rel)
+
+            status_txt = "Status: "
+            if tui.has_color:
+                color = result.status.get_color()
+                status_txt += (
+                    f"[{color}]{result.status.name}[/{color}] -- {result.summary}"
+                )
+            else:
+                status_txt += f"{result.status.name} -- {result.summary}"
+
+            tui.finalize_step(f"Reviewed {f_rel}. {status_txt}", status=result.status)
+            audit_results.append(result)
+
+    tui.finalize_step(f"Reviewed all {processing_description}.")
+    return audit_results
+
+
 def do_agentic_audit(
-    tui: ConsoleUI, report: Report, package_name: str, client: OpenAI, pkgdir: Path
+    tui: ConsoleUI, report: Report, package_name: str, pkgdir: Path
 ) -> List[AuditResult]:
     """Performs an agentic security audit on the package contents."""
 
@@ -807,70 +887,49 @@ def do_agentic_audit(
         report.write(msg)
         return [AuditResult(None, pkgdir, SafeStatus.SKIPPED, msg)]
 
-    already_reviewed_files = []
-    num_additional_files_to_review = 10
-    audit_results: List[AuditResult] = []
-
-    tui.update_status("Starting agentic audit...")
-
-    tui.update_status("Reviewing required files...")
-    for f in required_review_files:
-        f_abs = f.resolve()
-        f_rel = f_abs.relative_to(pkgdir)
-        tui.update_status(f"Reviewing {f_rel}...")
-        result = audit_file(report, package_name, f_abs, pkgdir, client, tui)
-        status_txt = "Status: "
-        if tui.has_color:
-            color = result.status.get_color()
-            status_txt += f"[{color}]{result.status.name}[/{color}] -- {result.summary}"
-        else:
-            status_txt += f"{result.status.name} -- {result.summary}"
-
-        tui.finalize_step(f"Reviewed {f_rel}. {status_txt}", status=result.status)
-        already_reviewed_files.append(f)
-        audit_results.append(result)
-
-    tui.finalize_step("Reviewed all required files.")
-
-    tui.update_status("Deciding which files to review next...")
-    files_to_review = decide_next_files_to_review(
+    # Review required files in parallel
+    required_audit_results = audit_files(
+        tui,
         report,
         package_name,
-        client,
+        pkgdir,
+        required_review_files,
+        "required files",
+    )
+
+    tui.update_status("Deciding which files to review next...")
+    additional_review_files = decide_next_files_to_review(
+        report,
+        package_name,
         other_pkg_files,
-        already_reviewed_files,
-        num_additional_files_to_review,
+        required_review_files,
+        10,
     )
     tui.finalize_step(
-        f"Decided to review {len(files_to_review)} additional files: {', '.join(str(f) for f in files_to_review)}"
+        f"Decided to review {len(additional_review_files)} additional files: {', '.join(str(f) for f in additional_review_files)}"
     )
 
+    # Review additional files in parallel
     tui.update_status("Reviewing additional files...")
-    for f in files_to_review:
-        f_abs = f.resolve()
-        f_rel = f_abs.relative_to(pkgdir)
-        tui.update_status(f"Reviewing {f_rel}...")
-        result = audit_file(report, package_name, f_abs, pkgdir, client, tui)
-        status_txt = "Status: "
-        if tui.has_color:
-            color = result.status.get_color()
-            status_txt += f"[{color}]{result.status.name}[/{color}] -- {result.summary}"
-        else:
-            status_txt += f"{result.status.name} -- {result.summary}"
 
-        tui.finalize_step(f"Reviewed {f_rel}. {status_txt}", status=result.status)
-        audit_results.append(result)
+    additional_audit_results = audit_files(
+        tui,
+        report,
+        package_name,
+        pkgdir,
+        additional_review_files,
+        "additional files",
+    )
 
     tui.finalize_step("Reviewed additional files.")
 
-    return audit_results
+    return required_audit_results + additional_audit_results
 
 
 def run_aur_sleuth_audit(
     tui: ConsoleUI,
     report: Report,
     package_name: str,
-    client: OpenAI,
     pkgdir: Path,
 ) -> int:
     """Runs the specified security audits for aur-sleuth."""
@@ -885,12 +944,12 @@ def run_aur_sleuth_audit(
 
     try:
         tui.finalize_step(
-            f"Analyzing {package_name} AUR package with {model} from {get_base_url()}"
+            f"Analyzing {package_name} AUR package (working in {pkgdir}) with {model} from {get_base_url()}"
         )
 
         os.chdir(pkgdir)
 
-        audit_results = do_agentic_audit(tui, report, package_name, client, pkgdir)
+        audit_results = do_agentic_audit(tui, report, package_name, pkgdir)
 
     except subprocess.CalledProcessError as e:
         msg = f"An unexpected error occurred: {e}"
@@ -980,6 +1039,13 @@ def sleuth_main() -> int:
         default=None,
         help="Base API URL (OpenAI API compatible) to use (overrides environment and config file settings)",
     )
+    parser.add_argument(
+        "--max-llm-jobs",
+        "-j",
+        type=int,
+        default=None,
+        help="Maximum number of concurrent LLM audit jobs (default: 3)",
+    )
     args = parser.parse_args()
 
     if args.model:
@@ -990,7 +1056,9 @@ def sleuth_main() -> int:
         logger.debug("Setting base URL from command line: %s", args.base_url)
         os.environ["OPENAI_BASE_URL"] = args.base_url
 
-    client = get_openai_client()
+    if args.max_llm_jobs is not None:
+        logger.debug("Setting max LLM jobs from command line: %d", args.max_llm_jobs)
+        os.environ["MAX_LLM_JOBS"] = str(args.max_llm_jobs)
 
     original_cwd = os.getcwd()
 
@@ -1007,9 +1075,7 @@ def sleuth_main() -> int:
             pkgdir = download_package_to_tmpdir(
                 tui, Path(tmpdir_parent), args.package_name, args.clone_url
             )
-            retval = run_aur_sleuth_audit(
-                tui, report, args.package_name, client, pkgdir
-            )
+            retval = run_aur_sleuth_audit(tui, report, args.package_name, pkgdir)
 
     os.chdir(original_cwd)
     if os.path.exists(pkgdir):
@@ -1033,7 +1099,6 @@ def wrapper_main() -> int:
         os.execv("/usr/bin/makepkg", ["/usr/bin/makepkg"] + makepkg_args)
         return 0
 
-    client = get_openai_client()
     source_info = get_source_info()
     package_name = source_info["pkgname"]
 
@@ -1044,9 +1109,7 @@ def wrapper_main() -> int:
 
     with Report(report_file) as report:
         with TUI(report) as tui:
-            retval = run_aur_sleuth_audit(
-                tui, report, package_name, client, Path(os.getcwd())
-            )
+            retval = run_aur_sleuth_audit(tui, report, package_name, Path(os.getcwd()))
 
     if retval != 0:
         print("Security audit failed. Exiting makepkg wrapper.")
@@ -1090,7 +1153,12 @@ def load_config():
 
         if config.has_section("default"):
             config_section = config["default"]
-            for key in ["OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENAI_MODEL"]:
+            for key in [
+                "OPENAI_API_KEY",
+                "OPENAI_BASE_URL",
+                "OPENAI_MODEL",
+                "MAX_LLM_JOBS",
+            ]:
                 if key in config_section:
                     logger.debug("Setting %s from %s", key, config_file)
                     os.environ[key] = config_section[key]
