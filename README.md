@@ -72,6 +72,7 @@ The tool can be configured with environment variables:
 - `OPENAI_API_KEY`: Your API key. This is required.
 - `OPENAI_BASE_URL`: The API endpoint. Defaults to OpenRouter if not set.
 - `OPENAI_MODEL`: The model to use. Defaults to `qwen/qwen3-30b-a3b-instruct-2507`.
+- `MAX_LLM_JOBS`: The model to use. Defaults to `qwen/qwen3-30b-a3b-instruct-2507`.
 
 You can either set these environment variables directly in your shell, or add them to
 a configuration file. The tool will automatically load configuration from
@@ -85,6 +86,7 @@ The configuration file should be in INI format:
 OPENAI_API_KEY = your-api-key
 OPENAI_BASE_URL = your-base-url
 OPENAI_MODEL = your-model
+MAX_LLM_JOBS = desired-concurrency
 ```
 
 ### Example using OpenRouter
@@ -94,6 +96,7 @@ OPENAI_MODEL = your-model
 OPENAI_API_KEY = sk-or-v1-7f8...194
 OPENAI_BASE_URL = https://openrouter.ai/api/v1
 OPENAI_MODEL = qwen/qwen3-235b-a22b-2507
+MAX_LLM_JOBS = 10
 ```
 
 ### Example using local ollama instance
@@ -103,6 +106,7 @@ OPENAI_MODEL = qwen/qwen3-235b-a22b-2507
 OPENAI_API_KEY = ollama
 OPENAI_BASE_URL = http://localhost:11434/v1
 OPENAI_MODEL = llama3.1:8b
+MAX_LLM_JOBS = 1
 ```
 
 ## Usage
@@ -114,7 +118,7 @@ package.
 
 **Usage:**
 ```bash
-usage: aur-sleuth [-h] [--clone-url CLONE_URL] [--output OUTPUT] [--model MODEL] [--base-url BASE_URL] package_name
+usage: aur-sleuth [-h] [--clone-url CLONE_URL] [--output OUTPUT] [--model MODEL] [--base-url BASE_URL] [--max-llm-jobs MAX_LLM_JOBS] package_name
 
 Run a security audit on an AUR package.
 
@@ -128,6 +132,8 @@ options:
   --output OUTPUT       Output format. Supported formats: rich, plain. Defaults to rich.
   --model MODEL         LLM to use (overrides environment and config file settings)
   --base-url BASE_URL   Base API URL (OpenAI API compatible) to use (overrides environment and config file settings)
+  --max-llm-jobs MAX_LLM_JOBS, -j MAX_LLM_JOBS
+                        Maximum number of concurrent LLM audit jobs (default: 3)
 ```
 
 The audit process is subject to a session token limit (default: 100,000 tokens) to manage API usage.
@@ -196,7 +202,9 @@ The wrapper will automatically skip the audit for certain makepkg operations lik
 
 The script checks how it was invoked (`sys.argv[0]`).
 1.  **`aur-sleuth`:** It runs the in-depth audit on the specified package.
-2.  **`makepkg-sleuthed`:** It acts as a wrapper around `makepkg`, auditing the `PKGBUILD` in the current directory before building.
+2.  **`makepkg-sleuthed`:** It acts as a wrapper around `makepkg`, performing the
+    audit as if invoked via `aur-sleuth`, and then handing off execution to `makepkg`
+    for building.
 
 ## Security Considerations
 
@@ -207,8 +215,7 @@ The script checks how it was invoked (`sys.argv[0]`).
 
 ## Supported LLM Providers
 
-1. OpenRouter (default)
-2. Any OpenAI-compatible API server
+Any OpenAI-compatible API server
 
 ## Contributing
 
