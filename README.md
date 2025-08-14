@@ -10,7 +10,7 @@ standalone tool, or as a `makepkg` wrapper:
 aur-sleuth package-name
 
 # Audit a package then build and install with yay if it passes the audit
-yay --makepkg aur-sleuth-makepkg-wrapper package-name
+yay --makepkg makepkg-sleuthed package-name
 ```
 
 ## Features
@@ -57,7 +57,7 @@ security auditing LLM deems interesting.
    ```bash
    sudo make install
    ```
-   This will install `aur-sleuth` and a symlink `aur-sleuth-makepkg-wrapper` to `/usr/local/bin`.
+   This will install `aur-sleuth` and a symlink `makepkg-sleuthed` to `/usr/local/bin`.
 
    **User-local installation (no sudo required):**
    ```bash
@@ -153,7 +153,7 @@ After the audit completes, if it is deemed safe, the tool will print the
 path to the temporary directory. You can then inspect the files and, if you
 choose to proceed, run `makepkg` manually from within that directory.
 
-### 2. `aur-sleuth-makepkg-wrapper` (Wrapper Mode)
+### 2. `makepkg-sleuthed` (Wrapper Mode)
 
 This mode is for integrating the audit into your existing `makepkg`
 workflow, for example with a AUR helper like `yay`.
@@ -163,13 +163,13 @@ workflow, for example with a AUR helper like `yay`.
 Audit a package, then install if it passes:
 
 ```bash
-yay --makepkg aur-sleuth-makepkg-wrapper package-name
+yay --makepkg makepkg-sleuthed package-name
 ```
 
 You can persist the `--makepkg` setting like so:
 
 ```bash
-yay --makepkg aur-sleuth-makepkg-wrapper --save
+yay --makepkg makepkg-sleuthed --save
 ```
 
 Then you no longer have to pass `--makepkg` to each invocation of `yay`. Just use it
@@ -186,7 +186,7 @@ arguments to it:
 
 ```bash
 # In a directory with a PKGBUILD
-aur-sleuth-makepkg-wrapper -si
+makepkg-sleuthed -si
 ```
 
 The wrapper will automatically skip the audit for certain makepkg operations like
@@ -196,7 +196,7 @@ The wrapper will automatically skip the audit for certain makepkg operations lik
 
 The script checks how it was invoked (`sys.argv[0]`).
 1.  **`aur-sleuth`:** It runs the in-depth audit on the specified package.
-2.  **`aur-sleuth-makepkg-wrapper`:** It acts as a wrapper around `makepkg`, auditing the `PKGBUILD` in the current directory before building.
+2.  **`makepkg-sleuthed`:** It acts as a wrapper around `makepkg`, auditing the `PKGBUILD` in the current directory before building.
 
 ## Security Considerations
 
