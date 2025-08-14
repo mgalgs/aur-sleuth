@@ -1099,6 +1099,13 @@ def wrapper_main() -> int:
         os.execv("/usr/bin/makepkg", ["/usr/bin/makepkg"] + makepkg_args)
         return 0
 
+    if (Path(os.getcwd()) / "src").exists():
+        proggie = Path(sys.argv[0]).name
+        print(
+            f"./src directory exists. {proggie} requires a clean package directory. Please remove the ./src directory and try again."
+        )
+        sys.exit(1)
+
     source_info = get_source_info()
     package_name = source_info["pkgname"]
 
