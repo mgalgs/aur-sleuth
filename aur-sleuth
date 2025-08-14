@@ -15,6 +15,7 @@ from typing import Dict, Iterable, List, Tuple, Optional, NamedTuple
 from urllib.parse import urlparse
 import abc
 import argparse
+import configparser
 import logging
 import os
 import pprint
@@ -22,6 +23,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import xml.etree.ElementTree as ET
 
 from openai import OpenAI, APIError
@@ -93,6 +95,7 @@ class SafeStatus(Enum):
 
 class AuditResult(NamedTuple):
     file_path: Optional[Path]
+    pkgdir: Path
     status: SafeStatus
     summary: str
     details: str = ""
@@ -103,7 +106,12 @@ class AuditResult(NamedTuple):
         return f"{fpath}[{self.status.name}] {self.summary}{deets}"
 
     def report_text(self, use_color=True) -> str:
-        content = f"## {self.file_path or self.summary}\n\n"
+        header = (
+            self.file_path.relative_to(self.pkgdir).name
+            if self.file_path
+            else self.summary
+        )
+        content = f"## {header}\n\n"
 
         if use_color:
             color = self.status.get_color()
@@ -134,13 +142,14 @@ def generate_report_text(
     report_path: Path,
     results_by_status: Dict[SafeStatus, List[AuditResult]],
     use_color: bool = False,
+    execution_time: Optional[float] = None,
 ) -> str:
     content = ""
     nunsafe = len(results_by_status[SafeStatus.UNSAFE])
     if nunsafe > 0:
         content += f"# Issues ({nunsafe} total)\n\n"
         for issue in results_by_status[SafeStatus.UNSAFE]:
-            content += issue.report_text(use_color=use_color) + "---\n"
+            content += issue.report_text(use_color=use_color) + "---\n\n"
 
     nskips = len(results_by_status[SafeStatus.SKIPPED])
     if nskips > 0:
@@ -148,9 +157,15 @@ def generate_report_text(
             (r.file_path.name if r.file_path else "?")
             for r in results_by_status[SafeStatus.SKIPPED]
         )
-        content += f"\n(Skipped {nskips} file{'' if nskips == 1 else 's'}: {skipped_files})\n"
+        content += (
+            f"(Skipped {nskips} file{'' if nskips == 1 else 's'}: {skipped_files})\n\n"
+        )
 
-    content += f"\nFull audit report can be found in {report_path}"
+    # Add execution time to the report if available
+    if execution_time is not None:
+        content += f"Total execution time: {execution_time:.2f} seconds\n\n"
+
+    content += f"Full audit report can be found in {report_path}"
 
     return content
 
@@ -171,7 +186,10 @@ class ConsoleUI(abc.ABC):
         raise NotImplementedError("Subclasses must implement finalize_step.")
 
     def show_summary(
-        self, report_path: Path, audit_results: Optional[List[AuditResult]] = None
+        self,
+        report_path: Path,
+        audit_results: Optional[List[AuditResult]] = None,
+        execution_time: Optional[float] = None,
     ):
         """Displays the final audit summary."""
         raise NotImplementedError("Subclasses must implement show_summary.")
@@ -199,7 +217,10 @@ class TUIPlain(ConsoleUI):
         self.report.write(f"{icon} {message}", stdout=True)
 
     def show_summary(
-        self, report_path: Path, audit_results: Optional[List[AuditResult]] = None
+        self,
+        report_path: Path,
+        audit_results: Optional[List[AuditResult]] = None,
+        execution_time: Optional[float] = None,
     ):
         results_by_status = partition_results_by_status(audit_results or [])
 
@@ -209,7 +230,12 @@ class TUIPlain(ConsoleUI):
             else SafeStatus.SAFE
         )
 
-        content = generate_report_text(report_path, results_by_status, use_color=False)
+        content = generate_report_text(
+            report_path,
+            results_by_status,
+            use_color=False,
+            execution_time=execution_time,
+        )
 
         recommended_action = (
             " -- DO NOT INSTALL!" if overall_status == SafeStatus.UNSAFE else ""
@@ -282,7 +308,10 @@ class TUI(ConsoleUI):
         self.live.update(self._get_renderable())
 
     def show_summary(
-        self, report_path: Path, audit_results: Optional[List[AuditResult]] = None
+        self,
+        report_path: Path,
+        audit_results: Optional[List[AuditResult]] = None,
+        execution_time: Optional[float] = None,
     ):
         """Displays the final audit summary in a box."""
         if self.live and self.live.is_started:
@@ -304,7 +333,12 @@ class TUI(ConsoleUI):
         )
         title = f"Audit complete! Result: [{result_color}]{overall_status.name}{recommended_action}[/{result_color}]"
 
-        content = generate_report_text(report_path, results_by_status, use_color=True)
+        content = generate_report_text(
+            report_path,
+            results_by_status,
+            use_color=True,
+            execution_time=execution_time,
+        )
 
         self.report.write(content)
 
@@ -317,7 +351,6 @@ class TUI(ConsoleUI):
 
 # Default configuration
 DEFAULT_MODEL = "qwen/qwen3-30b-a3b-instruct-2507"
-MODEL = os.environ.get("OPENAI_MODEL", os.environ.get("MODEL", DEFAULT_MODEL))
 SESSION_AUDIT_LIMIT_TOKENS = 100_000  # 100k tokens for the entire session
 IGNORED_DIRS = [".git"]
 
@@ -341,6 +374,14 @@ Please carefully analyze the following file and identify any potential security 
 }
 
 
+def remove_thinking_block(response: str) -> str:
+    if response.startswith("<think>"):
+        end_idx = response.find("</think>")
+        if end_idx != -1:
+            return response[end_idx + len("</think>") :]
+    return response
+
+
 class LLM:
     """LLM interface"""
 
@@ -348,7 +389,7 @@ class LLM:
         self,
         limit_tokens,
         client,
-        model=MODEL,
+        model=DEFAULT_MODEL,
         system_prompt=None,
         temperature=0.0,
         top_p=0.1,
@@ -397,6 +438,7 @@ class LLM:
             "messages": self.history,
             "temperature": self.temperature,
             "top_p": self.top_p,
+            "timeout": (5.0, 240.0),  # 5s connect, 240s read
         }
         response = self.client.chat.completions.create(**kwargs)
         if response.usage:
@@ -411,7 +453,8 @@ class LLM:
         logger.debug("--- BEGIN LLM RESPONSE ---")
         logger.debug("%s", pprint.pformat(self.history[-1]))
         logger.debug("--- END LLM RESPONSE ---")
-        return rsp_msg.content
+        content = rsp_msg.content
+        return remove_thinking_block(content)
 
 
 def get_api_key():
@@ -427,8 +470,6 @@ def get_base_url():
     """Get API endpoint from OPENAI_BASE_URL, with fallback to OpenRouter"""
     base_url = os.environ.get("OPENAI_BASE_URL")
     if base_url:
-        if not base_url.endswith("/v1"):
-            base_url += "/v1"
         return base_url
     print("WARN: OPENAI_BASE_URL not set, using OpenRouter as fallback")
     return "https://openrouter.ai/api/v1"
@@ -462,7 +503,12 @@ def file_is_plain_text(file_path: Path) -> bool:
 
 
 def audit_file(
-    report: Report, package_name: str, file_path: Path, client: OpenAI, tui: ConsoleUI
+    report: Report,
+    package_name: str,
+    file_path: Path,
+    pkgdir: Path,
+    client: OpenAI,
+    tui: ConsoleUI,
 ) -> AuditResult:
     """Audits a single source file with an LLM."""
 
@@ -471,7 +517,10 @@ def audit_file(
     if not is_plain_text:
         # TODO: Take a look at binary files?
         return AuditResult(
-            file_path, SafeStatus.SKIPPED, f"Skipping binary file: {file_path.name}"
+            file_path,
+            pkgdir,
+            SafeStatus.SKIPPED,
+            f"Skipping binary file: {file_path.name}",
         )
 
     try:
@@ -479,14 +528,18 @@ def audit_file(
             file_content = f.read()
     except FileNotFoundError:
         return AuditResult(
-            file_path, SafeStatus.UNSAFE, f"File not found at: {file_path}"
+            file_path, pkgdir, SafeStatus.UNSAFE, f"File not found at: {file_path}"
         )
     except Exception as e:
-        return AuditResult(file_path, SafeStatus.UNSAFE, f"Failed to read file: {e}")
+        return AuditResult(
+            file_path, pkgdir, SafeStatus.UNSAFE, f"Failed to read file: {e}"
+        )
 
+    model = os.environ.get("OPENAI_MODEL", DEFAULT_MODEL)
     llm_pkgbuild_auditor = LLM(
         limit_tokens=SESSION_AUDIT_LIMIT_TOKENS,
         client=client,
+        model=model,
         system_prompt=SYSTEM_PROMPTS["file_auditor"](package_name),
     )
     prompt = f"""Respond with a security assessment in the following XML format:
@@ -503,15 +556,15 @@ def audit_file(
 <file name="{file_path.name}">
 {file_content}
 </file>"""
-    tui.update_status(f"Auditing {file_path.name} with {MODEL}...")
+    tui.update_status(f"Auditing {file_path.name} with {model}...")
 
-    logger.info("--- LLM REQUEST ---")
+    logger.debug("--- LLM REQUEST ---")
     logger.debug(prompt)
 
     try:
         assessment = llm_pkgbuild_auditor.chat(prompt)
 
-        logger.info("--- LLM RESPONSE ---")
+        logger.debug("--- LLM RESPONSE ---")
         logger.debug(assessment)
         report.write(f"LLM auditresponse for {file_path.name}:\n{assessment}\n")
 
@@ -539,11 +592,11 @@ def audit_file(
         summary = summary_el.text.strip()
 
         safestatus = SafeStatus.SAFE if decision == "SAFE" else SafeStatus.UNSAFE
-        return AuditResult(file_path, safestatus, summary, details)
+        return AuditResult(file_path, pkgdir, safestatus, summary, details)
 
     except (APIError, ET.ParseError, AttributeError) as e:
         tui.finalize_step(f"LLM response processing failed: {e}", success=False)
-        return AuditResult(file_path, SafeStatus.UNSAFE, str(e))
+        return AuditResult(file_path, pkgdir, SafeStatus.UNSAFE, str(e))
 
 
 def gen_user_prompt_for_agentic_audit(
@@ -615,6 +668,26 @@ def download_sources(tui: ConsoleUI):
         return False
 
 
+def get_source_info():
+    output = subprocess.run(
+        ["makepkg", "--printsrcinfo"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    source_info = dict()
+    for line in output.stdout.splitlines():
+        line = line.strip()
+        if "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+        source_info[key] = value
+
+    return source_info
+
+
 def get_source_listing(
     pkgdir: Path, tui: ConsoleUI
 ) -> Tuple[Optional[List[Path]], Optional[List[Path]]]:
@@ -626,19 +699,8 @@ def get_source_listing(
     # required to be reviewed.
     tui.update_status("Running makepkg --printsrcinfo to get source files for agent...")
     try:
-        output = subprocess.run(
-            ["makepkg", "--printsrcinfo"],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-        for line in output.stdout.splitlines():
-            line = line.strip()
-            if "=" not in line:
-                continue
-            key, value = line.split("=", 1)
-            key = key.strip()
-            value = value.strip()
+        source_info = get_source_info()
+        for key, value in source_info.items():
             if key == "source":
                 pfile = Path(value)
                 if is_remote_url(value):
@@ -687,6 +749,7 @@ def decide_next_files_to_review(
     llm = LLM(
         limit_tokens=SESSION_AUDIT_LIMIT_TOKENS,
         client=client,
+        model=os.environ.get("OPENAI_MODEL", DEFAULT_MODEL),
         system_prompt=SYSTEM_PROMPTS["general_security_auditor"](),
     )
     prompt = f"""
@@ -735,14 +798,14 @@ def do_agentic_audit(
     if not download_sources(tui):
         msg = "makepkg --nobuild failed, unable to download sources."
         report.write(msg)
-        return [AuditResult(None, SafeStatus.SKIPPED, msg)]
+        return [AuditResult(None, pkgdir, SafeStatus.SKIPPED, msg)]
 
     required_review_files, other_pkg_files = get_source_listing(pkgdir, tui)
 
     if required_review_files is None or other_pkg_files is None:
         msg = "Failed to get source files for agentic audit."
         report.write(msg)
-        return [AuditResult(None, SafeStatus.SKIPPED, msg)]
+        return [AuditResult(None, pkgdir, SafeStatus.SKIPPED, msg)]
 
     already_reviewed_files = []
     num_additional_files_to_review = 10
@@ -755,7 +818,7 @@ def do_agentic_audit(
         f_abs = f.resolve()
         f_rel = f_abs.relative_to(pkgdir)
         tui.update_status(f"Reviewing {f_rel}...")
-        result = audit_file(report, package_name, f_abs, client, tui)
+        result = audit_file(report, package_name, f_abs, pkgdir, client, tui)
         status_txt = "Status: "
         if tui.has_color:
             color = result.status.get_color()
@@ -787,7 +850,7 @@ def do_agentic_audit(
         f_abs = f.resolve()
         f_rel = f_abs.relative_to(pkgdir)
         tui.update_status(f"Reviewing {f_rel}...")
-        result = audit_file(report, package_name, f_abs, client, tui)
+        result = audit_file(report, package_name, f_abs, pkgdir, client, tui)
         status_txt = "Status: "
         if tui.has_color:
             color = result.status.get_color()
@@ -814,29 +877,35 @@ def run_aur_sleuth_audit(
     report_file = report.report_path
     audit_results = []
     audit_ok = True
+    model = os.environ.get("OPENAI_MODEL", DEFAULT_MODEL)
+
+    # Track execution time
+    start_time = time.time()
+    execution_time = None
 
     try:
-        tui.update_status(f"Analyzing {package_name}")
+        tui.finalize_step(
+            f"Analyzing {package_name} AUR package with {model} from {get_base_url()}"
+        )
 
         os.chdir(pkgdir)
 
         audit_results = do_agentic_audit(tui, report, package_name, client, pkgdir)
 
-        tui.show_summary(report_file, audit_results)
-
     except subprocess.CalledProcessError as e:
         msg = f"An unexpected error occurred: {e}"
         tui.finalize_step(msg, success=False)
-        audit_results.append(AuditResult(None, SafeStatus.SKIPPED, msg))
-        tui.show_summary(report_file, audit_results)
+        audit_results.append(AuditResult(None, pkgdir, SafeStatus.SKIPPED, msg))
     except Exception as e:
         msg = f"An unexpected error occurred: {e}"
         logger.error(msg, exc_info=True)
         tui.finalize_step(msg, success=False)
-        audit_results.append(AuditResult(None, SafeStatus.SKIPPED, msg))
-        tui.show_summary(report_file, audit_results)
+        audit_results.append(AuditResult(None, pkgdir, SafeStatus.SKIPPED, msg))
         raise
     finally:
+        execution_time = time.time() - start_time
+        tui.show_summary(report_file, audit_results, execution_time)
+
         # Write full report
         results_by_status = partition_results_by_status(audit_results)
         overall_status = (
@@ -886,7 +955,7 @@ def download_package_to_tmpdir(
     return Path(tmpdir).resolve()
 
 
-def sleuth_main(client: OpenAI) -> int:
+def sleuth_main() -> int:
     parser = argparse.ArgumentParser(
         description="Run a security audit on an AUR package."
     )
@@ -901,7 +970,27 @@ def sleuth_main(client: OpenAI) -> int:
         default=None,
         help="Output format. Supported formats: rich, plain. Defaults to rich.",
     )
+    parser.add_argument(
+        "--model",
+        default=None,
+        help="LLM to use (overrides environment and config file settings)",
+    )
+    parser.add_argument(
+        "--base-url",
+        default=None,
+        help="Base API URL (OpenAI API compatible) to use (overrides environment and config file settings)",
+    )
     args = parser.parse_args()
+
+    if args.model:
+        logger.debug("Setting model from command line: %s", args.model)
+        os.environ["OPENAI_MODEL"] = args.model
+
+    if args.base_url:
+        logger.debug("Setting base URL from command line: %s", args.base_url)
+        os.environ["OPENAI_BASE_URL"] = args.base_url
+
+    client = get_openai_client()
 
     original_cwd = os.getcwd()
 
@@ -929,16 +1018,9 @@ def sleuth_main(client: OpenAI) -> int:
     return retval
 
 
-def wrapper_main(client: OpenAI) -> int:
+def wrapper_main() -> int:
     parser = argparse.ArgumentParser(
         description="Wrapper for makepkg to audit PKGBUILD."
-    )
-    parser.add_argument(
-        "-p",
-        "--pkgbuild",
-        dest="pkgbuild_path",
-        default="PKGBUILD",
-        help="Path to PKGBUILD.",
     )
     args, makepkg_args = parser.parse_known_args()
 
@@ -951,14 +1033,28 @@ def wrapper_main(client: OpenAI) -> int:
         os.execv("/usr/bin/makepkg", ["/usr/bin/makepkg"] + makepkg_args)
         return 0
 
-    # Otherwise, proceed with the audit
-    retval = run_aur_sleuth_audit(package_name, client, args.clone_url)
+    client = get_openai_client()
+    source_info = get_source_info()
+    package_name = source_info["pkgname"]
+
+    # Create a temporary report file for the wrapper
+    tmpdir_parent = Path(tempfile.gettempdir()) / "aur-sleuth"
+    os.makedirs(tmpdir_parent, exist_ok=True)
+    report_file = tmpdir_parent / f"aur-sleuth-report-{package_name}-wrapper.txt"
+
+    with Report(report_file) as report:
+        with TUI(report) as tui:
+            retval = run_aur_sleuth_audit(
+                tui, report, package_name, client, Path(os.getcwd())
+            )
+
     if retval != 0:
         print("Security audit failed. Exiting makepkg wrapper.")
         return retval
 
     print("Security audit passed. Proceeding with makepkg execution...")
-    os.execv("/usr/bin/makepkg", makepkg_args)
+    os.execv("/usr/bin/makepkg", ["/usr/bin/makepkg"] + makepkg_args)
+    return 0
 
 
 def get_openai_client() -> OpenAI:
@@ -975,14 +1071,41 @@ def get_openai_client() -> OpenAI:
     )
 
 
+def load_config():
+    """Load configuration from system and user config files."""
+    config_files = [
+        Path("/etc/aur-sleuth.conf"),
+        Path.home() / ".config" / "aur-sleuth.conf",
+    ]
+
+    # Read all existing config files (later files override earlier ones)
+    for config_file in config_files:
+        config = configparser.ConfigParser()
+        if config_file.exists():
+            try:
+                config.read(config_file)
+                logger.debug("Loading settings from %s", config_file)
+            except Exception as e:
+                logger.warning(f"Failed to read config from {config_file}: {e}")
+
+        if config.has_section("default"):
+            config_section = config["default"]
+            for key in ["OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENAI_MODEL"]:
+                if key in config_section:
+                    logger.debug("Setting %s from %s", key, config_file)
+                    os.environ[key] = config_section[key]
+
+
 def main():
+    # Load configuration files if they exist
+    load_config()
+
     invocation_name = Path(sys.argv[0]).name
-    client = get_openai_client()
 
     if invocation_name == "aur-sleuth":
-        sys.exit(sleuth_main(client))
+        sys.exit(sleuth_main())
     elif invocation_name == "aur-sleuth-makepkg-wrapper":
-        sys.exit(wrapper_main(client))
+        sys.exit(wrapper_main())
     else:
         print(
             f"ERROR: Unknown invocation name '{invocation_name}'. Please invoke as 'aur-sleuth' or 'aur-sleuth-makepkg-wrapper'.",
