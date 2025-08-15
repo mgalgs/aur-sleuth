@@ -24,9 +24,8 @@ Here it is in action catching the shenanigans from the infamous [malicious `goog
 
 ## Motivation
 
-Recently, there have been supply chain security breaches where malicious
-code was inserted into AUR packages in subtle ways. This tool helps detect
-such issues by using an LLM to analyze AUR packages for potential
+Recently, there have been subtly malicious packages uploaded to the AUR. This tool
+helps detect such issues by using an LLM to analyze AUR packages for potential
 security concerns before building.
 
 `aur-sleuth` performs a security audit of all of the files in the `source` array in
