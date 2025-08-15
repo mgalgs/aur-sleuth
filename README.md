@@ -73,6 +73,8 @@ The tool can be configured with environment variables:
 - `OPENAI_BASE_URL`: The API endpoint. Defaults to OpenRouter if not set.
 - `OPENAI_MODEL`: The model to use. Defaults to `qwen/qwen3-30b-a3b-instruct-2507`.
 - `MAX_LLM_JOBS`: The model to use. Defaults to `qwen/qwen3-30b-a3b-instruct-2507`.
+- `NUM_FILES_TO_REVIEW`: The number of files to review in addition to those listed in
+  the `source` array. Defaults to `10`.
 
 You can either set these environment variables directly in your shell, or add them to
 a configuration file. The tool will automatically load configuration from
@@ -118,7 +120,7 @@ package.
 
 **Usage:**
 ```bash
-usage: aur-sleuth [-h] [--clone-url CLONE_URL] [--output OUTPUT] [--model MODEL] [--base-url BASE_URL] [--max-llm-jobs MAX_LLM_JOBS] package_name
+usage: aur-sleuth [-h] [--clone-url CLONE_URL] [--output OUTPUT] [--model MODEL] [--base-url BASE_URL] [--max-llm-jobs MAX_LLM_JOBS] [--num-files-to-review NUM_FILES_TO_REVIEW] package_name
 
 Run a security audit on an AUR package.
 
@@ -134,6 +136,8 @@ options:
   --base-url BASE_URL   Base API URL (OpenAI API compatible) to use (overrides environment and config file settings)
   --max-llm-jobs MAX_LLM_JOBS, -j MAX_LLM_JOBS
                         Maximum number of concurrent LLM audit jobs (default: 3)
+  --num-files-to-review NUM_FILES_TO_REVIEW, -n NUM_FILES_TO_REVIEW
+                        Target number of files to audit jobs (default: 10)
 ```
 
 The audit process is subject to a session token limit (default: 100,000 tokens) to manage API usage.

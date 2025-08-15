@@ -743,8 +743,8 @@ def decide_next_files_to_review(
     package_name: str,
     other_pkg_files: List[Path],
     already_reviewed_files: List[Path],
-    num_additional_files_to_review: int,
 ) -> List[Path]:
+    num_additional_files_to_review = int(os.environ.get("NUM_FILES_TO_REVIEW", "10"))
     files_to_consider = [f for f in other_pkg_files if f not in already_reviewed_files]
     if len(files_to_consider) <= num_additional_files_to_review:
         return files_to_consider
@@ -903,7 +903,6 @@ def do_agentic_audit(
         package_name,
         other_pkg_files,
         required_review_files,
-        10,
     )
     tui.finalize_step(
         f"Decided to review {len(additional_review_files)} additional files: {', '.join(str(f) for f in additional_review_files)}"
@@ -1046,6 +1045,13 @@ def sleuth_main() -> int:
         default=None,
         help="Maximum number of concurrent LLM audit jobs (default: 3)",
     )
+    parser.add_argument(
+        "--num-files-to-review",
+        "-n",
+        type=int,
+        default=10,
+        help="Target number of files to audit jobs (default: 10)",
+    )
     args = parser.parse_args()
 
     if args.model:
@@ -1059,6 +1065,8 @@ def sleuth_main() -> int:
     if args.max_llm_jobs is not None:
         logger.debug("Setting max LLM jobs from command line: %d", args.max_llm_jobs)
         os.environ["MAX_LLM_JOBS"] = str(args.max_llm_jobs)
+
+    os.environ["NUM_FILES_TO_REVIEW"] = str(args.num_files_to_review)
 
     original_cwd = os.getcwd()
 
@@ -1165,6 +1173,7 @@ def load_config():
                 "OPENAI_BASE_URL",
                 "OPENAI_MODEL",
                 "MAX_LLM_JOBS",
+                "NUM_FILES_TO_REVIEW",
             ]:
                 if key in config_section:
                     logger.debug("Setting %s from %s", key, config_file)
