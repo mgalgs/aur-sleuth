@@ -6,18 +6,15 @@ An LLM-powered security auditing tool for Arch User Repository (AUR) packages.
 standalone tool, or as a `makepkg` wrapper:
 
 ```bash
-# Audit a package without building or installing
+# Audit a package from the AUR without building or installing
 aur-sleuth package-name
 
 # Audit a package then build and install with yay if it passes the audit
 yay --makepkg makepkg-sleuthed package-name
+
+# Audit, then build and install a local package (in a directory containing a PKGBUILD)
+makepkg-sleuthed -si
 ```
-
-## Features
-
-- `yay` integration.
-- Can use any LLM with OpenAI compatible API endpoint (OpenRouter, OpenAI, local
-  ollama, etc.).
 
 ## Screenshot
 
