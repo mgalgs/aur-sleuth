@@ -16,7 +16,7 @@ yay --makepkg makepkg-sleuthed package-name
 makepkg-sleuthed -si
 ```
 
-## Screenshot
+## Demo
 
 Here it is in action catching the shenanigans from the infamous [malicious `google-chrome-stable` package](https://www.reddit.com/r/archlinux/comments/1me632m/is_this_another_aur_infect_package/):
 
