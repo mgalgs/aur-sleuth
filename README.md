@@ -188,7 +188,7 @@ yay --makepkg makepkg-sleuthed --save
 ```
 
 Then you no longer have to pass `--makepkg` to each invocation of `yay`. Just use it
-as you normally would:
+as you normally would and the audit will be performed automatically:
 
 ```bash
 yay -S package-name
