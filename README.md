@@ -111,6 +111,16 @@ OPENAI_MODEL = qwen/qwen3-30b-a3b-instruct-2507
 MAX_LLM_JOBS = 10
 ```
 
+### Example using OpenAI
+
+```ini
+[default]
+OPENAI_API_KEY = sk-proj-EW...KA
+OPENAI_BASE_URL = https://api.openai.com/v1
+OPENAI_MODEL = gpt-5-mini
+MAX_LLM_JOBS = 5
+```
+
 ### Example using local ollama instance
 
 ```ini
