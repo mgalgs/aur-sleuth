@@ -392,8 +392,8 @@ class LLM:
         client,
         model=DEFAULT_MODEL,
         system_prompt=None,
-        temperature=0.0,
-        top_p=0.1,
+        temperature=None,
+        top_p=None,
     ):
         self.limit_tokens = limit_tokens
         self.tokens_processed = 0
@@ -404,6 +404,7 @@ class LLM:
         self.model = model
         self.temperature = temperature
         self.top_p = top_p
+
         if system_prompt:
             self.init_chat(system_prompt)
 
@@ -437,15 +438,21 @@ class LLM:
         kwargs = {
             "model": self.model,
             "messages": self.history,
-            "temperature": self.temperature,
-            "top_p": self.top_p,
             "timeout": (5.0, 240.0),  # 5s connect, 240s read
         }
+
+        optional_llm_params = ["temperature", "top_p"]
+        for param in optional_llm_params:
+            if getattr(self, param, None):
+                kwargs[param] = getattr(self, param)
+
         response = self.client.chat.completions.create(**kwargs)
+
         if response.usage:
             self.prompt_tokens += response.usage.prompt_tokens
             self.completion_tokens += response.usage.completion_tokens
             self.add_tokens(self.prompt_tokens + self.completion_tokens)
+
         rsp_msg = response.choices[0].message
         self.history.append(rsp_msg)
         logger.debug("--- BEGIN LLM REQUEST ---")
@@ -456,6 +463,30 @@ class LLM:
         logger.debug("--- END LLM RESPONSE ---")
         content = rsp_msg.content
         return remove_thinking_block(content)
+
+
+class LLMParams(NamedTuple):
+    model: str
+    temperature: Optional[float] = None
+    top_p: Optional[float] = None
+
+
+def get_llm_params_from_env():
+    model = os.environ.get("OPENAI_MODEL", DEFAULT_MODEL)
+
+    temperature = os.environ.get("LLM_TEMPERATURE")
+    if temperature is not None:
+        temperature = float(temperature)
+
+    top_p = os.environ.get("LLM_TOP_P")
+    if top_p is not None:
+        top_p = float(top_p)
+
+    return LLMParams(
+        model=model,
+        temperature=temperature,
+        top_p=top_p,
+    )
 
 
 def get_api_key():
@@ -535,12 +566,15 @@ def audit_file(
             file_path, pkgdir, SafeStatus.UNSAFE, f"Failed to read file: {e}"
         )
 
-    model = os.environ.get("OPENAI_MODEL", DEFAULT_MODEL)
+    llm_params = get_llm_params_from_env()
+
     llm_pkgbuild_auditor = LLM(
         limit_tokens=SESSION_AUDIT_LIMIT_TOKENS,
         client=client,
-        model=model,
+        model=llm_params.model,
         system_prompt=SYSTEM_PROMPTS["file_auditor"](package_name),
+        temperature=llm_params.temperature,
+        top_p=llm_params.top_p,
     )
     prompt = f"""Respond with a security assessment in the following XML format:
 <security_assessment>
@@ -748,12 +782,15 @@ def decide_next_files_to_review(
         return files_to_consider
 
     client = get_openai_client()
+    llm_params = get_llm_params_from_env()
 
     llm = LLM(
         limit_tokens=SESSION_AUDIT_LIMIT_TOKENS,
         client=client,
-        model=os.environ.get("OPENAI_MODEL", DEFAULT_MODEL),
+        model=llm_params.model,
         system_prompt=SYSTEM_PROMPTS["general_security_auditor"](),
+        temperature=llm_params.temperature,
+        top_p=llm_params.top_p,
     )
     prompt = f"""
 To continue the audit of the {package_name} package, please select {num_additional_files_to_review} more source files to review from the package directory listing below.
@@ -1172,6 +1209,8 @@ def load_config():
                 "OPENAI_MODEL",
                 "MAX_LLM_JOBS",
                 "NUM_FILES_TO_REVIEW",
+                "LLM_TEMPERATURE",
+                "LLM_TOP_P",
             ]:
                 if key in config_section:
                     logger.debug("Setting %s from %s", key, config_file)

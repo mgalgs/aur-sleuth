@@ -81,6 +81,8 @@ The tool can be configured with environment variables:
 - `MAX_LLM_JOBS`: Max concurrent LLM calls. Defaults to `3`.
 - `NUM_FILES_TO_REVIEW`: The number of files to review in addition to those listed in
   the `source` array. Defaults to `10`.
+- `LLM_TEMPERATURE`: The temperature parameter for the LLM (0.0-2.0). If not set, uses model default.
+- `LLM_TOP_P`: The top-p parameter for the LLM (0.0-1.0). If not set, uses model default.
 
 You can either set these environment variables directly in your shell, or add them to
 a configuration file. The tool will automatically load configuration from
@@ -95,6 +97,8 @@ OPENAI_API_KEY = your-api-key
 OPENAI_BASE_URL = your-base-url
 OPENAI_MODEL = your-model
 MAX_LLM_JOBS = desired-concurrency
+LLM_TEMPERATURE = 0.7  # Omit to use the model default
+LLM_TOP_P = 0.9        # ditto
 ```
 
 ### Example using OpenRouter
