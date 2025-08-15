@@ -22,7 +22,7 @@ Here it is in action catching the shenanigans from the infamous [malicious `goog
 
 ![Screenshot](./screenshot.png)
 
-## Purpose
+## Motivation
 
 Recently, there have been supply chain security breaches where malicious
 code was inserted into AUR packages in subtle ways. This tool helps detect
@@ -32,6 +32,14 @@ security concerns before building.
 `aur-sleuth` performs a security audit of all of the files in the `source` array in
 the `PKGBUILD`, along with any other files from the actual package sources that the
 security auditing LLM deems interesting.
+
+This helps fulfill one of the great promises of open source software: security
+through the ability to audit the source code of applications you run on your
+machine. In the past this wasn't really practical since there's just too much code to
+review. But in a world with readily available LLMs that are fast, cheap, and
+effective, this promise of enhanced security becomes extremely compelling. As LLMs
+get even faster and cheaper there will be no reason not to audit every bit of code
+you run on your machine. This will only be possible in the world of open source!
 
 ## Installation
 
