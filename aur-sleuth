@@ -594,7 +594,9 @@ def audit_file(
         return AuditResult(file_path, pkgdir, safestatus, summary, details)
 
     except (APIError, ET.ParseError, AttributeError) as e:
-        return AuditResult(file_path, pkgdir, SafeStatus.SKIPPED, "Audit error: " + str(e))
+        msg = "Audit error: " + str(e)
+        logger.debug("%s", msg, exc_info=True)
+        return AuditResult(file_path, pkgdir, SafeStatus.SKIPPED, msg)
 
 
 def gen_user_prompt_for_agentic_audit(
