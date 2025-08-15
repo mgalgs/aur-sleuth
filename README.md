@@ -77,7 +77,7 @@ The tool can be configured with environment variables:
 - `OPENAI_API_KEY`: Your API key. This is required.
 - `OPENAI_BASE_URL`: The API endpoint. Defaults to OpenRouter if not set.
 - `OPENAI_MODEL`: The model to use. Defaults to `qwen/qwen3-30b-a3b-instruct-2507`.
-- `MAX_LLM_JOBS`: The model to use. Defaults to `qwen/qwen3-30b-a3b-instruct-2507`.
+- `MAX_LLM_JOBS`: The model to use. Defaults to `3`.
 - `NUM_FILES_TO_REVIEW`: The number of files to review in addition to those listed in
   the `source` array. Defaults to `10`.
 
