@@ -43,13 +43,13 @@ you run on your machine. This will only be possible in the world of open source!
 
 ## Installation
 
+*(AUR package coming soon...)*
+
 1. Clone this repository:
    ```bash
    git clone https://github.com/mgalgs/aur-sleuth.git
    cd aur-sleuth
    ```
-
-(AUR package coming soon...)
 
 2. Install dependencies:
    ```bash
