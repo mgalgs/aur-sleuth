@@ -11,7 +11,7 @@
 from collections import defaultdict
 from enum import Enum
 from pathlib import Path
-from typing import Dict, Iterable, List, Tuple, Optional, NamedTuple
+from typing import Dict, List, Tuple, Optional, NamedTuple
 from urllib.parse import urlparse
 import abc
 import argparse
@@ -26,10 +26,8 @@ import tempfile
 import time
 import xml.etree.ElementTree as ET
 
-# Threading imports for parallel execution
-import threading
 import concurrent.futures
-from threading import Lock, Thread
+from threading import Lock
 
 from openai import OpenAI, APIError
 from rich import box
@@ -40,9 +38,8 @@ from rich.spinner import Spinner
 from rich.text import Text
 
 
-# --- Logging Setup ---
 LOG_FILE = "/tmp/aur-sleuth-debug.log"
-# Clear the log file at the start of a run
+
 if os.path.exists(LOG_FILE):
     os.remove(LOG_FILE)
 
@@ -53,7 +50,30 @@ logging.basicConfig(
     filemode="a",
 )
 logger = logging.getLogger("aur-sleuth")
-# --- End Logging Setup ---
+
+# Default configuration
+DEFAULT_MODEL = "qwen/qwen3-30b-a3b-instruct-2507"
+SESSION_AUDIT_LIMIT_TOKENS = 100_000  # 100k tokens for the entire session
+IGNORED_DIRS = [".git"]
+
+SYSTEM_PROMPTS = {
+    "general_security_auditor": lambda: (
+        """You are an agentic security auditor. Your goal is to inspect the source code and AUR build files in this package to find any potential vulnerabilities, malicious code, or supply chain attack vectors."""
+    ),
+    "file_auditor": lambda package_name: (
+        f"""You are a security expert tasked with auditing a file from a package distributed via the Arch User Repository (AUR).
+This file is part of the {package_name} package for Arch Linux systems. Recently, there have been supply chain attacks where
+malicious code was inserted into AUR packages in subtle ways. You need to detect any potential security issues in this file.
+
+Please carefully analyze the following file and identify any potential security issues, including but not limited to:
+1. Suspicious network requests or downloads from non-standard sources
+2. Obfuscated code or unusual encoding
+3. Unexpected file operations or system modifications
+4. Use of potentially dangerous commands like eval, base64, curl, wget in unexpected contexts
+5. Anything that deviates from standard packaging practices
+"""
+    ),
+}
 
 
 class Report:
@@ -177,7 +197,6 @@ def generate_report_text(
     return content
 
 
-# --- TUI Setup ---
 class ConsoleUI(abc.ABC):
     """Base class for terminal user interfaces."""
 
@@ -354,34 +373,6 @@ class TUI(ConsoleUI):
 
         panel = Panel(content, title=title, box=box.ROUNDED, expand=False)
         self.console.print(panel)
-
-
-# --- End TUI Setup ---
-
-
-# Default configuration
-DEFAULT_MODEL = "qwen/qwen3-30b-a3b-instruct-2507"
-SESSION_AUDIT_LIMIT_TOKENS = 100_000  # 100k tokens for the entire session
-IGNORED_DIRS = [".git"]
-
-SYSTEM_PROMPTS = {
-    "general_security_auditor": lambda: (
-        """You are an agentic security auditor. Your goal is to inspect the source code and AUR build files in this package to find any potential vulnerabilities, malicious code, or supply chain attack vectors."""
-    ),
-    "file_auditor": lambda package_name: (
-        f"""You are a security expert tasked with auditing a file from a package distributed via the Arch User Repository (AUR).
-This file is part of the {package_name} package for Arch Linux systems. Recently, there have been supply chain attacks where
-malicious code was inserted into AUR packages in subtle ways. You need to detect any potential security issues in this file.
-
-Please carefully analyze the following file and identify any potential security issues, including but not limited to:
-1. Suspicious network requests or downloads from non-standard sources
-2. Obfuscated code or unusual encoding
-3. Unexpected file operations or system modifications
-4. Use of potentially dangerous commands like eval, base64, curl, wget in unexpected contexts
-5. Anything that deviates from standard packaging practices
-"""
-    ),
-}
 
 
 def remove_thinking_block(response: str) -> str:
