@@ -647,7 +647,7 @@ def is_remote_url(source):
 
 
 def download_sources(tui: ConsoleUI):
-    tui.update_status("Running makepkg --nobuild to download sources for agent...")
+    tui.update_status("Running makepkg --nobuild --nodeps --noprepare to download sources for agent...")
     try:
         subprocess.run(
             ["makepkg", "--nobuild", "--nodeps", "--noprepare"],
@@ -655,14 +655,14 @@ def download_sources(tui: ConsoleUI):
             capture_output=True,
             text=True,
         )
-        tui.finalize_step("makepkg --nobuild successful")
+        tui.finalize_step("makepkg --nobuild --nodeps --noprepare successful")
         return True
     except subprocess.CalledProcessError as e:
         tui.finalize_step(
-            "makepkg --nobuild failed.",
+            "makepkg --nobuild --nodeps --noprepare failed.",
             success=False,
         )
-        logger.error(f"makepkg --nobuild failed: {e.stderr}")
+        logger.error(f"makepkg --nobuild --nodeps --noprepare failed: {e.stderr}")
         return False
 
 
