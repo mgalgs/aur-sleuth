@@ -44,15 +44,15 @@ you run on your machine. This will only be possible in the world of open source!
 
 *(AUR package coming soon...)*
 
-1. Clone this repository:
+1. Install dependencies:
+   ```bash
+   sudo pacman -S uv
+   ```
+
+2. Clone this repository:
    ```bash
    git clone https://github.com/mgalgs/aur-sleuth.git
    cd aur-sleuth
-   ```
-
-2. Install dependencies:
-   ```bash
-   sudo pacman -S uv
    ```
 
 3. Install the script.
@@ -68,6 +68,8 @@ you run on your machine. This will only be possible in the world of open source!
    make install PREFIX=$HOME/.local
    ```
    This will install the scripts to `$HOME/.local/bin`. Make sure this directory is in your `PATH`.
+
+Alternatively you can simply download [`aur-sleuth`](https://raw.githubusercontent.com/mgalgs/aur-sleuth/refs/heads/master/aur-sleuth), drop it in your PATH, and add a symlink named `makepkg-sleuthed`.
 
 ## Configuration
 
