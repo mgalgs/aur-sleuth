@@ -248,6 +248,15 @@ class SafeStatus(Enum):
             self.SKIPPED: "!",
         }[self]
 
+    @property
+    def cautious_name(self):
+        """Returns a cautious name for the status."""
+        return {
+            self.SAFE: "No issues found",
+            self.UNSAFE: "Unsafe",
+            self.SKIPPED: "Skipped",
+        }[self]
+
 
 class AuditResult(NamedTuple):
     file_path: Optional[Path]
@@ -436,7 +445,7 @@ class TUIPlain(ConsoleUI):
             " -- DO NOT INSTALL!" if overall_status == SafeStatus.UNSAFE else ""
         )
         self.report.write(
-            f"Audit complete! Result: {overall_status.name}{recommended_action}",
+            f"Audit complete! Result: {overall_status.cautious_name}{recommended_action}",
             stdout=True,
         )
         self.report.write(content, stdout=True)
@@ -527,7 +536,7 @@ class TUI(ConsoleUI):
         recommended_action = (
             " -- DO NOT INSTALL!" if overall_status == SafeStatus.UNSAFE else ""
         )
-        title = f"Audit complete! Result: [{result_color}]{overall_status.name}{recommended_action}[/{result_color}]"
+        title = f"Audit complete! Result: [{result_color}]{overall_status.cautious_name}{recommended_action}[/{result_color}]"
 
         content = generate_report_text(
             report_path,
