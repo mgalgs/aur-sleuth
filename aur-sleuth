@@ -5,17 +5,23 @@
 # dependencies = [
 #     "openai",
 #     "rich",
+#     "requests",
 # ]
 # ///
 
 from collections import defaultdict
+from decimal import Decimal
 from enum import Enum
 from pathlib import Path
+from threading import Lock
 from typing import Dict, List, Tuple, Optional, NamedTuple
 from urllib.parse import urlparse
 import abc
 import argparse
+import colorsys
+import concurrent.futures
 import configparser
+import json
 import logging
 import os
 import pprint
@@ -26,9 +32,6 @@ import tempfile
 import time
 import xml.etree.ElementTree as ET
 
-import concurrent.futures
-from threading import Lock
-
 from openai import OpenAI, APIError
 from rich import box
 from rich.console import Console, Group
@@ -36,9 +39,10 @@ from rich.live import Live
 from rich.panel import Panel
 from rich.spinner import Spinner
 from rich.text import Text
+import requests
 
 
-LOG_FILE = "/tmp/aur-sleuth-debug.log"
+LOG_FILE = "/tmp/aur-sleuth/aur-sleuth-debug.log"
 
 if os.path.exists(LOG_FILE):
     os.remove(LOG_FILE)
@@ -55,6 +59,131 @@ logger = logging.getLogger("aur-sleuth")
 DEFAULT_MODEL = "qwen/qwen3-235b-a22b-2507"
 SESSION_AUDIT_LIMIT_TOKENS = 100_000  # 100k tokens for the entire session
 IGNORED_DIRS = [".git"]
+
+
+class ModelPricingParams(NamedTuple):
+    prompt: Decimal
+    completion: Decimal
+    request: Decimal
+    image: Decimal
+    audio: Decimal
+    web_search: Decimal
+    internal_reasoning: Decimal
+
+
+class LLMClient:
+    """A wrapper around OpenAI client that tracks token usage and costs."""
+
+    def __init__(self, openai_client: Optional[OpenAI] = None):
+        self.openai_client = openai_client
+        # Other clients can be added here in the future
+        if not any([self.openai_client]):
+            raise ValueError("No LLM client configured.")
+        self.prompt_tokens: Dict[str, int] = defaultdict(lambda: 0)
+        self.completion_tokens: Dict[str, int] = defaultdict(lambda: 0)
+        self.total_cost: Dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
+        self.pricing: Dict[str, ModelPricingParams] = dict()  # model => pricing
+        self._fetch_pricing_info()
+
+    def _fetch_pricing_info(self):
+        """Fetch up-to-date pricing information."""
+        base_url = getattr(self.openai_client, "base_url", "")
+        if "openrouter.ai" in str(base_url):
+            self._fetch_openrouter_pricing()
+            return
+
+    def _fetch_openrouter_pricing(self):
+        logger.debug("Fetching model pricing from OpenRouter API")
+        response = requests.get("https://openrouter.ai/api/v1/models", timeout=10)
+        if response.status_code == 200:
+            models_data = response.json()
+            for model_data in models_data.get("data", []):
+                model_name = model_data.get("id")
+                pricing = model_data.get("pricing", {})
+                if not all([model_name, pricing]):
+                    continue
+                self.pricing[model_name] = ModelPricingParams(
+                    prompt=Decimal(pricing.get("prompt", 0)),
+                    completion=Decimal(pricing.get("completion", 0)),
+                    request=Decimal(pricing.get("request", 0)),
+                    image=Decimal(pricing.get("image", 0)),
+                    audio=Decimal(pricing.get("audio", 0)),
+                    web_search=Decimal(pricing.get("web_search", 0)),
+                    internal_reasoning=Decimal(pricing.get("internal_reasoning", 0)),
+                )
+
+    def _calculate_cost(
+        self, model_name: str, prompt_tokens: int, completion_tokens: int
+    ) -> Decimal:
+        """Calculate cost based on token usage and pricing info."""
+        if model_name not in self.pricing:
+            return Decimal("0")
+
+        prompt_cost = prompt_tokens * self.pricing[model_name].prompt
+        completion_cost = completion_tokens * self.pricing[model_name].completion
+        return prompt_cost + completion_cost
+
+    def chat_completions_create(self, *args, **kwargs):
+        """Wrapper around client.chat.completions.create that tracks usage."""
+        if self.openai_client:
+            return self._openai_chat_completions_create(*args, **kwargs)
+        raise ValueError("No LLM client configured.")
+
+    def _openai_chat_completions_create(self, *args, **kwargs):
+        if not self.openai_client:
+            raise ValueError("OpenAI client not configured.")
+
+        response = self.openai_client.chat.completions.create(*args, **kwargs)
+
+        model_name = kwargs["model"]
+
+        # Track token usage
+        if response.usage:
+            prompt_tokens = response.usage.prompt_tokens
+            completion_tokens = response.usage.completion_tokens
+
+            self.prompt_tokens[model_name] += prompt_tokens
+            self.completion_tokens[model_name] += completion_tokens
+
+            # Calculate and track cost
+            cost = self._calculate_cost(model_name, prompt_tokens, completion_tokens)
+            self.total_cost[model_name] += cost
+
+        return response
+
+    def get_usage_summary(self) -> dict[str, dict]:
+        """
+        Get a summary of token usage and costs by model as well as aggregated
+        totals.
+        """
+        return {
+            "by-model": {
+                model: {
+                    "prompt_tokens": f"{self.prompt_tokens[model]:,}",
+                    "completion_tokens": f"{self.completion_tokens[model]:,}",
+                    "total_tokens": f"{self.prompt_tokens[model] + self.completion_tokens[model]:,}",
+                    "total_cost": (
+                        f"${self.total_cost[model]:.6f}"
+                        if self.pricing.get(model)
+                        else "Unknown"
+                    ),
+                }
+                for model in self.prompt_tokens
+            },
+            "total": {
+                "prompt_tokens": f"{sum(self.prompt_tokens.values()):,}",
+                "completion_tokens": f"{sum(self.completion_tokens.values()):,}",
+                "total_tokens": f"{sum(
+                        list(self.prompt_tokens.values())
+                        + list(self.completion_tokens.values())):,}",
+                "total_cost": (
+                    f"${sum(self.total_cost.values()):.6f}"
+                    if any(k in self.pricing for k in self.total_cost.keys())
+                    else "Unknown"
+                ),
+            },
+        }
+
 
 SYSTEM_PROMPTS = {
     "general_security_auditor": lambda: (
@@ -168,8 +297,9 @@ def partition_results_by_status(
 def generate_report_text(
     report_path: Path,
     results_by_status: Dict[SafeStatus, List[AuditResult]],
-    use_color: bool = False,
-    execution_time: Optional[float] = None,
+    use_color: bool,
+    execution_time: Optional[float],
+    llm_client: LLMClient,
 ) -> str:
     content = ""
     nunsafe = len(results_by_status[SafeStatus.UNSAFE])
@@ -188,12 +318,45 @@ def generate_report_text(
             f"(Skipped {nskips} file{'' if nskips == 1 else 's'}: {skipped_files})\n\n"
         )
 
-    # Add execution time to the report if available
-    if execution_time is not None:
-        content += f"Total execution time: {execution_time:.2f} seconds\n\n"
+    usage_summary_all = llm_client.get_usage_summary()
+    usage_summary = usage_summary_all["total"]
+    models = usage_summary_all["by-model"].keys()
 
+    if use_color:
+        gradient_title = ""
+        title_text = "API Usage Summary"
+        num_colors = len(title_text)
+        for i, char in enumerate(title_text):
+            hue = 0.7 + (0.19 * i / (num_colors - 1))
+            saturation = 0.7
+            value = 0.9
+            r, g, b = colorsys.hsv_to_rgb(hue, saturation, value)
+            r, g, b = int(r * 255), int(g * 255), int(b * 255)
+            hex_color = f"#{r:02x}{g:02x}{b:02x}"
+
+            gradient_title += f"[{hex_color}]{char}[/]"
+
+        usage_details = gradient_title + "\n"
+        usage_details += (
+            f"  [bold dark_gray]Models:[/] [bold grey]{', '.join(models)}[/]\n"
+        )
+        usage_details += f"  [bold dark_gray]Prompt Tokens:[/] [bold grey]{usage_summary['prompt_tokens']}[/]\n"
+        usage_details += f"  [bold dark_gray]Completion Tokens:[/] [bold grey]{usage_summary['completion_tokens']}[/]\n"
+        usage_details += f"  [bold dark_gray]Total Tokens:[/] [bold grey]{usage_summary['total_tokens']}[/]\n"
+        usage_details += f"  [bold dark_gray]Total Cost:[/] [bold grey]{usage_summary['total_cost']}[/]\n"
+        usage_details += f"  [bold dark_gray]Execution Time:[/] [bold grey]{execution_time:.2f} seconds[/]\n"
+    else:
+        # Plain text version without colors
+        usage_details = "API Usage Summary\n"
+        usage_details += f"  Models: {', '.join(models)}\n"
+        usage_details += f"  Prompt Tokens: {usage_summary['prompt_tokens']}\n"
+        usage_details += f"  Completion Tokens: {usage_summary['completion_tokens']}\n"
+        usage_details += f"  Total Tokens: {usage_summary['total_tokens']}\n"
+        usage_details += f"  Total Cost: {usage_summary['total_cost']}\n"
+        usage_details += f"  Execution Time: {execution_time:.2f} seconds\n"
+
+    content += usage_details
     content += f"Full audit report can be found in {report_path}"
-
     return content
 
 
@@ -214,8 +377,9 @@ class ConsoleUI(abc.ABC):
     def show_summary(
         self,
         report_path: Path,
-        audit_results: Optional[List[AuditResult]] = None,
-        execution_time: Optional[float] = None,
+        audit_results: Optional[List[AuditResult]],
+        execution_time: Optional[float],
+        llm_client: LLMClient,
     ):
         """Displays the final audit summary."""
         raise NotImplementedError("Subclasses must implement show_summary.")
@@ -248,10 +412,11 @@ class TUIPlain(ConsoleUI):
     def show_summary(
         self,
         report_path: Path,
-        audit_results: Optional[List[AuditResult]] = None,
-        execution_time: Optional[float] = None,
+        audit_results: Optional[List[AuditResult]],
+        execution_time: Optional[float],
+        llm_client: LLMClient,
     ):
-        results_by_status = partition_results_by_status(audit_results or [])
+        results_by_status = partition_results_by_status(audit_results)
 
         overall_status = (
             SafeStatus.UNSAFE
@@ -264,6 +429,7 @@ class TUIPlain(ConsoleUI):
             results_by_status,
             use_color=False,
             execution_time=execution_time,
+            llm_client=llm_client,
         )
 
         recommended_action = (
@@ -339,8 +505,9 @@ class TUI(ConsoleUI):
     def show_summary(
         self,
         report_path: Path,
-        audit_results: Optional[List[AuditResult]] = None,
-        execution_time: Optional[float] = None,
+        audit_results: Optional[List[AuditResult]],
+        execution_time: Optional[float],
+        llm_client: LLMClient,
     ):
         """Displays the final audit summary in a box."""
         if self.live and self.live.is_started:
@@ -367,6 +534,7 @@ class TUI(ConsoleUI):
             results_by_status,
             use_color=True,
             execution_time=execution_time,
+            llm_client=llm_client,
         )
 
         self.report.write(content)
@@ -388,16 +556,16 @@ class LLM:
 
     def __init__(
         self,
-        limit_tokens,
-        client,
-        model=DEFAULT_MODEL,
+        limit_tokens: int,
+        llm_client: LLMClient,
+        model: str,
         system_prompt=None,
         temperature=None,
         top_p=None,
     ):
         self.limit_tokens = limit_tokens
         self.tokens_processed = 0
-        self.client = client
+        self.llm_client = llm_client
         self.prompt_tokens = 0
         self.completion_tokens = 0
         self.history = []
@@ -446,7 +614,7 @@ class LLM:
             if getattr(self, param, None):
                 kwargs[param] = getattr(self, param)
 
-        response = self.client.chat.completions.create(**kwargs)
+        response = self.llm_client.chat_completions_create(**kwargs)
 
         if response.usage:
             self.prompt_tokens += response.usage.prompt_tokens
@@ -539,7 +707,7 @@ def audit_file(
     package_name: str,
     file_path: Path,
     pkgdir: Path,
-    client: OpenAI,
+    llm_client: LLMClient,
 ) -> AuditResult:
     """Audits a single source file with an LLM."""
 
@@ -570,7 +738,7 @@ def audit_file(
 
     llm_pkgbuild_auditor = LLM(
         limit_tokens=SESSION_AUDIT_LIMIT_TOKENS,
-        client=client,
+        llm_client=llm_client,
         model=llm_params.model,
         system_prompt=SYSTEM_PROMPTS["file_auditor"](package_name),
         temperature=llm_params.temperature,
@@ -775,18 +943,18 @@ def decide_next_files_to_review(
     package_name: str,
     other_pkg_files: List[Path],
     already_reviewed_files: List[Path],
+    llm_client: LLMClient,
 ) -> List[Path]:
     num_additional_files_to_review = int(os.environ.get("NUM_FILES_TO_REVIEW", "10"))
     files_to_consider = [f for f in other_pkg_files if f not in already_reviewed_files]
     if len(files_to_consider) <= num_additional_files_to_review:
         return files_to_consider
 
-    client = get_openai_client()
     llm_params = get_llm_params_from_env()
 
     llm = LLM(
         limit_tokens=SESSION_AUDIT_LIMIT_TOKENS,
-        client=client,
+        llm_client=llm_client,
         model=llm_params.model,
         system_prompt=SYSTEM_PROMPTS["general_security_auditor"](),
         temperature=llm_params.temperature,
@@ -836,7 +1004,8 @@ def audit_files(
     package_name: str,
     pkgdir: Path,
     files_to_audit: List[Path],
-    processing_description: str = "files",
+    processing_description: str,
+    llm_client: LLMClient,
 ) -> List[AuditResult]:
     """Audit a list of files in parallel."""
     processing_files = []
@@ -866,10 +1035,9 @@ def audit_files(
         """Wrapper function for parallel execution with thread-specific clients."""
         f_abs = f.resolve()
         f_rel = f_abs.relative_to(pkgdir)
-        thread_client = get_openai_client()
 
         add_file_to_processing(f_rel)
-        result = audit_file(report, package_name, f_abs, pkgdir, thread_client)
+        result = audit_file(report, package_name, f_abs, pkgdir, llm_client)
 
         return (f, result)
 
@@ -906,7 +1074,11 @@ def audit_files(
 
 
 def do_agentic_audit(
-    tui: ConsoleUI, report: Report, package_name: str, pkgdir: Path
+    tui: ConsoleUI,
+    report: Report,
+    package_name: str,
+    pkgdir: Path,
+    llm_client: LLMClient,
 ) -> List[AuditResult]:
     """Performs an agentic security audit on the package contents."""
 
@@ -930,6 +1102,7 @@ def do_agentic_audit(
         pkgdir,
         required_review_files,
         "required files",
+        llm_client,
     )
 
     tui.update_status("Deciding which files to review next...")
@@ -938,6 +1111,7 @@ def do_agentic_audit(
         package_name,
         other_pkg_files,
         required_review_files,
+        llm_client,
     )
     tui.finalize_step(
         f"Decided to review {len(additional_review_files)} additional files: {', '.join(str(f) for f in additional_review_files)}"
@@ -953,6 +1127,7 @@ def do_agentic_audit(
         pkgdir,
         additional_review_files,
         "additional files",
+        llm_client,
     )
 
     tui.finalize_step("Reviewed additional files.")
@@ -965,12 +1140,14 @@ def run_aur_sleuth_audit(
     report: Report,
     package_name: str,
     pkgdir: Path,
+    llm_client: LLMClient,
 ) -> int:
     """Runs the specified security audits for aur-sleuth."""
     report_file = report.report_path
     audit_results = []
     audit_ok = True
-    model = os.environ.get("OPENAI_MODEL", DEFAULT_MODEL)
+    llm_params = get_llm_params_from_env()
+    model = llm_params.model
 
     # Track execution time
     start_time = time.time()
@@ -983,7 +1160,7 @@ def run_aur_sleuth_audit(
 
         os.chdir(pkgdir)
 
-        audit_results = do_agentic_audit(tui, report, package_name, pkgdir)
+        audit_results = do_agentic_audit(tui, report, package_name, pkgdir, llm_client)
 
     except subprocess.CalledProcessError as e:
         msg = f"An unexpected error occurred: {e}"
@@ -997,7 +1174,8 @@ def run_aur_sleuth_audit(
         raise
     finally:
         execution_time = time.time() - start_time
-        tui.show_summary(report_file, audit_results, execution_time)
+
+        tui.show_summary(report_file, audit_results, execution_time, llm_client)
 
         # Write full report
         results_by_status = partition_results_by_status(audit_results)
@@ -1118,7 +1296,9 @@ def sleuth_main() -> int:
             pkgdir = download_package_to_tmpdir(
                 tui, Path(tmpdir_parent), args.package_name, args.clone_url
             )
-            retval = run_aur_sleuth_audit(tui, report, args.package_name, pkgdir)
+            retval = run_aur_sleuth_audit(
+                tui, report, args.package_name, pkgdir, get_openai_client()
+            )
 
     os.chdir(original_cwd)
     if os.path.exists(pkgdir):
@@ -1159,7 +1339,9 @@ def wrapper_main() -> int:
 
     with Report(report_file) as report:
         with TUI(report) as tui:
-            retval = run_aur_sleuth_audit(tui, report, package_name, Path(os.getcwd()))
+            retval = run_aur_sleuth_audit(
+                tui, report, package_name, Path(os.getcwd()), get_openai_client()
+            )
 
     if retval != 0:
         print("Security audit failed. Exiting makepkg wrapper.")
@@ -1170,7 +1352,7 @@ def wrapper_main() -> int:
     return 0
 
 
-def get_openai_client() -> OpenAI:
+def get_openai_client() -> LLMClient:
     base_url = get_base_url()
     default_headers = {}
     if "openrouter.ai" in base_url:
@@ -1179,9 +1361,11 @@ def get_openai_client() -> OpenAI:
             "X-Title": "aur-sleuth",
         }
 
-    return OpenAI(
+    client = OpenAI(
         api_key=get_api_key(), base_url=base_url, default_headers=default_headers
     )
+
+    return LLMClient(client)
 
 
 def load_config():
