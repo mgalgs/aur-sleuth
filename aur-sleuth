@@ -393,7 +393,7 @@ class ConsoleUI(abc.ABC):
         """Updates the status text."""
         raise NotImplementedError("Subclasses must implement update_status.")
 
-    def finalize_step(self, message, success=True, status: Optional[SafeStatus] = None):
+    def finalize_step(self, message, status: Optional[SafeStatus] = None):
         """Finalizes a step with a message."""
         raise NotImplementedError("Subclasses must implement finalize_step.")
 
@@ -425,7 +425,7 @@ class TUIPlain(ConsoleUI):
     def update_status(self, text):
         self.report.write(text, stdout=True)
 
-    def finalize_step(self, message, success=True, status: Optional[SafeStatus] = None):
+    def finalize_step(self, message, status: Optional[SafeStatus] = None):
         if status is not None:
             icon = status.get_icon()
             self.report.write(f"{icon} {message}", stdout=True)
@@ -514,7 +514,7 @@ class TUI(ConsoleUI):
         self.spinner.text = Text(f" {text}", style="bold blue")
         self.live.update(self._get_renderable())
 
-    def finalize_step(self, message, success=True, status: Optional[SafeStatus] = None):
+    def finalize_step(self, message, status: Optional[SafeStatus] = None):
         """Adds a message to the history and updates the display."""
         status = status or SafeStatus.SAFE
         icon = status.get_icon()
@@ -942,7 +942,7 @@ def get_source_listing(
     except subprocess.CalledProcessError as e:
         tui.finalize_step(
             "makepkg --printsrcinfo failed.",
-            success=False,
+            status=SafeStatus.UNSAFE,
         )
         logger.error(f"makepkg --printsrcinfo failed: {e.stderr}")
         return None, None
