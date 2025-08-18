@@ -347,13 +347,13 @@ def generate_report_text(
 
         usage_details = gradient_title + "\n"
         usage_details += (
-            f"  [bold dark_gray]Models:[/] [bold grey]{', '.join(models)}[/]\n"
+            f"  [bold grey50]Models:[/] [bold white]{', '.join(models)}[/]\n"
         )
-        usage_details += f"  [bold dark_gray]Prompt Tokens:[/] [bold grey]{usage_summary['prompt_tokens']}[/]\n"
-        usage_details += f"  [bold dark_gray]Completion Tokens:[/] [bold grey]{usage_summary['completion_tokens']}[/]\n"
-        usage_details += f"  [bold dark_gray]Total Tokens:[/] [bold grey]{usage_summary['total_tokens']}[/]\n"
-        usage_details += f"  [bold dark_gray]Total Cost:[/] [bold grey]{usage_summary['total_cost']}[/]\n"
-        usage_details += f"  [bold dark_gray]Execution Time:[/] [bold grey]{execution_time:.2f} seconds[/]\n"
+        usage_details += f"  [bold grey50]Prompt Tokens:[/] [bold white]{usage_summary['prompt_tokens']}[/]\n"
+        usage_details += f"  [bold grey50]Completion Tokens:[/] [bold white]{usage_summary['completion_tokens']}[/]\n"
+        usage_details += f"  [bold grey50]Total Tokens:[/] [bold white]{usage_summary['total_tokens']}[/]\n"
+        usage_details += f"  [bold grey50]Total Cost:[/] [bold white]{usage_summary['total_cost']}[/]\n"
+        usage_details += f"  [bold grey50]Execution Time:[/] [bold white]{execution_time:.2f} seconds[/]\n"
     else:
         # Plain text version without colors
         usage_details = "API Usage Summary\n"
@@ -1069,13 +1069,19 @@ def audit_files(
             status_txt = "Status: "
             if tui.has_color:
                 color = result.status.get_color()
-                status_txt += (
-                    f"[{color}]{result.status.name}[/{color}] -- {result.summary}"
+                summary_color = (
+                    "bold white" if result.status == SafeStatus.UNSAFE else "grey50"
+                )
+                status_txt += f"[{color}]{result.status.name}[/{color}] [grey50]--[/] [{summary_color}]{result.summary}[/]"
+                tui.finalize_step(
+                    f"[grey50]Reviewed {f_rel}.[/] {status_txt}", status=result.status
                 )
             else:
                 status_txt += f"{result.status.name} -- {result.summary}"
+                tui.finalize_step(
+                    f"Reviewed {f_rel}. {status_txt}", status=result.status
+                )
 
-            tui.finalize_step(f"Reviewed {f_rel}. {status_txt}", status=result.status)
             audit_results.append(result)
 
     tui.finalize_step(f"Reviewed all {processing_description}.")
