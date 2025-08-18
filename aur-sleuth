@@ -317,6 +317,48 @@ def partition_results_by_status(
     return results_by_status
 
 
+def gradient(
+    text: str,
+    start_hue: float,
+    end_hue: float,
+    saturation: float = 0.7,
+    value: float = 0.9,
+) -> str:
+    """
+    Apply a smooth gradient color effect to the input text using ANSI color codes.
+
+    Each character in the text is assigned a color that transitions from `start_hue`
+    to `end_hue` in the HSV color space.
+
+    Args:
+        text (str): The input string to colorize. If empty, returns the empty string.
+        start_hue (float): The starting hue (0.0–1.0) for the gradient.
+        end_hue (float): The ending hue (0.0–1.0) for the gradient.
+        saturation (float): The saturation value (0.0–1.0) used for all colors.
+        value (float): The value (brightness) value (0.0–1.0) used for all colors.
+
+    Returns:
+        str: The input text with each character wrapped in color markup:
+             '[#RRGGBB]char[/]'. If the input is empty, returns an empty string.
+    """
+    if not text:
+        return text
+
+    num_colors = len(text)
+    if num_colors == 1:
+        hue = (start_hue + end_hue) / 2
+
+    ret = ""
+    for i, char in enumerate(text):
+        hue = start_hue + (end_hue - start_hue) * i / max(num_colors - 1, 1)
+        r, g, b = colorsys.hsv_to_rgb(hue, saturation, value)
+        r, g, b = int(r * 255), int(g * 255), int(b * 255)
+        hex_color = f"#{r:02x}{g:02x}{b:02x}"
+        ret += f"[{hex_color}]{char}[/]"
+
+    return ret
+
+
 def generate_report_text(
     report_path: Path,
     results_by_status: Dict[SafeStatus, List[AuditResult]],
@@ -346,18 +388,7 @@ def generate_report_text(
     models = usage_summary_all["by-model"].keys()
 
     if use_color:
-        gradient_title = ""
-        title_text = "API Usage Summary"
-        num_colors = len(title_text)
-        for i, char in enumerate(title_text):
-            hue = 0.7 + (0.19 * i / (num_colors - 1))
-            saturation = 0.7
-            value = 0.9
-            r, g, b = colorsys.hsv_to_rgb(hue, saturation, value)
-            r, g, b = int(r * 255), int(g * 255), int(b * 255)
-            hex_color = f"#{r:02x}{g:02x}{b:02x}"
-
-            gradient_title += f"[{hex_color}]{char}[/]"
+        gradient_title = gradient("API Usage Summary", 0.7, 0.89)
 
         usage_details = gradient_title + "\n"
         usage_details += (
@@ -550,7 +581,8 @@ class TUI(ConsoleUI):
         recommended_action = (
             " -- DO NOT INSTALL!" if overall_status == SafeStatus.UNSAFE else ""
         )
-        title = f"Audit complete! Result: [{result_color}]{overall_status.cautious_name}{recommended_action}[/{result_color}]"
+        audit_complete_text = gradient("Audit complete!", 0.25, 0.0)
+        title = f"{audit_complete_text} Result: [{result_color}]{overall_status.cautious_name}{recommended_action}[/{result_color}]"
 
         content = generate_report_text(
             report_path,
