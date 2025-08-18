@@ -731,6 +731,7 @@ def audit_file(
     file_path: Path,
     pkgdir: Path,
     llm_client: LLMClient,
+    extra_instructions: Optional[str] = None,
 ) -> AuditResult:
     """Audits a single source file with an LLM."""
 
@@ -767,7 +768,8 @@ def audit_file(
         temperature=llm_params.temperature,
         top_p=llm_params.top_p,
     )
-    prompt = f"""Respond with a security assessment in the following XML format:
+    prompt = f"""{extra_instructions + "\n" if extra_instructions else ""}
+Respond with a security assessment in the following XML format:
 <security_assessment>
 <decision>SAFE or UNSAFE</decision>
 <details>
@@ -889,10 +891,6 @@ def download_sources(tui: ConsoleUI):
         tui.finalize_step("makepkg --nobuild --nodeps --noprepare successful")
         return True
     except subprocess.CalledProcessError as e:
-        tui.finalize_step(
-            "makepkg --nobuild --nodeps --noprepare failed.",
-            success=False,
-        )
         logger.error(f"makepkg --nobuild --nodeps --noprepare failed: {e.stderr}")
         return False
 
@@ -1104,6 +1102,32 @@ def audit_files(
     return audit_results
 
 
+def check_pkgbuild(tui, report, package_name, pkgdir, llm_client) -> AuditResult:
+    tui.update_status(
+        "Performing initial audit of PKGBUILD to ensure that we can safely run `makepkg`"
+    )
+
+    extra_instructions = """We're going to run `makepkg --nobuild` and `makepkg --printsrcinfo` with
+the following PKGBUILD file in order to download all of the package sources for auditing. Unfortunately,
+an attacker can include malicious code in the PKGBUILD itself that will be executed when running the
+above commands (there could be something malicious in the `source` array, for example).
+
+So please pay close attention to any malicious code that could be executed by the above `makepkg`
+commands. We'll perform a more comprehensive audit of the PKGBUILD file later, right now we're
+just trying to ensure that we can safely call `makepkg --nobuild` and `makepkg --printsrcinfo`."""
+    result = audit_file(
+        report,
+        package_name,
+        Path("PKGBUILD").resolve(),
+        pkgdir,
+        llm_client,
+        extra_instructions,
+    )
+
+    tui.finalize_step("Initial PKGBUILD audit complete", status=result.status)
+    return result
+
+
 def do_agentic_audit(
     tui: ConsoleUI,
     report: Report,
@@ -1113,9 +1137,17 @@ def do_agentic_audit(
 ) -> List[AuditResult]:
     """Performs an agentic security audit on the package contents."""
 
+    pkgbuild_result = check_pkgbuild(tui, report, package_name, pkgdir, llm_client)
+    if pkgbuild_result.status != SafeStatus.SAFE:
+        msg = "Initial PKGBUILD check doesn't look good: " + pkgbuild_result.summary
+        report.write(msg + "\n\n" + pkgbuild_result.details)
+        tui.finalize_step(msg, pkgbuild_result.status)
+        return [pkgbuild_result]
+
     if not download_sources(tui):
         msg = "makepkg --nobuild failed, unable to download sources."
         report.write(msg)
+        tui.finalize_step(msg, SafeStatus.SKIPPED)
         return [AuditResult(None, pkgdir, SafeStatus.SKIPPED, msg)]
 
     required_review_files, other_pkg_files = get_source_listing(pkgdir, tui)
@@ -1123,6 +1155,7 @@ def do_agentic_audit(
     if required_review_files is None or other_pkg_files is None:
         msg = "Failed to get source files for agentic audit."
         report.write(msg)
+        tui.finalize_step(msg, SafeStatus.SKIPPED)
         return [AuditResult(None, pkgdir, SafeStatus.SKIPPED, msg)]
 
     # Review required files in parallel
@@ -1195,12 +1228,12 @@ def run_aur_sleuth_audit(
 
     except subprocess.CalledProcessError as e:
         msg = f"An unexpected error occurred: {e}"
-        tui.finalize_step(msg, success=False)
+        tui.finalize_step(msg, status=SafeStatus.UNSAFE)
         audit_results.append(AuditResult(None, pkgdir, SafeStatus.SKIPPED, msg))
     except Exception as e:
         msg = f"An unexpected error occurred: {e}"
         logger.error(msg, exc_info=True)
-        tui.finalize_step(msg, success=False)
+        tui.finalize_step(msg, status=SafeStatus.UNSAFE)
         audit_results.append(AuditResult(None, pkgdir, SafeStatus.SKIPPED, msg))
         raise
     finally:
