@@ -40,6 +40,13 @@ effective, this promise of enhanced security becomes extremely compelling. As LL
 get even faster and cheaper there will be no reason not to audit every bit of code
 you run on your machine. This will only be possible in the world of open source!
 
+## Security Considerations
+
+- This tool is meant to *assist* in security auditing, not replace good judgment
+- Always review code before installing packages from AUR
+- The LLM analysis is not foolproof and may produce false positives or negatives
+- Keep your API keys secure and monitor usage
+
 ## Installation
 
 *(AUR package coming soon...)*
@@ -229,13 +236,6 @@ The script checks how it was invoked (`sys.argv[0]`).
 2.  **`makepkg-sleuthed`:** It acts as a wrapper around `makepkg`, performing the
     audit as if invoked via `aur-sleuth`, and then handing off execution to `makepkg`
     for building.
-
-## Security Considerations
-
-- This tool is meant to *assist* in security auditing, not replace good judgment
-- Always review code before installing packages from AUR
-- The LLM analysis is not foolproof and may produce false positives or negatives
-- Keep your API keys secure and monitor usage
 
 ## Supported LLM Providers
 
