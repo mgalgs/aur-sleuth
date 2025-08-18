@@ -180,3 +180,27 @@ a single file. And the audit conversation history only needs to record the
 outcome of the review in its context, not the code listing or the code
 review / audit report. What's the canonical/proper way to handle this in an
 agentic LLM loop?
+
+* DONE API cost and token usage improvements
+:PROPERTIES:
+:ARCHIVE_TIME: 2025-08-18 Mon 10:38
+:ARCHIVE_FILE: ~/src/aur-sleuth/TODO.org
+:ARCHIVE_CATEGORY: TODO
+:ARCHIVE_TODO: DONE
+:END:
+Create a wrapper class for our "client" instance (OpenAI). This will contain an
+OpenAI instance, and also take care of aggregating all costs and token usage
+throughout the whole session.
+
+For OpenRouter we can use their API to dynamically retrieve up-to-date pricing info:
+
+> curl -s https://openrouter.ai/api/v1/models | jq '.data[] | select(.id == "qwen/qwen3-coder") | .pricing'
+{
+  "prompt": "0.0000002",
+  "completion": "0.0000008",
+  "request": "0",
+  "image": "0",
+  "audio": "0",
+  "web_search": "0",
+  "internal_reasoning": "0"
+}
