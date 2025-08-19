@@ -12,6 +12,7 @@
 from collections import defaultdict
 from decimal import Decimal
 from enum import Enum
+from io import StringIO
 from pathlib import Path
 from threading import Lock
 from typing import Dict, List, Tuple, Optional, NamedTuple
@@ -359,6 +360,34 @@ def gradient(
     return ret
 
 
+def strip_rich_tags(text: str) -> str:
+    """
+    Remove Rich markup tags from a string, returning plain text.
+
+    This function takes a string that may contain Rich-formatted markup (e.g.,
+    [bold], [italic], [blue]), parses it into a Rich Text object to properly handle
+    nested and styled tags, then renders it as plain text without any formatting,
+    ANSI codes, or markup.
+
+    Args:
+        text (str): The input string containing Rich markup.
+
+    Returns:
+        str: The plain text with all Rich markup removed.
+
+    Example:
+        >>> strip_rich_tags("[bold]Hello [blue]World[/blue]![/bold]")
+        'Hello World!'
+    """
+    # Convert marked-up string to Text object (handles nested/colored tags)
+    rich_text = Text.from_markup(text)
+
+    # Use Console to render it to plain string (no ANSI, no markup, width=1000 to avoid wrapping)
+    console = Console(file=StringIO(), color_system=None, width=1000)
+    console.print(rich_text)
+    return console.file.getvalue().strip()
+
+
 def generate_report_text(
     report_path: Path,
     results_by_status: Dict[SafeStatus, List[AuditResult]],
@@ -592,7 +621,7 @@ class TUI(ConsoleUI):
             llm_client=llm_client,
         )
 
-        self.report.write(content)
+        self.report.write(strip_rich_tags(content))
 
         panel = Panel(content, title=title, box=box.ROUNDED, expand=False)
         self.console.print(panel)
