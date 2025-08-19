@@ -61,6 +61,7 @@ logger = logging.getLogger("aur-sleuth")
 DEFAULT_MODEL = "qwen/qwen3-235b-a22b-2507"
 SESSION_AUDIT_LIMIT_TOKENS = 100_000  # 100k tokens for the entire session
 IGNORED_DIRS = [".git"]
+GREY = "grey50"
 
 
 def sanitize_for_llm(text: str) -> str:
@@ -421,13 +422,13 @@ def generate_report_text(
 
         usage_details = gradient_title + "\n"
         usage_details += (
-            f"  [bold grey50]Models:[/] [bold white]{', '.join(models)}[/]\n"
+            f"  [bold {GREY}]Models:[/] [bold white]{', '.join(models)}[/]\n"
         )
-        usage_details += f"  [bold grey50]Prompt Tokens:[/] [bold white]{usage_summary['prompt_tokens']}[/]\n"
-        usage_details += f"  [bold grey50]Completion Tokens:[/] [bold white]{usage_summary['completion_tokens']}[/]\n"
-        usage_details += f"  [bold grey50]Total Tokens:[/] [bold white]{usage_summary['total_tokens']}[/]\n"
-        usage_details += f"  [bold grey50]Total Cost:[/] [bold white]{usage_summary['total_cost']}[/]\n"
-        usage_details += f"  [bold grey50]Execution Time:[/] [bold white]{execution_time:.2f} seconds[/]\n"
+        usage_details += f"  [bold {GREY}]Prompt Tokens:[/] [bold white]{usage_summary['prompt_tokens']}[/]\n"
+        usage_details += f"  [bold {GREY}]Completion Tokens:[/] [bold white]{usage_summary['completion_tokens']}[/]\n"
+        usage_details += f"  [bold {GREY}]Total Tokens:[/] [bold white]{usage_summary['total_tokens']}[/]\n"
+        usage_details += f"  [bold {GREY}]Total Cost:[/] [bold white]{usage_summary['total_cost']}[/]\n"
+        usage_details += f"  [bold {GREY}]Execution Time:[/] [bold white]{execution_time:.2f} seconds[/]\n"
     else:
         # Plain text version without colors
         usage_details = "API Usage Summary\n"
@@ -1161,11 +1162,11 @@ def audit_files(
             if tui.has_color:
                 color = result.status.get_color()
                 summary_color = (
-                    "bold white" if result.status == SafeStatus.UNSAFE else "grey50"
+                    "bold white" if result.status == SafeStatus.UNSAFE else f"{GREY}"
                 )
-                status_txt += f"[{color}]{result.status.name}[/{color}] [grey50]--[/] [{summary_color}]{result.summary}[/]"
+                status_txt += f"[{color}]{result.status.name}[/{color}] [{GREY}]--[/] [{summary_color}]{result.summary}[/]"
                 tui.finalize_step(
-                    f"[grey50]Reviewed {f_rel}.[/] {status_txt}", status=result.status
+                    f"[{GREY}]Reviewed {f_rel}.[/] {status_txt}", status=result.status
                 )
             else:
                 status_txt += f"{result.status.name} -- {result.summary}"
