@@ -1496,12 +1496,8 @@ def wrapper_main() -> int:
         os.execv("/usr/bin/makepkg", ["/usr/bin/makepkg"] + makepkg_args)
         return 0
 
-    if (Path(os.getcwd()) / "src").exists():
-        proggie = Path(sys.argv[0]).name
-        logger.error(
-            f"./src directory exists. {proggie} requires a clean package directory. Please remove the ./src directory and try again."
-        )
-        sys.exit(1)
+    pkgdir = Path(os.getcwd())
+    logger.debug("Running in pkgdir %s", pkgdir.absolute())
 
     source_info = get_source_info()
     package_name = source_info["pkgname"]
@@ -1514,7 +1510,7 @@ def wrapper_main() -> int:
     with Report(report_file) as report:
         with TUI(report) as tui:
             retval = run_aur_sleuth_audit(
-                tui, report, package_name, Path(os.getcwd()), get_openai_client()
+                tui, report, package_name, pkgdir, get_openai_client()
             )
 
     if retval != 0:
