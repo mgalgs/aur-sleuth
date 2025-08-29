@@ -45,17 +45,24 @@ from rich.text import Text
 import requests
 
 
-LOG_FILE = "/tmp/aur-sleuth/aur-sleuth-debug.log"
 
-if os.path.exists(LOG_FILE):
-    os.remove(LOG_FILE)
 
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(threadName)s - %(message)s",
-    filename=LOG_FILE,
-    filemode="a",
-)
+def setup_logging():
+    tmpdir_parent = Path(tempfile.gettempdir()) / "aur-sleuth"
+    os.makedirs(tmpdir_parent, exist_ok=True)
+
+    log_file = tmpdir_parent / "aur-sleuth-debug.log"
+
+    if os.path.exists(log_file):
+        os.remove(log_file)
+
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format="%(asctime)s - %(name)s - %(threadName)s - %(message)s",
+        filename=log_file,
+        filemode="a",
+    )
+
 logger = logging.getLogger("aur-sleuth")
 
 # Default configuration
@@ -1556,6 +1563,7 @@ def load_config():
 
 
 def main():
+    setup_logging()
     # Load configuration files if they exist
     load_config()
 
