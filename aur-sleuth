@@ -45,8 +45,6 @@ from rich.text import Text
 import requests
 
 
-
-
 def setup_logging():
     tmpdir_parent = Path(tempfile.gettempdir()) / "aur-sleuth"
     os.makedirs(tmpdir_parent, exist_ok=True)
@@ -56,12 +54,22 @@ def setup_logging():
     if os.path.exists(log_file):
         os.remove(log_file)
 
+    # Set up file logging
     logging.basicConfig(
         level=logging.DEBUG,
         format="%(asctime)s - %(name)s - %(threadName)s - %(message)s",
         filename=log_file,
         filemode="a",
     )
+
+    # Add console handler for stdout
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(logging.INFO)
+    console_handler.setFormatter(
+        logging.Formatter("%(asctime)s - %(name)s - %(threadName)s - %(message)s")
+    )
+    logging.getLogger().addHandler(console_handler)
+
 
 logger = logging.getLogger("aur-sleuth")
 
