@@ -1479,6 +1479,11 @@ def wrapper_main() -> int:
 
     # Check if any of the skip flags are in the arguments passed to the wrapper
     if any(flag in makepkg_args for flag in skip_audit_flags):
+        logger.info(
+            "Skipping aur-sleuth audit due to makepkg args %s containing one of %s",
+            makepkg_args,
+            skip_audit_flags,
+        )
         # If so, just execute makepkg without an audit
         os.execv("/usr/bin/makepkg", ["/usr/bin/makepkg"] + makepkg_args)
         return 0
@@ -1568,6 +1573,8 @@ def main():
     load_config()
 
     invocation_name = Path(sys.argv[0]).name
+
+    logger.debug("aur-sleuth was invoked as %s", invocation_name)
 
     if invocation_name == "aur-sleuth":
         sys.exit(sleuth_main())
