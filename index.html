@@ -49,7 +49,7 @@
             packagesDiv.innerHTML = '<h2 class="text-xl mb-2">Packages</h2><table class="table-auto w-full"><thead><tr><th class="px-4 py-2">Name</th><th class="px-4 py-2">Last Updated</th><th class="px-4 py-2">Status</th><th class="px-4 py-2">Audits</th></tr></thead><tbody>' +
                 data.packages.map(pkg => {
                     const pkgAudits = allAudits.filter(a => a[1] === pkg[0]).sort((a, b) => b[3] - a[3]).slice(0, 3);
-                    const auditsList = pkgAudits.map(a => `<a href="#" onclick="toggleAudit('${pkg[0]}-${a[0]}')" class="text-blue-500">${new Date(a[3] * 1000).toLocaleDateString()} (${a[4]})</a>`).join(', ');
+                    const auditsList = pkgAudits.map(a => `<a href="#" onclick="toggleAudit('${pkg[0]}-${a[0]}')" class="text-blue-500">${new Date(a[3] * 1000).toLocaleString()} (${a[4]}) - ${a[6]} @ ${a[7].substring(0,7)}</a>`).join(', ');
                     let rows = `<tr><td class="border px-4 py-2">${pkg[0]}</td><td class="border px-4 py-2">${new Date(pkg[1] * 1000).toLocaleString()}</td><td class="border px-4 py-2">${pkg[2]}</td><td class="border px-4 py-2">${auditsList || 'None'}</td></tr>`;
                     pkgAudits.forEach(a => {
                         rows += `<tr id="audit-${pkg[0]}-${a[0]}" class="audit-details"><td colspan="4">${renderAuditDetails(a)}</td></tr>`;
@@ -62,7 +62,7 @@
         function renderAuditDetails(audit) {
             if (!audit) return '';
             const details = audit[5];
-            return `<table class="w-full"><tr><td>ID: ${audit[0]}</td><td>Started: ${new Date(audit[2] * 1000).toLocaleString()}</td><td>Finished: ${new Date(audit[3] * 1000).toLocaleString()}</td><td>Result: <span class="hacker-green">${audit[4]}</span></td></tr><tr><td colspan="4"><pre class="whitespace-pre-wrap">${details}</pre></td></tr></table>`;
+            return `<table class="w-full"><tr><td>ID: ${audit[0]}</td><td>Started: ${new Date(audit[2] * 1000).toLocaleString()}</td><td>Finished: ${new Date(audit[3] * 1000).toLocaleString()}</td><td>Result: <span class="hacker-green">${audit[4]}</span></td></tr><tr><td>Model: ${audit[6]}</td><td colspan="3">Git Rev: ${audit[7]}</td></tr><tr><td colspan="4"><pre class="whitespace-pre-wrap">${details}</pre></td></tr></table>`;
         }
 
         function toggleAudit(auditId) {

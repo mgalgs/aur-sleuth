@@ -38,7 +38,7 @@ async def get_all_audits():
     if not DB_PATH.exists():
         return {"audits": []}
     with sqlite3.connect(DB_PATH) as conn:
-        audits = conn.execute("SELECT id, package_name, started_at, finished_at, result, details FROM audits ORDER BY finished_at DESC").fetchall()
+        audits = conn.execute("SELECT id, package_name, started_at, finished_at, result, details, model, git_rev FROM audits ORDER BY finished_at DESC").fetchall()
     return {"audits": audits}
 
 if __name__ == "__main__":

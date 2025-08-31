@@ -41,11 +41,13 @@ class AurTracker:
         aur_repo_path: Path,
         max_parallel: int = 3,
         max_packages: Optional[int] = None,
+        second_opinions_mode: bool = False,
     ):
         self.db_path = db_path
         self.aur_repo_path = aur_repo_path
         self.max_parallel = max_parallel
         self.max_packages = max_packages
+        self.second_opinions_mode = second_opinions_mode
         self.init_db()
 
     def init_db(self):
@@ -57,8 +59,7 @@ class AurTracker:
                     last_updated INTEGER,
                     status TEXT DEFAULT 'pending'
                 )
-            """
-            )
+            """)
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS audits (
@@ -68,10 +69,11 @@ class AurTracker:
                     finished_at INTEGER,
                     result TEXT,
                     details TEXT,
+                    model TEXT,
+                    git_rev TEXT,
                     FOREIGN KEY (package_name) REFERENCES packages (name)
                 )
-            """
-            )
+            """)
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS audit_files (
@@ -118,7 +120,7 @@ class AurTracker:
             [
                 "git",
                 "for-each-ref",
-                "--format=%(refname) %(committerdate:unix)",
+                "--format=%(refname) %(committerdate:unix) %(objectname)",
                 "refs/heads",
             ],
             cwd=self.aur_repo_path,
@@ -131,8 +133,8 @@ class AurTracker:
         for line in result.stdout.strip().split("\n"):
             if line:
                 parts = line.split()
-                if len(parts) >= 2:
-                    full_ref, date = parts[0], int(parts[1])
+                if len(parts) >= 3:
+                    full_ref, date, rev = parts[0], int(parts[1]), parts[2]
                     ref_short = full_ref.split("/", 2)[
                         -1
                     ]  # Get the short name after refs/heads/
@@ -140,7 +142,7 @@ class AurTracker:
                         package_name = ref_short[len("packages/") :]
                     else:
                         package_name = ref_short
-                    refs.append((ref_short, package_name, date))
+                    refs.append((ref_short, package_name, date, rev))
 
         # If few refs/heads, try refs/remotes/origin
         if len(refs) < 1000:
@@ -148,7 +150,7 @@ class AurTracker:
                 [
                     "git",
                     "for-each-ref",
-                    "--format=%(refname) %(committerdate:unix)",
+                    "--format=%(refname) %(committerdate:unix) %(objectname)",
                     "refs/remotes/origin",
                 ],
                 cwd=self.aur_repo_path,
@@ -160,8 +162,8 @@ class AurTracker:
             for line in result.stdout.strip().split("\n"):
                 if line:
                     parts = line.split()
-                    if len(parts) >= 2:
-                        full_ref, date = parts[0], int(parts[1])
+                    if len(parts) >= 3:
+                        full_ref, date, rev = parts[0], int(parts[1]), parts[2]
                         ref_short = full_ref.split("/", 3)[
                             -1
                         ]  # After refs/remotes/origin/
@@ -169,24 +171,24 @@ class AurTracker:
                             package_name = ref_short[len("packages/") :]
                         else:
                             package_name = ref_short
-                        refs.append((ref_short, package_name, date))
+                        refs.append((ref_short, package_name, date, rev))
 
         # Filter out invalid package names
         valid_refs = []
         invalid_names = {'HEAD', 'master', 'main', 'develop', 'trunk', 'stable'}
-        for ref_short, package_name, date in refs:
+        for ref_short, package_name, date, rev in refs:
             if package_name not in invalid_names and '/' not in package_name:
-                valid_refs.append((ref_short, package_name, date))
+                valid_refs.append((ref_short, package_name, date, rev))
         print(f"Found {len(valid_refs)} valid refs")
         return sorted(valid_refs, key=lambda x: x[2], reverse=True)  # Most recent first
 
-    def is_package_audited(self, package_name: str, last_updated: int) -> bool:
+    def is_package_audited(self, package_name: str, git_rev: str) -> bool:
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.execute(
-                "SELECT last_updated, status FROM packages WHERE name = ?", (package_name,)
+                "SELECT 1 FROM audits WHERE package_name = ? AND git_rev = ?", (package_name, git_rev)
             )
             row = cursor.fetchone()
-            return row is not None and row[1] == 'audited' and row[0] >= last_updated
+            return row is not None
 
     def mark_package_auditing(self, package_name: str, last_updated: int):
         with sqlite3.connect(self.db_path) as conn:
@@ -196,7 +198,7 @@ class AurTracker:
             )
 
     def audit_package(
-        self, ref: str, package_name: str, last_updated: int
+        self, ref: str, package_name: str, last_updated: int, git_rev: str, model: str
     ) -> Tuple[str, dict]:
         started_at = int(time.time())
         tmpdir = Path(tempfile.mkdtemp())
@@ -207,6 +209,16 @@ class AurTracker:
                 cwd=self.aur_repo_path,
                 check=True,
             )
+
+            # Get the actual git rev from the worktree
+            rev_result = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=tmpdir,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            actual_git_rev = rev_result.stdout.strip()
 
             # Run aur-sleuth with local clone_url and plain output
             result = subprocess.run(
@@ -224,13 +236,32 @@ class AurTracker:
 
             finished_at = int(time.time())
 
-            # Parse result - for simplicity, assume exit code 0 is safe, 1 is unsafe
-            audit_result = "safe" if result.returncode == 0 else "unsafe"
-            details = result.stdout + result.stderr
+            # Parse result
+            output = result.stdout
+            if 'Audit complete! Result: No issues found' in output:
+                audit_result = 'safe'
+            elif 'Audit complete! Result: Issues found' in output:
+                audit_result = 'unsafe'
+            else:
+                audit_result = f'error: {output}'
+
+            details = output
 
             return package_name, {
                 "result": audit_result,
                 "details": details,
+                "model": model,
+                "git_rev": actual_git_rev,
+                "started_at": started_at,
+                "finished_at": finished_at,
+            }
+        except subprocess.CalledProcessError as e:
+            finished_at = int(time.time())
+            return package_name, {
+                "result": f'error: {e.stderr}',
+                "details": '',
+                "model": model,
+                "git_rev": git_rev,
                 "started_at": started_at,
                 "finished_at": finished_at,
             }
@@ -244,21 +275,21 @@ class AurTracker:
         self, package_name: str, last_updated: int, audit_data: dict
     ):
         with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.execute(
-                "INSERT INTO audits (package_name, started_at, finished_at, result, details) VALUES (?, ?, ?, ?, ?)",
+            conn.execute(
+                "UPDATE packages SET status = 'audited', last_updated = ? WHERE name = ?",
+                (last_updated, package_name)
+            )
+            conn.execute(
+                "INSERT INTO audits (package_name, started_at, finished_at, result, details, model, git_rev) VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (
                     package_name,
                     audit_data["started_at"],
                     audit_data["finished_at"],
                     audit_data["result"],
                     audit_data["details"],
+                    audit_data["model"],
+                    audit_data["git_rev"],
                 ),
-            )
-            audit_id = cursor.lastrowid
-            # For now, no file details, but can be extended
-            conn.execute(
-                "UPDATE packages SET status = ?, last_updated = ? WHERE name = ?",
-                ("audited", last_updated, package_name),
             )
 
     def run_audit_loop(self):
@@ -267,10 +298,18 @@ class AurTracker:
         print("Getting refs...")
         refs = self.get_refs_with_dates()
         print(f"Found {len(refs)} refs")
+        current_model = os.environ.get('OPENAI_MODEL', 'qwen/qwen3-235b-a22b-2507')
         candidates = []
-        for ref, package_name, last_updated in refs:
-            if not self.is_package_audited(package_name, last_updated):
-                candidates.append((ref, package_name, last_updated))
+        if not self.second_opinions_mode:
+            for ref, package_name, date, git_rev in refs:
+                if not self.is_package_audited(package_name, git_rev):
+                    candidates.append((ref, package_name, date, git_rev))
+        else:
+            for ref, package_name, date, git_rev in refs:
+                with sqlite3.connect(self.db_path) as conn:
+                    audits = conn.execute("SELECT result, model FROM audits WHERE package_name = ? AND git_rev = ?", (package_name, git_rev)).fetchall()
+                    if audits and any(a[0] != 'safe' for a in audits) and all(a[1] != current_model for a in audits):
+                        candidates.append((ref, package_name, date, git_rev))
         if self.max_packages:
             candidates = sorted(candidates, key=lambda x: x[2], reverse=True)[:self.max_packages]
         print(f"Processing {len(candidates)} packages.")
@@ -279,12 +318,12 @@ class AurTracker:
             max_workers=self.max_parallel
         ) as executor:
             futures = []
-            for ref, package_name, last_updated in candidates:
+            for ref, package_name, date, git_rev in candidates:
                 print(f"Queueing audit for {package_name}")
-                self.mark_package_auditing(package_name, last_updated)
+                self.mark_package_auditing(package_name, date)
                 futures.append(
                     executor.submit(
-                        self.audit_package, ref, package_name, last_updated
+                        self.audit_package, ref, package_name, date, git_rev, current_model
                     )
                 )
 
@@ -293,7 +332,7 @@ class AurTracker:
                     package_name, audit_data = future.result()
                     # Find last_updated for this package
                     last_updated = next(
-                        (date for r, name, date in refs if name == package_name), None
+                        (date for r, name, date, rev in refs if name == package_name), None
                     )
                     if last_updated:
                         self.store_audit_result(package_name, last_updated, audit_data)
@@ -325,6 +364,11 @@ def main():
         action="store_true",
         help="Select a random free LLM model from OpenRouter",
     )
+    parser.add_argument(
+        "--second-opinions-mode",
+        action="store_true",
+        help="Audit packages that failed previous audits with a different model",
+    )
     args = parser.parse_args()
 
     if args.im_feeling_lucky_freebiez:
@@ -335,7 +379,7 @@ def main():
     db_path = Path(args.db_path)
     aur_repo_path = Path(os.path.expanduser(args.aur_repo_path))
 
-    tracker = AurTracker(db_path, aur_repo_path, args.max_parallel, args.max_packages)
+    tracker = AurTracker(db_path, aur_repo_path, args.max_parallel, args.max_packages, args.second_opinions_mode)
     tracker.run_audit_loop()
 
 
