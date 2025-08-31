@@ -12,6 +12,7 @@
 import argparse
 import concurrent.futures
 import os
+import random
 import sqlite3
 import subprocess
 import sys
@@ -22,6 +23,15 @@ from typing import List, Tuple, Optional
 
 # Assuming aur-sleuth is in the same directory
 AUR_SLEUTH_PATH = Path(__file__).parent / "aur-sleuth"
+
+FREE_MODELS = [
+    'deepseek/deepseek-chat-v3.1:free',
+    'openai/gpt-oss-120b:free',
+    'z-ai/glm-4.5-air:free',
+    'qwen/qwen3-coder:free',
+    'moonshotai/kimi-k2:free',
+    'deepseek/deepseek-r1-0528:free'
+]
 
 
 class AurTracker:
@@ -310,7 +320,17 @@ def main():
         type=int,
         help="Maximum number of packages to audit (for testing)",
     )
+    parser.add_argument(
+        "--im-feeling-lucky-freebiez",
+        action="store_true",
+        help="Select a random free LLM model from OpenRouter",
+    )
     args = parser.parse_args()
+
+    if args.im_feeling_lucky_freebiez:
+        selected_model = random.choice(FREE_MODELS)
+        os.environ['OPENAI_MODEL'] = selected_model
+        print(f"Selected random free model: {selected_model}")
 
     db_path = Path(args.db_path)
     aur_repo_path = Path(os.path.expanduser(args.aur_repo_path))
