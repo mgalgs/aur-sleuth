@@ -71,6 +71,7 @@ class AurTracker:
                     details TEXT,
                     model TEXT,
                     git_rev TEXT,
+                    version TEXT,
                     FOREIGN KEY (package_name) REFERENCES packages (name)
                 )
             """)
@@ -203,6 +204,25 @@ class AurTracker:
         started_at = int(time.time())
         tmpdir = Path(tempfile.mkdtemp())
         try:
+            # Select model for second-opinions-mode
+            if self.second_opinions_mode:
+                with sqlite3.connect(self.db_path) as conn:
+                    used_models = conn.execute("SELECT DISTINCT model FROM audits WHERE package_name = ? AND git_rev = ?", (package_name, git_rev)).fetchall()
+                    used_models = {row[0] for row in used_models}
+                    available_models = [m for m in FREE_MODELS if m not in used_models]
+                    if available_models:
+                        model = random.choice(available_models)
+                    # else keep the passed model
+
+            # Get aur-sleuth version
+            version_result = subprocess.run(
+                [str(AUR_SLEUTH_PATH), "--version"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            aur_sleuth_version = version_result.stdout.strip()
+
             # Create worktree for the package
             subprocess.run(
                 ["git", "worktree", "add", str(tmpdir), f"remotes/origin/{package_name}"],
@@ -252,6 +272,7 @@ class AurTracker:
                 "details": details,
                 "model": model,
                 "git_rev": actual_git_rev,
+                "version": aur_sleuth_version,
                 "started_at": started_at,
                 "finished_at": finished_at,
             }
@@ -262,6 +283,7 @@ class AurTracker:
                 "details": '',
                 "model": model,
                 "git_rev": git_rev,
+                "version": "unknown",
                 "started_at": started_at,
                 "finished_at": finished_at,
             }
@@ -280,7 +302,7 @@ class AurTracker:
                 (last_updated, package_name)
             )
             conn.execute(
-                "INSERT INTO audits (package_name, started_at, finished_at, result, details, model, git_rev) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO audits (package_name, started_at, finished_at, result, details, model, git_rev, version) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     package_name,
                     audit_data["started_at"],
@@ -289,6 +311,7 @@ class AurTracker:
                     audit_data["details"],
                     audit_data["model"],
                     audit_data["git_rev"],
+                    audit_data["version"],
                 ),
             )
 
