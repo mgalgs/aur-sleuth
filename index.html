@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AUR Sleuth Tracker UI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Courier New', monospace; }
+        .hacker-green { color: #00ff00; }
+        .corporate-blue { color: #0066cc; }
+        .audit-details { display: none; }
+    </style>
+</head>
+<body class="bg-white text-black" onload="loadData()">
+    <div class="container mx-auto p-4">
+        <h1 class="text-2xl font-bold mb-4 corporate-blue">AUR Sleuth Tracker</h1>
+        <div id="content">
+            <div id="packages" class="mt-4"></div>
+            <div id="pagination" class="mt-4"></div>
+        </div>
+    </div>
+    <script>
+        let allAudits = [];
+        let currentPage = 1;
+        const perPage = 10;
+
+        async function loadData() {
+            await loadAudits();
+            await loadPackages(currentPage);
+        }
+
+        async function loadAudits() {
+            const response = await fetch('/api/all_audits');
+            const data = await response.json();
+            allAudits = data.audits;
+        }
+
+        async function loadPackages(page) {
+            const response = await fetch(`/api/packages?page=${page}&per_page=${perPage}`);
+            const data = await response.json();
+            currentPage = page;
+            renderPackages(data);
+            renderPagination(data);
+        }
+
+        function renderPackages(data) {
+            const packagesDiv = document.getElementById('packages');
+            packagesDiv.innerHTML = '<h2 class="text-xl mb-2">Packages</h2><table class="table-auto w-full"><thead><tr><th class="px-4 py-2">Name</th><th class="px-4 py-2">Last Updated</th><th class="px-4 py-2">Status</th><th class="px-4 py-2">Audits</th></tr></thead><tbody>' +
+                data.packages.map(pkg => {
+                    const pkgAudits = allAudits.filter(a => a[1] === pkg[0]).sort((a, b) => b[3] - a[3]).slice(0, 3);
+                    const auditsList = pkgAudits.map(a => `<a href="#" onclick="toggleAudit('${pkg[0]}-${a[0]}')" class="text-blue-500">${new Date(a[3] * 1000).toLocaleDateString()} (${a[4]})</a>`).join(', ');
+                    let rows = `<tr><td class="border px-4 py-2">${pkg[0]}</td><td class="border px-4 py-2">${new Date(pkg[1] * 1000).toLocaleString()}</td><td class="border px-4 py-2">${pkg[2]}</td><td class="border px-4 py-2">${auditsList || 'None'}</td></tr>`;
+                    pkgAudits.forEach(a => {
+                        rows += `<tr id="audit-${pkg[0]}-${a[0]}" class="audit-details"><td colspan="4">${renderAuditDetails(a)}</td></tr>`;
+                    });
+                    return rows;
+                }).join('') +
+                '</tbody></table>';
+        }
+
+        function renderAuditDetails(audit) {
+            if (!audit) return '';
+            const details = audit[5];
+            return `<table class="w-full"><tr><td>ID: ${audit[0]}</td><td>Started: ${new Date(audit[2] * 1000).toLocaleString()}</td><td>Finished: ${new Date(audit[3] * 1000).toLocaleString()}</td><td>Result: <span class="hacker-green">${audit[4]}</span></td></tr><tr><td colspan="4"><pre class="whitespace-pre-wrap">${details}</pre></td></tr></table>`;
+        }
+
+        function toggleAudit(auditId) {
+            const element = document.getElementById(`audit-${auditId}`);
+            element.style.display = element.style.display === 'table-row' ? 'none' : 'table-row';
+        }
+
+        
+
+        function renderPagination(data) {
+            const paginationDiv = document.getElementById('pagination');
+            const totalPages = Math.ceil(data.total / perPage);
+            let html = '';
+            if (currentPage > 1) html += `<button onclick="loadPackages(${currentPage - 1})" class="bg-gray-200 hover:bg-gray-300 px-4 py-2 rounded mr-2">Prev</button>`;
+            if (currentPage < totalPages) html += `<button onclick="loadPackages(${currentPage + 1})" class="bg-gray-200 hover:bg-gray-300 px-4 py-2 rounded">Next</button>`;
+            paginationDiv.innerHTML = html;
+        }
+    </script>
+</body>
+</html>
