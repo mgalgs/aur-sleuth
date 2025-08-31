@@ -1073,6 +1073,10 @@ def decide_next_files_to_review(
     if len(files_to_consider) <= num_additional_files_to_review:
         return files_to_consider
 
+    # Limit files in prompt to prevent token overflow
+    max_files_in_prompt = 50
+    files_for_prompt = files_to_consider[:max_files_in_prompt]
+
     llm_params = get_llm_params_from_env()
 
     llm = LLM(
@@ -1093,7 +1097,7 @@ Do not select any files that have already been reviewed.
 </already_reviewed_files>
 
 <listing>
-{"- ".join(str(f) for f in files_to_consider)}
+{"- ".join(str(f) for f in files_for_prompt)}
 </listing>
 
 Respond with a list of file paths, one path per line, with NO other additional text or formatting.
