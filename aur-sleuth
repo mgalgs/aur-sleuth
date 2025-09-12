@@ -1493,19 +1493,28 @@ def wrapper_main() -> int:
     args, makepkg_args = parser.parse_known_args()
 
     # Arguments that indicate a non-build action where we should skip the audit
-    skip_audit_flags = ["--verifysource", "--nobuild", "--geninteg", "-o", "-g"]
+    skip_audit_flags = [
+        "--verifysource",
+        "--nobuild",
+        "--geninteg",
+        "-o",
+        "-g",
+        "--packagelist",
+        "--printsrcinfo",
+        "-h",
+        "--help",
+        "-V",
+        "--version",
+    ]
 
     # Check if any of the skip flags are in the arguments passed to the wrapper
     if any(flag in makepkg_args for flag in skip_audit_flags):
-        print(
-            f"Skipping aur-sleuth audit due to makepkg args {makepkg_args} containing one of {skip_audit_flags}"
-        )
         # If so, just execute makepkg without an audit
         os.execv("/usr/bin/makepkg", ["/usr/bin/makepkg"] + makepkg_args)
         return 0
 
     pkgdir = Path(os.getcwd())
-    print(f"Running aur-sleuth audit in pkgdir {pkgdir.absolute()}")
+    print(f"Running aur-sleuth audit in pkgdir {pkgdir.absolute()}", file=sys.stderr)
 
     source_info = get_source_info()
     package_name = source_info["pkgname"]
