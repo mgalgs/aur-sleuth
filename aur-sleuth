@@ -1497,17 +1497,15 @@ def wrapper_main() -> int:
 
     # Check if any of the skip flags are in the arguments passed to the wrapper
     if any(flag in makepkg_args for flag in skip_audit_flags):
-        logger.debug(
-            "Skipping aur-sleuth audit due to makepkg args %s containing one of %s",
-            makepkg_args,
-            skip_audit_flags,
+        print(
+            f"Skipping aur-sleuth audit due to makepkg args {makepkg_args} containing one of {skip_audit_flags}"
         )
         # If so, just execute makepkg without an audit
         os.execv("/usr/bin/makepkg", ["/usr/bin/makepkg"] + makepkg_args)
         return 0
 
     pkgdir = Path(os.getcwd())
-    logger.debug("Running in pkgdir %s", pkgdir.absolute())
+    print(f"Running aur-sleuth audit in pkgdir {pkgdir.absolute()}")
 
     source_info = get_source_info()
     package_name = source_info["pkgname"]
