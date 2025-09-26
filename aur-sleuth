@@ -803,6 +803,14 @@ def file_is_plain_text(file_path: Path) -> bool:
         return False
 
 
+def audit_failure_is_fatal() -> bool:
+    return os.environ.get("AUDIT_FAILURE_FATAL", "true").lower() in (
+        "true",
+        "1",
+        "yes",
+    )
+
+
 def strip_markdown_fences(text: str) -> str:
     """Strips markdown fences from a string."""
     lines = text.strip().split("\n")
@@ -1483,6 +1491,13 @@ def sleuth_main() -> int:
     if os.path.exists(pkgdir):
         shutil.rmtree(pkgdir)
 
+    if retval and not audit_failure_is_fatal():
+        print(
+            "WARNING: Audit failures detected but exiting with success due to AUDIT_FAILURE_FATAL=false",
+            file=sys.stderr,
+        )
+        return 0
+
     return retval
 
 
@@ -1530,11 +1545,18 @@ def wrapper_main() -> int:
                 tui, report, package_name, pkgdir, get_openai_client()
             )
 
-    if retval != 0:
-        print("Security audit failed. Exiting makepkg wrapper.")
-        return retval
+    if retval:
+        if audit_failure_is_fatal():
+            print("Security audit failed. Exiting makepkg wrapper.")
+            return retval
+        else:
+            print(
+                "WARNING: Audit failures detected but continuing due to AUDIT_FAILURE_FATAL=false",
+                file=sys.stderr,
+            )
+    else:
+        print("Security audit passed. Proceeding with makepkg execution...")
 
-    print("Security audit passed. Proceeding with makepkg execution...")
     os.execv("/usr/bin/makepkg", ["/usr/bin/makepkg"] + makepkg_args)
     return 0
 
@@ -1582,6 +1604,7 @@ def load_config():
                 "NUM_FILES_TO_REVIEW",
                 "LLM_TEMPERATURE",
                 "LLM_TOP_P",
+                "AUDIT_FAILURE_FATAL",
             ]:
                 if key in config_section:
                     logger.debug("Setting %s from %s", key, config_file)

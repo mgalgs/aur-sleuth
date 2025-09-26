@@ -90,6 +90,7 @@ The tool can be configured with environment variables:
   the `source` array. Defaults to `10`.
 - `LLM_TEMPERATURE`: The temperature parameter for the LLM (0.0-2.0). If not set, uses model default.
 - `LLM_TOP_P`: The top-p parameter for the LLM (0.0-1.0). If not set, uses model default.
+- `AUDIT_FAILURE_FATAL`: Whether audit failures should be fatal (exit with error). Set to `false` to make audit failures non-fatal. Defaults to `true`.
 
 You can either set these environment variables directly in your shell, or add them to
 a configuration file. The tool will automatically load configuration from
@@ -106,6 +107,7 @@ OPENAI_MODEL = your-model
 MAX_LLM_JOBS = desired-concurrency
 LLM_TEMPERATURE = 0.7  # Omit to use the model default
 LLM_TOP_P = 0.9        # ditto
+AUDIT_FAILURE_FATAL = false  # Set to false to make audit failures non-fatal
 ```
 
 ### Example using OpenRouter
@@ -136,6 +138,7 @@ OPENAI_API_KEY = ollama
 OPENAI_BASE_URL = http://localhost:11434/v1
 OPENAI_MODEL = llama3.1:8b
 MAX_LLM_JOBS = 1
+AUDIT_FAILURE_FATAL = false
 ```
 
 ## Usage
