@@ -1,0 +1,30 @@
+#!/bin/sh
+
+# makepkg-with-sleuthing - makepkg wrapper that checks the package with aur-sleuth
+# before building.
+
+# Skip audit for non-build actions
+skip=false
+for arg in "$@"; do
+    case "$arg" in
+        --verifysource|--nobuild|--geninteg|--packagelist|--printsrcinfo|--help|-h|--version|-V|-o|-g)
+            skip=yes
+            ;;
+    esac
+done
+
+if [[ "$skip" = yes ]]; then
+    exec /usr/bin/makepkg "$@"
+fi
+
+# Run audit against the current working directory's PKGBUILD and sources.
+"${AUR_SLEUTH_BIN:-aur-sleuth}" --pkgdir "${PWD}"
+status=$?
+
+# Non-zero means audit failed and is fatal under current settings inside aur-sleuth.
+# If AUDIT_FAILURE_FATAL=false, aur-sleuth returns 0 here and we proceed.
+if [ $status -ne 0 ]; then
+    exit $status
+fi
+
+exec /usr/bin/makepkg "$@"

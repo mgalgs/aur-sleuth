@@ -1003,12 +1003,13 @@ def download_sources(tui: ConsoleUI):
         return False
 
 
-def get_source_info():
+def get_source_info(pkgdir: Path):
     output = subprocess.run(
         ["makepkg", "--printsrcinfo"],
         check=True,
         capture_output=True,
         text=True,
+        cwd=pkgdir,
     )
     source_info = dict()
     for line in output.stdout.splitlines():
@@ -1034,7 +1035,7 @@ def get_source_listing(
     # required to be reviewed.
     tui.update_status("Running makepkg --printsrcinfo to get source files for agent...")
     try:
-        source_info = get_source_info()
+        source_info = get_source_info(pkgdir)
         for key, value in source_info.items():
             if key == "source":
                 pfile = Path(value)
@@ -1411,7 +1412,15 @@ def sleuth_main() -> int:
     parser = argparse.ArgumentParser(
         description="Run a security audit on an AUR package."
     )
-    parser.add_argument("package_name", help="Name of the AUR package.")
+    mex = parser.add_mutually_exclusive_group(required=True)
+    mex.add_argument(
+        "package_name", nargs="?", help="Name of the AUR package (to clone and audit)."
+    )
+    mex.add_argument(
+        "--pkgdir",
+        default=None,
+        help="Audit an existing package directory (containing PKGBUILD) without cloning.",
+    )
     parser.add_argument(
         "--clone-url",
         default=None,
@@ -1468,28 +1477,36 @@ def sleuth_main() -> int:
 
     os.environ["NUM_FILES_TO_REVIEW"] = str(args.num_files_to_review)
 
-    original_cwd = os.getcwd()
-
     TuiCls = TUIPlain if args.output == "plain" else TUI
 
     # Create the base parent directory
     tmpdir_parent = Path(tempfile.gettempdir()) / "aur-sleuth"
     os.makedirs(tmpdir_parent, exist_ok=True)
 
-    report_file = tmpdir_parent / f"aur-sleuth-report-{args.package_name}.txt"
+    if args.pkgdir:
+        package_name = get_source_info(Path(args.pkgdir).resolve())["pkgname"]
+        report_file = tmpdir_parent / f"aur-sleuth-report-{package_name}.txt"
+    else:
+        package_name = args.package_name
+        report_file = tmpdir_parent / f"aur-sleuth-report-{package_name}.txt"
 
     with Report(report_file) as report:
         with TuiCls(report) as tui:
-            pkgdir = download_package_to_tmpdir(
-                tui, Path(tmpdir_parent), args.package_name, args.clone_url
-            )
+            if args.pkgdir:
+                pkgdir = Path(args.pkgdir).resolve()
+            else:
+                pkgdir = download_package_to_tmpdir(
+                    tui, Path(tmpdir_parent), package_name, args.clone_url
+                )
+
             retval = run_aur_sleuth_audit(
-                tui, report, args.package_name, pkgdir, get_openai_client()
+                tui, report, package_name, pkgdir, get_openai_client()
             )
 
-    os.chdir(original_cwd)
-    if os.path.exists(pkgdir):
-        shutil.rmtree(pkgdir)
+    if not args.pkgdir:
+        # Clean up temporary cloned directory
+        if os.path.exists(pkgdir):
+            shutil.rmtree(pkgdir)
 
     if retval and not audit_failure_is_fatal():
         print(
@@ -1499,66 +1516,6 @@ def sleuth_main() -> int:
         return 0
 
     return retval
-
-
-def wrapper_main() -> int:
-    parser = argparse.ArgumentParser(
-        description="makepkg wrapper that performs a security audit on the package using aur-sleuth before building."
-    )
-    args, makepkg_args = parser.parse_known_args()
-
-    # Arguments that indicate a non-build action where we should skip the audit
-    skip_audit_flags = [
-        "--verifysource",
-        "--nobuild",
-        "--geninteg",
-        "-o",
-        "-g",
-        "--packagelist",
-        "--printsrcinfo",
-        "-h",
-        "--help",
-        "-V",
-        "--version",
-    ]
-
-    # Check if any of the skip flags are in the arguments passed to the wrapper
-    if any(flag in makepkg_args for flag in skip_audit_flags):
-        # If so, just execute makepkg without an audit
-        os.execv("/usr/bin/makepkg", ["/usr/bin/makepkg"] + makepkg_args)
-        return 0
-
-    pkgdir = Path(os.getcwd())
-    print(f"Running aur-sleuth audit in pkgdir {pkgdir.absolute()}", file=sys.stderr)
-
-    source_info = get_source_info()
-    package_name = source_info["pkgname"]
-
-    # Create a temporary report file for the wrapper
-    tmpdir_parent = Path(tempfile.gettempdir()) / "aur-sleuth"
-    os.makedirs(tmpdir_parent, exist_ok=True)
-    report_file = tmpdir_parent / f"aur-sleuth-report-{package_name}-wrapper.txt"
-
-    with Report(report_file) as report:
-        with TUI(report) as tui:
-            retval = run_aur_sleuth_audit(
-                tui, report, package_name, pkgdir, get_openai_client()
-            )
-
-    if retval:
-        if audit_failure_is_fatal():
-            print("Security audit failed. Exiting makepkg wrapper.")
-            return retval
-        else:
-            print(
-                "WARNING: Audit failures detected but continuing due to AUDIT_FAILURE_FATAL=false",
-                file=sys.stderr,
-            )
-    else:
-        print("Security audit passed. Proceeding with makepkg execution...")
-
-    os.execv("/usr/bin/makepkg", ["/usr/bin/makepkg"] + makepkg_args)
-    return 0
 
 
 def get_openai_client() -> LLMClient:
@@ -1615,21 +1572,7 @@ def main():
     setup_logging()
     # Load configuration files if they exist
     load_config()
-
-    invocation_name = Path(sys.argv[0]).name
-
-    logger.debug("aur-sleuth was invoked as %s", invocation_name)
-
-    if invocation_name == "aur-sleuth":
-        sys.exit(sleuth_main())
-    elif invocation_name == "makepkg-sleuthed":
-        sys.exit(wrapper_main())
-    else:
-        print(
-            f"ERROR: Unknown invocation name '{invocation_name}'. Please invoke as 'aur-sleuth' or 'makepkg-sleuthed'.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
+    sys.exit(sleuth_main())
 
 
 if __name__ == "__main__":

@@ -2,18 +2,19 @@
 
 An LLM-powered security auditing tool for Arch User Repository (AUR) packages.
 
-`aur-sleuth` performs in-depth security analysis of an AUR package either as a
-standalone tool, or as a `makepkg` wrapper:
+`aur-sleuth` performs in-depth security analysis of an AUR package. It can be run
+standalone, and a separate shell wrapper (`makepkg-with-sleuthing`) integrates it
+with `makepkg`:
 
 ```bash
 # Audit a package from the AUR without building or installing
 aur-sleuth package-name
 
 # Audit a package then build and install with yay if it passes the audit
-yay --makepkg makepkg-sleuthed package-name
+yay --makepkg makepkg-with-sleuthing package-name
 
 # Audit, then build and install a local package (in a directory containing a PKGBUILD)
-makepkg-sleuthed -si
+makepkg-with-sleuthing -si
 ```
 
 ## Demo
@@ -68,7 +69,7 @@ you run on your machine. This will only be possible in the world of open source!
    ```bash
    sudo make install
    ```
-   This will install `aur-sleuth` and a symlink `makepkg-sleuthed` to `/usr/local/bin`.
+   This will install `aur-sleuth` and the shell wrapper `makepkg-with-sleuthing` to `/usr/local/bin`.
 
    **User-local installation (no sudo required):**
    ```bash
@@ -76,7 +77,7 @@ you run on your machine. This will only be possible in the world of open source!
    ```
    This will install the scripts to `$HOME/.local/bin`. Make sure this directory is in your `PATH`.
 
-Alternatively you can simply download [`aur-sleuth`](https://raw.githubusercontent.com/mgalgs/aur-sleuth/refs/heads/master/aur-sleuth), drop it in your PATH, and add a symlink named `makepkg-sleuthed`.
+Alternatively you can simply download [`aur-sleuth`](https://raw.githubusercontent.com/mgalgs/aur-sleuth/refs/heads/master/aur-sleuth), and [`makepkg-with-sleuthing`](https://raw.githubusercontent.com/mgalgs/aur-sleuth/refs/heads/master/makepkg-with-sleuthing) drop them in your PATH.
 
 ## Configuration
 
@@ -150,7 +151,7 @@ package.
 
 **Usage:**
 ```bash
-usage: aur-sleuth [-h] [--clone-url CLONE_URL] [--output OUTPUT] [--model MODEL] [--base-url BASE_URL] [--max-llm-jobs MAX_LLM_JOBS] [--num-files-to-review NUM_FILES_TO_REVIEW] package_name
+usage: aur-sleuth [-h] package_name [--clone-url CLONE_URL] [--output OUTPUT] [--model MODEL] [--base-url BASE_URL] [--max-llm-jobs MAX_LLM_JOBS] [--num-files-to-review NUM_FILES_TO_REVIEW]
 
 Run a security audit on an AUR package.
 
@@ -174,9 +175,14 @@ The audit process is subject to a session token limit (default: 100,000 tokens) 
 
 **Examples:**
 
-- **Audit a package:**
+- **Audit a package by name (clone from AUR):**
   ```bash
   aur-sleuth google-chrome-stable
+  ```
+
+- **Audit an existing local pkgdir:**
+  ```bash
+  aur-sleuth --pkgdir /path/to/pkgdir
   ```
 
 - **Audit with custom clone URL:**
@@ -190,10 +196,11 @@ The audit process is subject to a session token limit (default: 100,000 tokens) 
   ```
 
 After the audit completes, if it is deemed safe, the tool will print the
-path to the temporary directory. You can then inspect the files and, if you
-choose to proceed, run `makepkg` manually from within that directory.
+path to the temporary directory when cloning, or it will leave your existing
+`--pkgdir` untouched. You can then inspect the files and, if you choose to
+proceed, run `makepkg` manually from within that directory.
 
-### 2. `makepkg-sleuthed` (Wrapper Mode)
+### 2. `makepkg-with-sleuthing` (Wrapper Mode)
 
 This mode is for integrating the audit into your existing `makepkg`
 workflow, for example with a AUR helper like `yay`.
@@ -203,13 +210,13 @@ workflow, for example with a AUR helper like `yay`.
 Audit a package, then install if it passes:
 
 ```bash
-yay --makepkg makepkg-sleuthed package-name
+yay --makepkg makepkg-with-sleuthing package-name
 ```
 
 You can persist the `--makepkg` setting like so:
 
 ```bash
-yay --makepkg makepkg-sleuthed --save
+yay --makepkg makepkg-with-sleuthing --save
 ```
 
 Then you no longer have to pass `--makepkg` to each invocation of `yay`. Just use it
@@ -226,7 +233,7 @@ arguments to it:
 
 ```bash
 # In a directory with a PKGBUILD
-makepkg-sleuthed -si
+makepkg-with-sleuthing -si
 ```
 
 The wrapper will automatically skip the audit for certain makepkg operations like
@@ -234,11 +241,11 @@ The wrapper will automatically skip the audit for certain makepkg operations lik
 
 ## How it works
 
-The script checks how it was invoked (`sys.argv[0]`).
-1.  **`aur-sleuth`:** It runs the in-depth audit on the specified package.
-2.  **`makepkg-sleuthed`:** It acts as a wrapper around `makepkg`, performing the
-    audit as if invoked via `aur-sleuth`, and then handing off execution to `makepkg`
-    for building.
+- `aur-sleuth` is a Python script that audits a package either by cloning from AUR by
+  name, or by auditing an existing directory with `--pkgdir /path/to/pkgdir`.
+- `makepkg-with-sleuthing` is a small shell script that first runs `aur-sleuth --pkgdir .`
+  to audit the current PKGBUILD and sources, and then execs `/usr/bin/makepkg` if the
+  audit passes.
 
 ## Supported LLM Providers
 
