@@ -1062,10 +1062,17 @@ def get_source_listing(
                 dirs.remove(ignoramus)
         for f in files:
             pkg_file = rel_root / f
-            if pkg_file.resolve() in seen_files:
+            pkg_file_resolved = pkg_file.resolve()
+            # Skip files that resolve to paths outside the package directory
+            # (e.g. symlinks to system directories)
+            try:
+                pkg_file_resolved.relative_to(pkgdir)
+            except ValueError:
+                continue
+            if pkg_file_resolved in seen_files:
                 continue
             other_pkg_files.append(pkg_file)
-            seen_files.add(pkg_file.resolve())
+            seen_files.add(pkg_file_resolved)
 
     return required_review_files, other_pkg_files
 
