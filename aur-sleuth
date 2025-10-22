@@ -559,6 +559,7 @@ class TUI(ConsoleUI):
         self.spinner = Spinner("dots", text="")
         self.report = report
         self.history = []
+        self._render_lock = Lock()
 
     def __enter__(self):
         self.live = Live(
@@ -597,7 +598,8 @@ class TUI(ConsoleUI):
             raise RuntimeError("TUI is not started. Call __enter__() first.")
         self.report.write(text)
         self.spinner.text = Text(f" {text}", style="bold blue")
-        self.live.update(self._get_renderable())
+        with self._render_lock:
+            self.live.update(self._get_renderable(), refresh=True)
 
     def finalize_step(self, message, status: Optional[SafeStatus] = None):
         """Adds a message to the history and updates the display."""
@@ -608,7 +610,8 @@ class TUI(ConsoleUI):
         self.history.append(f"[{color}]{icon}[/{color}] {message}")
         self.report.write(strip_rich_tags(message))
         # Update the live display with the new history
-        self.live.update(self._get_renderable())
+        with self._render_lock:
+            self.live.update(self._get_renderable(), refresh=True)
 
     def show_summary(
         self,
@@ -621,7 +624,8 @@ class TUI(ConsoleUI):
         if self.live and self.live.is_started:
             # Trash the spinner
             self.spinner = Text("")
-            self.live.update(self._get_renderable())
+            with self._render_lock:
+                self.live.update(self._get_renderable(), refresh=True)
             self.live.stop()
 
         results_by_status = partition_results_by_status(audit_results or [])
