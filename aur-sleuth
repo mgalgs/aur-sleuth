@@ -78,6 +78,8 @@ DEFAULT_MODEL = "qwen/qwen3-235b-a22b-2507"
 SESSION_AUDIT_LIMIT_TOKENS = 100_000  # 100k tokens for the entire session
 IGNORED_DIRS = [".git"]
 GREY = "grey50"
+# Use ASCII icons to avoid ambiguous-width Unicode affecting box layout in some terminals
+USE_ASCII_ICONS = os.environ.get("AUR_SLEUTH_ASCII_ICONS", "").lower() in ("1", "true", "yes", "y")
 
 
 def sanitize_for_llm(text: str) -> str:
@@ -274,6 +276,12 @@ class SafeStatus(Enum):
         }[self]
 
     def get_icon(self):
+        if USE_ASCII_ICONS:
+            return {
+                self.SAFE: "+",
+                self.UNSAFE: "x",
+                self.SKIPPED: "!",
+            }[self]
         return {
             self.SAFE: "✔",
             self.UNSAFE: "✖",
