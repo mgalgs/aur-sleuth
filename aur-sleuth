@@ -1594,9 +1594,54 @@ def main():
     sys.exit(sleuth_main())
 
 
+def selftest():
+    report_path = Path("/tmp/aur-sleuth-tui-selftest.txt")
+
+    with Report(report_path) as report:
+        with TUI(report) as tui:
+            tui.update_status("Starting TUI border test...")
+            time.sleep(0.2)
+
+            tui.update_status("Generating lines...")
+            # Generate lines of increasing length to trigger wrapping
+            for i in range(1, 16):
+                prefix = f"Log {i:02d}: "
+                body = ("-" * (i * 6))  # grows over time, causes wraps
+                # Alternate statuses to exercise color and icons
+                status = [SafeStatus.SAFE, SafeStatus.UNSAFE, SafeStatus.SKIPPED][i % 3]
+                tui.finalize_step(prefix + body, status=status)
+                time.sleep(0.05)
+
+            tui.update_status("Generating a big ol' line...")
+            # Long single line to exceed typical widths
+            long_line = "This is a very long line " + ("." * 200)
+            tui.finalize_step(long_line, status=SafeStatus.SAFE)
+
+            for i in range(1, 15):
+                tui.update_status(f"[{i}] Updating status")
+                time.sleep(0.2)
+
+            tui.update_status("Generating lines... YES -- AGAIN")
+            for i in range(1, 16):
+                prefix = f"Log {i:02d}: "
+                body = ("-" * (i * 6))  # grows over time, causes wraps
+                # Alternate statuses to exercise color and icons
+                status = [SafeStatus.SAFE, SafeStatus.UNSAFE, SafeStatus.SKIPPED][i % 3]
+                tui.finalize_step(prefix + body, status=status)
+                time.sleep(0.05)
+
+            time.sleep(0.1)
+
+            tui.update_status("Finishing TUI border test...")
+            time.sleep(0.2)
+
+
 if __name__ == "__main__":
     try:
-        main()
+        if os.environ.get("SELFTEST") == "1":
+            selftest()
+        else:
+            main()
     except KeyboardInterrupt:
         print("\nAudit interrupted by user.", file=sys.stderr)
         sys.exit(1)
