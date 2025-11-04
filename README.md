@@ -92,6 +92,7 @@ The tool can be configured with environment variables:
 - `LLM_TEMPERATURE`: The temperature parameter for the LLM (0.0-2.0). If not set, uses model default.
 - `LLM_TOP_P`: The top-p parameter for the LLM (0.0-1.0). If not set, uses model default.
 - `AUDIT_FAILURE_FATAL`: Whether audit failures should be fatal (exit with error). Set to `false` to make audit failures non-fatal. Defaults to `true`.
+- `SAFE_KEYWORDS`: Comma- or newline-separated list of benign patterns to treat as safe when they are the sole reason for concern. If any other risky behavior is present, they will not cause a downgrade.
 
 You can either set these environment variables directly in your shell, or add them to
 a configuration file. The tool will automatically load configuration from
@@ -109,6 +110,7 @@ MAX_LLM_JOBS = desired-concurrency
 LLM_TEMPERATURE = 0.7  # Omit to use the model default
 LLM_TOP_P = 0.9        # ditto
 AUDIT_FAILURE_FATAL = false  # Set to false to make audit failures non-fatal
+SAFE_KEYWORDS = telemetry, test-only, sample-script  # Comma- or newline-separated benign patterns; used to downgrade isolated matches to SAFE
 ```
 
 ### Example using OpenRouter
