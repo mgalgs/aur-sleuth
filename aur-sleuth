@@ -1292,14 +1292,14 @@ def check_pkgbuild(tui, report, package_name, pkgdir, llm_client) -> AuditResult
         "Performing initial audit of PKGBUILD to ensure that we can safely run `makepkg`"
     )
 
-    extra_instructions = """We're going to run `makepkg --nobuild` and `makepkg --printsrcinfo` with
+    extra_instructions = """We're going to run `makepkg --nobuild --nodeps --noprepare` and `makepkg --printsrcinfo` with
 the following PKGBUILD file in order to download all of the package sources for auditing. Unfortunately,
 an attacker can include malicious code in the PKGBUILD itself that will be executed when running the
-above commands (there could be something malicious in the `source` array, for example).
+above commands (there could be something malicious in the `source` array, for example). Important: we pass `--noprepare`, so `prepare()` will NOT execute during this step.
 
 So please pay close attention to any malicious code that could be executed by the above `makepkg`
-commands. We'll perform a more comprehensive audit of the PKGBUILD file later, right now we're
-just trying to ensure that we can safely call `makepkg --nobuild` and `makepkg --printsrcinfo`."""
+commands without `prepare()` running. We'll perform a more comprehensive audit of the PKGBUILD file later, right now we're
+just trying to ensure that we can safely call `makepkg --nobuild --nodeps --noprepare` and `makepkg --printsrcinfo`."""
     result = audit_file(
         report,
         package_name,
