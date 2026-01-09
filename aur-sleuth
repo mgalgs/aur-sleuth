@@ -890,15 +890,16 @@ def sanitize_xml_string(xml_string: str) -> str:
     sanitized = re.sub(r"&(?![a-zA-Z]+;|#[0-9]+;)", "&amp;", xml_string)
 
     def escape_unexpected_tags(match: re.Match[str]) -> str:
-        # group1: optional leading slash for closing tags
-        # group2: tag name
-        # group3: attributes / optional trailing slash for self-closing tags
+        # group1: optional leading slash for closing tags (not used directly)
+        # group2: tag name (used for allowlisting)
+        # group3: attributes / optional trailing slash for self-closing tags (not used directly)
         tag_name = match.group(2).lower()
         if tag_name not in ALLOWED_LLM_RESPONSE_TAGS:
             return saxutils.escape(match.group(0))
         return match.group(0)
 
-    # Allow opening/closing/self-closing tags only when the tag name is allowlisted
+    # Regex captures: optional leading slash, tag name, then any attributes or trailing slash.
+    # Allow opening/closing/self-closing tags only when the tag name is allowlisted.
     sanitized = re.sub(
         r"<(/?)([A-Za-z0-9:_-]+)([^>]*)>",
         escape_unexpected_tags,
