@@ -101,6 +101,7 @@ The tool can be configured with environment variables:
   the `source` array. Defaults to `10`.
 - `LLM_TEMPERATURE`: The temperature parameter for the LLM (0.0-2.0). If not set, uses model default.
 - `LLM_TOP_P`: The top-p parameter for the LLM (0.0-1.0). If not set, uses model default.
+- `LLM_REASONING_EFFORT`: Reasoning effort for supported reasoning models (`low`, `medium`, `high`). Defaults to `high`.
 - `AUDIT_FAILURE_FATAL`: Whether audit failures should be fatal (exit with error). Set to `false` to make audit failures non-fatal. Defaults to `true`.
 
 ### Audit Result Meanings
@@ -129,6 +130,7 @@ OPENAI_MODEL = your-model
 MAX_LLM_JOBS = desired-concurrency
 LLM_TEMPERATURE = 0.7  # Omit to use the model default
 LLM_TOP_P = 0.9        # ditto
+LLM_REASONING_EFFORT = high  # low | medium | high
 AUDIT_FAILURE_FATAL = false  # Set to false to make audit failures non-fatal
 ```
 
@@ -172,7 +174,7 @@ package.
 
 **Usage:**
 ```bash
-usage: aur-sleuth [-h] package_name [--clone-url CLONE_URL] [--output OUTPUT] [--model MODEL] [--base-url BASE_URL] [--max-llm-jobs MAX_LLM_JOBS] [--num-files-to-review NUM_FILES_TO_REVIEW]
+usage: aur-sleuth [-h] package_name [--clone-url CLONE_URL] [--output OUTPUT] [--model MODEL] [--base-url BASE_URL] [--reasoning-effort {low,medium,high}] [--max-llm-jobs MAX_LLM_JOBS] [--num-files-to-review NUM_FILES_TO_REVIEW]
 
 Run a security audit on an AUR package.
 
@@ -186,6 +188,8 @@ options:
   --output OUTPUT       Output format. Supported formats: rich, plain. Defaults to rich.
   --model MODEL         LLM to use (overrides environment and config file settings)
   --base-url BASE_URL   Base API URL (OpenAI API compatible) to use (overrides environment and config file settings)
+  --reasoning-effort {low,medium,high}
+                        Reasoning effort to request from the LLM (default: high)
   --max-llm-jobs MAX_LLM_JOBS, -j MAX_LLM_JOBS
                         Maximum number of concurrent LLM audit jobs (default: 3)
   --num-files-to-review NUM_FILES_TO_REVIEW, -n NUM_FILES_TO_REVIEW
