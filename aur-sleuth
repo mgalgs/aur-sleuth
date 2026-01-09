@@ -83,6 +83,7 @@ IGNORED_DIRS = [".git"]
 GREY = "grey50"
 # Use ASCII icons to avoid ambiguous-width Unicode affecting box layout in some terminals
 USE_ASCII_ICONS = os.environ.get("AUR_SLEUTH_ASCII_ICONS", "").lower() in ("1", "true", "yes", "y")
+ALLOWED_LLM_RESPONSE_TAGS = {"security_assessment", "decision", "details", "summary"}
 
 
 def sanitize_for_llm(text: str) -> str:
@@ -886,7 +887,16 @@ def sanitize_xml_string(xml_string: str) -> str:
     """
     Sanitize the XML string to replace unescaped ampersands.
     """
-    return re.sub(r"&(?![a-zA-Z]+;|#[0-9]+;)", "&amp;", xml_string)
+    sanitized = re.sub(r"&(?![a-zA-Z]+;|#[0-9]+;)", "&amp;", xml_string)
+
+    def escape_unexpected_tags(match: re.Match[str]) -> str:
+        tag_name = match.group(2).lower()
+        if tag_name not in ALLOWED_LLM_RESPONSE_TAGS:
+            return saxutils.escape(match.group(0))
+        return match.group(0)
+
+    sanitized = re.sub(r"<(/?)([A-Za-z0-9:_-]+)([^>]*)>", escape_unexpected_tags, sanitized)
+    return sanitized
 
 
 def parse_security_assessment(
@@ -998,6 +1008,7 @@ def audit_file(
     )
     prompt = f"""{extra_instructions + "\n" if extra_instructions else ""}
 Respond with a security assessment in the following XML format. Ensure that all special characters (e.g., &, <, >) within the XML tags are properly escaped (e.g., &amp;, &lt;, &gt;).
+Do not include any XML tags other than <security_assessment>, <decision>, <details>, and <summary>. If you must mention other XML-like tags (for example <defaults>), escape them like &lt;defaults&gt; instead of emitting raw tags.
 <security_assessment>
 <decision>SAFE or UNSAFE</decision>
 <details>
