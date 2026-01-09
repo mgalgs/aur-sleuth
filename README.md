@@ -103,6 +103,17 @@ The tool can be configured with environment variables:
 - `LLM_TOP_P`: The top-p parameter for the LLM (0.0-1.0). If not set, uses model default.
 - `AUDIT_FAILURE_FATAL`: Whether audit failures should be fatal (exit with error). Set to `false` to make audit failures non-fatal. Defaults to `true`.
 
+### Audit Result Meanings
+
+`aur-sleuth` reports per-file statuses and an overall result:
+
+- `SAFE`: Audited successfully; no issues found.
+- `UNSAFE`: Issues found; do not install.
+- `INCONCLUSIVE`: The audit could not be completed (LLM/API errors, malformed model output, etc.).
+  This is treated as a failed audit by default (non-zero exit code).
+- `SKIPPED`: The file was intentionally not audited (e.g. detected as binary). This does **not**
+  fail the audit by itself, but it does reduce audit coverage.
+
 You can either set these environment variables directly in your shell, or add them to
 a configuration file. The tool will automatically load configuration from
 `/etc/aur-sleuth.conf` (system-wide) or `~/.config/aur-sleuth.conf` (user-specific),
