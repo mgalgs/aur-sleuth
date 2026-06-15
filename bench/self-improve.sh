@@ -22,6 +22,7 @@ METADATA_CACHE_MAX_AGE=$((86400))  # 1 day in seconds
 AUR_RSS_URL="https://aur.archlinux.org/rss/"
 AUR_METADATA_URL="https://aur.archlinux.org/packages-meta-ext-v1.json.gz"
 REPORTS_BRANCH="audit-reports"
+BASE_BRANCH="origin/master"
 
 # --- Argument parsing ---
 MODE=""
@@ -39,6 +40,7 @@ Package selection (exactly one required):
   --package PKG     Audit a specific package
 
 Options:
+  --base BRANCH     Base branch to create from (default: origin/master)
   --auto-pr         Create a GitHub PR after pushing
   --dry-run         Show what would be done without running the audit
 EOF
@@ -56,6 +58,14 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             PACKAGE="$2"
+            shift 2
+            ;;
+        --base)
+            if [[ $# -lt 2 ]]; then
+                echo "Error: --base requires a branch name" >&2
+                exit 1
+            fi
+            BASE_BRANCH="$2"
             shift 2
             ;;
         --auto-pr)  AUTO_PR=1; shift ;;
@@ -269,12 +279,12 @@ git fetch origin
 
 if git show-ref --verify --quiet "refs/heads/${BRANCH}" 2>/dev/null; then
     git checkout "$BRANCH"
-    git rebase origin/master
+    git rebase "$BASE_BRANCH"
 elif git show-ref --verify --quiet "refs/remotes/origin/${BRANCH}" 2>/dev/null; then
     git checkout -b "$BRANCH" "origin/${BRANCH}"
-    git rebase origin/master
+    git rebase "$BASE_BRANCH"
 else
-    git checkout -b "$BRANCH" origin/master
+    git checkout -b "$BRANCH" "$BASE_BRANCH"
 fi
 
 # 3. Run the audit
@@ -334,7 +344,7 @@ EOF
 )"
 
 # 7. Push if there are commits ahead of origin/master
-if git log origin/master..HEAD --oneline | grep -q .; then
+if git log "${BASE_BRANCH}..HEAD" --oneline | grep -q .; then
     echo "==> Pushing to origin/${BRANCH}..."
     git push -u origin "$BRANCH"
 fi
