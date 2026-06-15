@@ -237,26 +237,27 @@ run_audit() {
     AUDIT_EXIT=0
     AUDIT_FAILURE_FATAL=true AUR_SLEUTH_ASCII_ICONS=1 \
         "$AUR_SLEUTH" "$PACKAGE" --output plain 2>&1 \
-        | tee "${CACHE_DIR}/last-run.txt" \
+        | tee "${RUN_DIR}/last-run.txt" \
         || AUDIT_EXIT=$?
 
     REPORT_FILE="${CACHE_DIR}/aur-sleuth-report-${PACKAGE}.txt"
     if [[ ! -f "$REPORT_FILE" ]]; then
         echo "Warning: report file not found at $REPORT_FILE, using captured output" >&2
-        REPORT_FILE="${CACHE_DIR}/last-run.txt"
+        REPORT_FILE="${RUN_DIR}/last-run.txt"
     fi
 
     echo ""
     echo "==> Audit exit code: $AUDIT_EXIT"
     echo "==> Report: $REPORT_FILE"
 
-    parse_report_metadata "$REPORT_FILE" "${CACHE_DIR}/last-run.txt"
+    parse_report_metadata "$REPORT_FILE" "${RUN_DIR}/last-run.txt"
 }
 
 # --- Main flow ---
 
 cd "$PROJECT_DIR"
 mkdir -p "$CACHE_DIR"
+RUN_DIR="$(mktemp -d "${CACHE_DIR}/run-XXXXXX")"
 
 # 1. Pick the package
 case "$MODE" in
@@ -297,12 +298,12 @@ for ((iteration=1; iteration<=MAX_ITERATIONS; iteration++)); do
     store_report "$PACKAGE" "$REPORT_FILE" "$REPORT_FILENAME"
 
     # Clear stale commit message from previous iteration
-    rm -f "${CACHE_DIR}/commit-msg.txt"
+    rm -f "${RUN_DIR}/commit-msg.txt"
 
     # Send to Claude for review
     echo ""
     echo "==> Sending report to Claude for review..."
-    "$SCRIPT_DIR/review-audit.sh" "$REPORT_FILE" || true
+    "$SCRIPT_DIR/review-audit.sh" "$REPORT_FILE" "$RUN_DIR" || true
 
     # Check if review made any changes
     if git diff --quiet && git diff --cached --quiet; then
@@ -314,8 +315,8 @@ for ((iteration=1; iteration<=MAX_ITERATIONS; iteration++)); do
 
     # Use Claude's commit message if it wrote one, otherwise fall back
     COMMIT_SUBJECT_BODY="self-improve: improvements from auditing ${PACKAGE}"
-    if [[ -f "${CACHE_DIR}/commit-msg.txt" ]]; then
-        COMMIT_SUBJECT_BODY="$(cat "${CACHE_DIR}/commit-msg.txt")"
+    if [[ -f "${RUN_DIR}/commit-msg.txt" ]]; then
+        COMMIT_SUBJECT_BODY="$(cat "${RUN_DIR}/commit-msg.txt")"
     fi
 
     SLEUTH_REV="$(git rev-parse HEAD)"

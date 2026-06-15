@@ -9,13 +9,15 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-if [[ $# -lt 1 ]]; then
-    echo "Usage: $0 <report-file>" >&2
-    echo "  report-file: path to aur-sleuth report (e.g. /tmp/aur-sleuth/aur-sleuth-report-foo.txt)" >&2
+if [[ $# -lt 2 ]]; then
+    echo "Usage: $0 <report-file> <scratch-dir>" >&2
+    echo "  report-file:  path to aur-sleuth report" >&2
+    echo "  scratch-dir:  writable directory for outputs (commit-msg.txt, etc.)" >&2
     exit 1
 fi
 
 REPORT_FILE="$1"
+SCRATCH_DIR="$2"
 if [[ ! -f "$REPORT_FILE" ]]; then
     echo "Error: report file not found: $REPORT_FILE" >&2
     exit 1
@@ -62,7 +64,7 @@ After making changes, verify with the synthetic test packages:
   AUDIT_FAILURE_FATAL=true AUR_SLEUTH_ASCII_ICONS=1 ./aur-sleuth --pkgdir bench/synthetics/malicious-curl-exfil --output plain -n 0
 Expected: benign passes (exit 0), both malicious fail (exit 1).
 
-If you make changes, write a git commit message to /tmp/aur-sleuth/commit-msg.txt:
+If you make changes, write a git commit message to SCRATCH_DIR/commit-msg.txt:
 - First line: conventional commit subject (e.g. "fix: Unescape HTML entities in XML response parsing")
 - Blank line, then body describing what changed and why
 
@@ -73,12 +75,12 @@ Here is the audit report:
 PROMPT_END
 )"
 
-PROMPT="${PROMPT}
+PROMPT="${PROMPT//SCRATCH_DIR/$SCRATCH_DIR}
 ${REPORT_CONTENT}
 </report>"
 
 cd "$PROJECT_DIR"
 exec claude -p \
     --model opus \
-    --allowedTools "Read" "Edit" "Bash(./aur-sleuth *)" \
+    --allowedTools "Read" "Edit" "Bash(./aur-sleuth *)" "Write(${SCRATCH_DIR}/*)" \
     <<< "$PROMPT"
