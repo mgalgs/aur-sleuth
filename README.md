@@ -15,7 +15,17 @@ yay --makepkg makepkg-with-sleuthing package-name
 
 # Audit, then build and install a local package (in a directory containing a PKGBUILD)
 makepkg-with-sleuthing -si
+
+# Use `yay --save` to set aur-sleuth as the default makepkg for yay.
+# After this, you can just run `yay` like normal
+# (without `--makepkg makepkg-with-sleuthing`) and it will audit
+# installed/updated packages automatically.
+yay --makepkg makepkg-with-sleuthing --save
 ```
+
+Set `AUDIT_FAILURE_FATAL=false` (see "Configuration" section below) if you just want
+to see the audit results but you *don't* want to block the actual install (in case of
+high rate of false positives -- highly model dependent).
 
 ## Demo
 
