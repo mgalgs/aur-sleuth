@@ -1045,8 +1045,8 @@ def get_source_listing(
     other_pkg_files = []
     seen_files = {Path("PKGBUILD").resolve()}
 
-    # Use `makepkg --printsrcinfo` to get the PKGBUILD source files. These are always
-    # required to be reviewed.
+    # Use `makepkg --printsrcinfo` to get source files and install scripts. These are
+    # always required to be reviewed.
     tui.update_status("Running makepkg --printsrcinfo to get source files for agent...")
     try:
         source_info = get_source_info(pkgdir)
@@ -1054,8 +1054,12 @@ def get_source_listing(
             if key == "source":
                 pfile = Path(value)
                 if is_remote_url(value):
-                    # Just use the basename since it should be downloaded to pkgdir
                     pfile = Path(pfile.name)
+                if pfile.resolve() not in seen_files:
+                    required_review_files.append(pfile)
+                    seen_files.add(pfile.resolve())
+            elif key == "install":
+                pfile = Path(value)
                 if pfile.resolve() not in seen_files:
                     required_review_files.append(pfile)
                     seen_files.add(pfile.resolve())
