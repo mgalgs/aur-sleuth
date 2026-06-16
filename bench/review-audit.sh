@@ -82,5 +82,5 @@ ${REPORT_CONTENT}
 cd "$PROJECT_DIR"
 exec claude -p \
     --model opus \
-    --allowedTools "Read" "Edit" "Bash(./aur-sleuth *)" "Write(${SCRATCH_DIR}/*)" \
+    --allowedTools "Read" "Edit" "Bash(./aur-sleuth *)" "Write(//${SCRATCH_DIR}/*)" \
     <<< "$PROMPT"
