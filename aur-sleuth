@@ -220,7 +220,9 @@ class LLMClient:
 
 SYSTEM_PROMPTS = {
     "general_security_auditor": lambda: (
-        """You are an agentic security auditor. Your goal is to inspect the source code and AUR build files in this package to find any potential vulnerabilities, malicious code, or supply chain attack vectors."""
+        """You are an agentic security auditor. Your goal is to inspect the source code and AUR build files in this package to find any potential vulnerabilities, malicious code, or supply chain attack vectors.
+
+Your review budget is limited, so spend it where malicious code actually lives: build scripts and install hooks, anything that runs at build or install time (or can inject code into it), and source files or configs that fetch or execute remote content. Pure documentation and license files (README, LICENSE, COPYING, NEWS, CHANGELOG, AUTHORS, THANKS, MAINTAINERS, CONTRIBUTING, HACKING, CODE_OF_CONDUCT, and the like) cannot execute and are essentially never the attack vector -- do not waste reviews on them unless nothing else remains."""
     ),
     "file_auditor": lambda package_name: (
         f"""You are a security expert tasked with auditing a file from a package distributed via the Arch User Repository (AUR).
@@ -1176,6 +1178,71 @@ def get_source_listing(
     return required_review_files, other_pkg_files
 
 
+# Filenames (case-insensitive, with or without an extension) that are pure
+# documentation or legal text. They can't execute and are the lowest-value use of
+# a review slot, so we rank them last and tell the model to skip them.
+_DOC_STEMS = frozenset(
+    {
+        "readme", "license", "licence", "copying", "copyright", "notice",
+        "news", "changelog", "changes", "history", "authors", "thanks",
+        "maintainers", "contributors", "contributing", "install", "hacking",
+        "code_of_conduct", "code-of-conduct", "todo", "faq", "bugs",
+        "acknowledgements", "acknowledgments", "readme.first",
+    }
+)
+_DOC_EXTS = frozenset({".md", ".rst", ".markdown", ".adoc", ".pod", ".texi"})
+
+# Extensions/names where build- or install-time code runs, or that can inject
+# code into the build. Highest priority -- this is where supply-chain payloads hide.
+_HIGH_RISK_EXTS = frozenset(
+    {
+        ".install", ".sh", ".bash", ".zsh", ".fish", ".py", ".js", ".mjs",
+        ".cjs", ".ts", ".rb", ".pl", ".lua", ".php", ".ps1", ".patch", ".diff",
+        ".hook", ".desktop", ".service", ".cmake",
+    }
+)
+_HIGH_RISK_NAMES = frozenset(
+    {
+        "pkgbuild", ".install", "meson.build", "meson_options.txt",
+        "cmakelists.txt", "configure", "configure.ac", "configure.in",
+        "makefile", "makefile.am", "makefile.in", "gnumakefile", "sconstruct",
+        "sconscript", "build.rs", "setup.py", "wscript", "package.json",
+    }
+)
+
+# Compiled source and config files that may carry URLs or payloads. Medium priority.
+_SOURCE_EXTS = frozenset(
+    {
+        ".c", ".h", ".cpp", ".cc", ".cxx", ".hpp", ".hh", ".rs", ".go",
+        ".java", ".vala", ".m", ".mm", ".s", ".asm", ".conf", ".cfg", ".ini",
+        ".toml", ".yaml", ".yml", ".json", ".xml",
+    }
+)
+
+
+def file_security_priority(path: Path) -> int:
+    """Heuristic ranking of how security-relevant a file is to review.
+
+    Higher means more important. Build/install scripts and other code that runs
+    at build or install time (or can inject into it) rank highest; compiled
+    source and config files rank in the middle; pure documentation and license
+    files rank lowest, since they can't execute and waste a review slot.
+    """
+    name = path.name.lower()
+    suffix = path.suffix.lower()
+    stem = name.rsplit(".", 1)[0] if "." in name else name
+
+    # Executable / build / install files win even when their name also looks
+    # doc-ish (e.g. an "install.sh" script vs. a doc named "INSTALL").
+    if name in _HIGH_RISK_NAMES or suffix in _HIGH_RISK_EXTS:
+        return 3
+    if stem in _DOC_STEMS or suffix in _DOC_EXTS:
+        return 0
+    if suffix in _SOURCE_EXTS:
+        return 2
+    return 1
+
+
 def decide_next_files_to_review(
     report: Report,
     package_name: str,
@@ -1187,6 +1254,14 @@ def decide_next_files_to_review(
     files_to_consider = [f for f in other_pkg_files if f not in already_reviewed_files]
     if len(files_to_consider) <= num_additional_files_to_review:
         return files_to_consider
+
+    # Rank by security relevance so that (a) the truncation below keeps the files
+    # most worth reviewing instead of whatever os.walk happened to list first, and
+    # (b) the model sees risky files at the top and docs/licenses last. Ties keep a
+    # stable, deterministic order. (Negate the priority since Python sort is ascending.)
+    files_to_consider = sorted(
+        files_to_consider, key=lambda f: (-file_security_priority(f), str(f))
+    )
 
     # Limit files in prompt to prevent token overflow
     max_files_in_prompt = 50
@@ -1202,17 +1277,29 @@ def decide_next_files_to_review(
         temperature=llm_params.temperature,
         top_p=llm_params.top_p,
     )
+    already_reviewed_str = "\n".join(f"- {f}" for f in already_reviewed_files)
+    listing_str = "\n".join(f"- {f}" for f in files_for_prompt)
     prompt = f"""
-To continue the audit of the {sanitize_for_llm(package_name)} package, please select {num_additional_files_to_review} more source files to review from the package directory listing below.
+To continue the audit of the {sanitize_for_llm(package_name)} package, choose the {num_additional_files_to_review} files from the listing below that are MOST likely to contain malicious or dangerous code.
+
+Prioritize files where code can execute at build or install time, or that can inject code into the build -- that is where supply-chain payloads hide:
+  - install hooks (*.install) and post_install/post_upgrade scripts
+  - build scripts (PKGBUILD, meson.build, CMakeLists.txt, configure, Makefile, build.rs, setup.py, ...)
+  - shell, python, javascript, and other scripts (*.sh, *.py, *.js, ...)
+  - patches/diffs that modify upstream source (*.patch, *.diff)
+  - .desktop/.service files (they can specify arbitrary commands to run)
+  - source code and config files, especially any that reference URLs or fetch/run remote content
+
+Do NOT spend reviews on pure documentation or license files (README, LICENSE/COPYING, NEWS, CHANGELOG, AUTHORS, THANKS, MAINTAINERS, CONTRIBUTING, INSTALL, HACKING, CODE_OF_CONDUCT, and similar). They cannot execute and are almost never an attack vector -- pick them only if there is genuinely nothing else worth reviewing. The listing is already ordered with the most security-relevant files first.
 
 Do not select any files that have already been reviewed.
 
 <already_reviewed_files>
-{"- ".join(str(f) for f in already_reviewed_files)}
+{already_reviewed_str}
 </already_reviewed_files>
 
 <listing>
-{"- ".join(str(f) for f in files_for_prompt)}
+{listing_str}
 </listing>
 
 Respond with a list of file paths, one path per line, with NO other additional text or formatting.
