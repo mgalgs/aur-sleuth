@@ -222,7 +222,9 @@ SYSTEM_PROMPTS = {
     "general_security_auditor": lambda: (
         """You are an agentic security auditor. Your goal is to inspect the source code and AUR build files in this package to find any potential vulnerabilities, malicious code, or supply chain attack vectors.
 
-Your review budget is limited, so spend it where malicious code actually lives: build scripts and install hooks, anything that runs at build or install time (or can inject code into it), and source files or configs that fetch or execute remote content. Pure documentation and license files (README, LICENSE, COPYING, NEWS, CHANGELOG, AUTHORS, THANKS, MAINTAINERS, CONTRIBUTING, HACKING, CODE_OF_CONDUCT, and the like) cannot execute and are essentially never the attack vector -- do not waste reviews on them unless nothing else remains."""
+Your review budget is limited, so spend it where malicious code actually lives: build scripts and install hooks, anything that runs at build or install time (or can inject code into it), and source files or configs that fetch or execute remote content. Pure documentation and license files (README, LICENSE, COPYING, NEWS, CHANGELOG, AUTHORS, THANKS, MAINTAINERS, CONTRIBUTING, HACKING, CODE_OF_CONDUCT, and the like) cannot execute and are essentially never the attack vector -- do not waste reviews on them unless nothing else remains.
+
+Two further ways to avoid wasting reviews: (1) Test-suite, example, and developer-maintenance scripts -- typically under tests/, test/, examples/, demo/, and similar -- usually run only under `check()`, CI, or manual developer use, NOT during a normal build or install, so prefer the real build system (meson.build, CMakeLists.txt, configure, Makefile, build.rs, setup.py, ...) and install hooks first. (2) When several files are near-identical copies of one another (e.g. the same script duplicated across per-driver or per-test subdirectories), review one representative instead of spending multiple reviews on duplicates, so the budget covers more distinct code."""
     ),
     "file_auditor": lambda package_name: (
         f"""You are a security expert tasked with auditing a file from a package distributed via the Arch User Repository (AUR).
@@ -1219,6 +1221,20 @@ _SOURCE_EXTS = frozenset(
     }
 )
 
+# Directory names whose contents are test scaffolding, examples/demos, or CI
+# config. Generic scripts/source living here typically run only under check(),
+# CI, or manual developer use -- NOT during a normal makepkg build or install --
+# so they are a lower-value use of a review slot than the package's actual build
+# system. We demote (but never exclude) them; the real build-system entry points
+# are exempt, since e.g. tests/meson.build still runs when meson configures.
+_LOW_VALUE_DIRS = frozenset(
+    {
+        "test", "tests", "testing", "examples", "example", "demo", "demos",
+        "doc", "docs", "benchmark", "benchmarks", "fuzz", "fuzzing", "samples",
+        "fixtures", "ci", ".github",
+    }
+)
+
 
 def file_security_priority(path: Path) -> int:
     """Heuristic ranking of how security-relevant a file is to review.
@@ -1226,21 +1242,38 @@ def file_security_priority(path: Path) -> int:
     Higher means more important. Build/install scripts and other code that runs
     at build or install time (or can inject into it) rank highest; compiled
     source and config files rank in the middle; pure documentation and license
-    files rank lowest, since they can't execute and waste a review slot.
+    files rank lowest, since they can't execute and waste a review slot. Generic
+    scripts/source under a test/example/dev directory are demoted one tier, since
+    they seldom run during an actual build or install.
     """
     name = path.name.lower()
     suffix = path.suffix.lower()
     stem = name.rsplit(".", 1)[0] if "." in name else name
 
-    # Executable / build / install files win even when their name also looks
-    # doc-ish (e.g. an "install.sh" script vs. a doc named "INSTALL").
-    if name in _HIGH_RISK_NAMES or suffix in _HIGH_RISK_EXTS:
+    # Build/install entry points run during makepkg regardless of where they
+    # live (and a name like "meson.build" wins even when it sits under tests/),
+    # so they always rank highest and are never demoted.
+    if name in _HIGH_RISK_NAMES:
         return 3
-    if stem in _DOC_STEMS or suffix in _DOC_EXTS:
+
+    # Executable script files win even when their name also looks doc-ish (e.g.
+    # an "install.sh" script vs. a doc named "INSTALL").
+    if suffix in _HIGH_RISK_EXTS:
+        base = 3
+    elif stem in _DOC_STEMS or suffix in _DOC_EXTS:
         return 0
-    if suffix in _SOURCE_EXTS:
-        return 2
-    return 1
+    elif suffix in _SOURCE_EXTS:
+        base = 2
+    else:
+        base = 1
+
+    # Demote generic scripts/source that live in a test/example/dev-tooling
+    # directory: they rarely execute during a real build or install, so the
+    # package's actual build system should sort above them. Never drop below the
+    # "other" tier, and never into the doc tier.
+    if any(part.lower() in _LOW_VALUE_DIRS for part in path.parts[:-1]):
+        base = max(1, base - 1)
+    return base
 
 
 def decide_next_files_to_review(
@@ -1285,12 +1318,16 @@ To continue the audit of the {sanitize_for_llm(package_name)} package, choose th
 Prioritize files where code can execute at build or install time, or that can inject code into the build -- that is where supply-chain payloads hide:
   - install hooks (*.install) and post_install/post_upgrade scripts
   - build scripts (PKGBUILD, meson.build, CMakeLists.txt, configure, Makefile, build.rs, setup.py, ...)
-  - shell, python, javascript, and other scripts (*.sh, *.py, *.js, ...)
+  - shell, python, javascript, and other scripts (*.sh, *.py, *.js, ...) that run during the build/install
   - patches/diffs that modify upstream source (*.patch, *.diff)
   - .desktop/.service files (they can specify arbitrary commands to run)
   - source code and config files, especially any that reference URLs or fetch/run remote content
 
 Do NOT spend reviews on pure documentation or license files (README, LICENSE/COPYING, NEWS, CHANGELOG, AUTHORS, THANKS, MAINTAINERS, CONTRIBUTING, INSTALL, HACKING, CODE_OF_CONDUCT, and similar). They cannot execute and are almost never an attack vector -- pick them only if there is genuinely nothing else worth reviewing. The listing is already ordered with the most security-relevant files first.
+
+Two more rules for spending the budget well:
+  - Prefer files that actually run during `makepkg` (the build system and install hooks) over test-suite, example, and developer-maintenance scripts -- typically under tests/, test/, examples/, demo/, and the like. Those usually run only under `check()`, CI, or manual developer use, so review them only after the build-time and install-time files are covered.
+  - Spread your picks across DISTINCT files. When several files are near-identical copies (for example the same script duplicated across per-driver or per-test subdirectories), review just one representative and use the remaining slots on different files, so the limited budget covers as much unique code as possible.
 
 Do not select any files that have already been reviewed.
 
