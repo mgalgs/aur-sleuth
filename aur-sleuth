@@ -1350,9 +1350,15 @@ def get_source_listing(
         source_info = get_source_info(pkgdir)
         for key, value in source_info.items():
             if key == "source":
-                pfile = Path(value)
-                if is_remote_url(value):
-                    pfile = Path(pfile.name)
+                # Handle makepkg's "localname::url" rename convention
+                if "::" in value:
+                    local_name, url = value.split("::", 1)
+                else:
+                    local_name, url = value, value
+                if is_remote_url(url):
+                    pfile = Path(local_name)
+                else:
+                    pfile = Path(value)
                 if pfile.resolve() not in seen_files:
                     required_review_files.append(pfile)
                     seen_files.add(pfile.resolve())
