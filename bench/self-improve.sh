@@ -320,26 +320,22 @@ for ((iteration=1; iteration<=MAX_ITERATIONS; iteration++)); do
     fi
 
     SLEUTH_REV="$(git rev-parse HEAD)"
-    REPORT_CONTENT="$(cat "$REPORT_FILE")"
 
     git add -A
     git commit -m "$(cat <<EOF
 ${COMMIT_SUBJECT_BODY}
 
-Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>
----
-Report run: $(date -u +%Y-%m-%dT%H:%M:%SZ)
 Iteration: ${iteration}/${MAX_ITERATIONS}
 Package: ${PACKAGE}
+Audit-result: ${AUDIT_RESULT}
 Model: ${AUDIT_MODEL}
 API: ${AUDIT_BASE_URL}
 Tokens: ${TOKENS}
 Cost: ${COST}
-Audit result: ${AUDIT_RESULT}
-aur-sleuth rev: ${SLEUTH_REV}
-Command: aur-sleuth ${PACKAGE} --output plain
----
-${REPORT_CONTENT}
+Aur-sleuth-rev: ${SLEUTH_REV}
+Report: ${REPORTS_BRANCH}:${PACKAGE}/${REPORT_FILENAME}
+
+Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>
 EOF
 )"
 
