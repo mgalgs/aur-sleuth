@@ -259,9 +259,15 @@ Follow these instructions stricly:
   - Checksums (sha256sums/md5sums/b2sums/etc.) set to 'SKIP'. SKIP is REQUIRED for VCS
     sources (git+/svn+/hg+/bzr+) and common otherwise; it is a trust/hygiene choice, not malware.
   - Fetching the package's own declared upstream source over git or http(s), including
-    `git clone` and `git checkout`/`switch`/`pull`/`fetch` of that repo or a branch/tag of it.
+    `git clone` and `git checkout`/`switch` of that repo or a branch/tag of it.
   - A `source` that tracks a mutable branch/tag instead of a pinned commit. Unpinned VCS
     sources are normal (especially for -git and fork packages).
+  However, `git pull`, `git pull -f`, or `git fetch` + `git reset --hard` in prepare() or
+  build() deserve scrutiny: they fetch UNCHECKED content from a mutable ref at build time,
+  bypassing whatever was cloned via the `source` array. Note this risk in your details even
+  if the destination is the package's own upstream -- it weakens reproducibility and widens
+  the supply-chain window. Mark UNSAFE only if combined with other red flags (e.g. the
+  pulled content is executed immediately, or the remote is unrelated to the package).
   - Running the upstream build system (make, cmake, meson, cargo, go, npm, node, etc.) and
     installing files (`install`, `cp`, `make install`) into "$pkgdir".
   - Routine post-install hooks that refresh system caches (ldconfig, update-desktop-database,
@@ -995,7 +1001,7 @@ Respond with a security assessment in the following XML format. Ensure that all 
 <security_assessment>
 <decision>SAFE or UNSAFE</decision>
 <details>
-[Your detailed analysis here in markdown format. If UNSAFE, show a short snippet of the problematic code and explain exactly what is problematic and why. Aim for brevity and clarity. Write 1-3 paragraphs. Reserve UNSAFE for genuinely malicious or dangerous behavior; do not mark a file UNSAFE for benign, conventional packaging (SKIP checksums, fetching the package's own upstream, unpinned VCS sources). Mention such hygiene concerns in your details but keep the decision SAFE unless real malice is present.]
+[Your detailed analysis here in markdown format. If UNSAFE, show a short snippet of the problematic code and explain exactly what is problematic and why. Aim for brevity and clarity. Write 1-3 paragraphs.]
 </details>
 <summary>
 [Brief summary of your analysis (12 words or less)]
@@ -1509,9 +1515,10 @@ So focus ONLY on whether fetching the sources and sourcing/parsing the PKGBUILD 
 for example a `source` entry, top-level command substitution, or `pkgver()` that downloads and
 runs an untrusted payload or exfiltrates data while the PKGBUILD is sourced. Standard source
 definitions are normal and must NOT fail this gate on their own: git+https sources, SKIP
-checksums for VCS sources, unpinned branches/tags, and ordinary `git checkout`/`switch`/`pull`
-inside `prepare()`. Mark UNSAFE only if running the two commands above would itself execute
-genuinely malicious code."""
+checksums for VCS sources, and unpinned branches/tags. Mark UNSAFE only if running the two
+commands above would itself execute genuinely malicious code. (Suspicious content in
+`prepare()`/`build()`/`package()` is out of scope here -- it will be audited in the full
+PKGBUILD review that follows.)"""
     result = audit_file(
         report,
         package_name,
