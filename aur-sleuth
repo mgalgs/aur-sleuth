@@ -931,12 +931,18 @@ def parse_security_assessment(
             pass  # fall through to the regex-based extraction below
 
     # Fallback: regex extraction tolerates unescaped special characters inside
-    # the fields (a common reason strict XML parsing fails).
+    # the fields (a common reason strict XML parsing fails). The strict XML path
+    # above resolves entities for us (&lt; -> <, &amp; -> &, &gt; -> >), but raw
+    # regex does not, so a model that escaped its snippet -- as we explicitly ask
+    # it to -- would otherwise leak literal "&lt;"/"&gt;"/"&amp;" into the details
+    # and summary shown to the user. UNSAFE findings carry code snippets and are
+    # therefore the responses most likely to break strict XML and land here, so
+    # unescape to match the strict path and keep the explanation readable.
     def extract(tag):
         m = re.search(
             rf"<{tag}\b[^>]*>(.*?)</{tag}>", text, re.DOTALL | re.IGNORECASE
         )
-        return m.group(1).strip() if m else None
+        return html.unescape(m.group(1).strip()) if m else None
 
     return extract("decision"), extract("details"), extract("summary")
 
@@ -1277,6 +1283,7 @@ def file_security_priority(path: Path) -> int:
 
 
 def decide_next_files_to_review(
+    tui: ConsoleUI,
     report: Report,
     package_name: str,
     other_pkg_files: List[Path],
@@ -1299,6 +1306,19 @@ def decide_next_files_to_review(
     # Limit files in prompt to prevent token overflow
     max_files_in_prompt = 50
     files_for_prompt = files_to_consider[:max_files_in_prompt]
+
+    # Large upstream trees (e.g. a forked library with hundreds of sources) can
+    # have far more candidates than fit in the prompt. The selector can only pick
+    # from what it sees, so anything past the cut is unreviewable -- make that
+    # coverage limit visible instead of letting it look like the whole package
+    # was offered for review.
+    num_omitted = len(files_to_consider) - len(files_for_prompt)
+    if num_omitted > 0:
+        tui.finalize_step(
+            f"Note: {len(files_to_consider)} files available for selection; "
+            f"offering the {max_files_in_prompt} highest-priority to the model. "
+            f"{num_omitted} lower-priority file(s) were not offered."
+        )
 
     llm_params = get_llm_params_from_env()
 
@@ -1350,6 +1370,7 @@ Respond with a list of file paths, one path per line, with NO other additional t
     report.write(f"LLM response for file selection:\n{response}")
 
     files_to_review = []
+    rejected = []
     for line in response.splitlines():
         line = line.strip()
         if not line:
@@ -1358,10 +1379,25 @@ Respond with a list of file paths, one path per line, with NO other additional t
             file_path = Path(line)
             if file_path not in other_pkg_files:
                 logger.warning("Invalid file path in LLM response: %s", line)
+                rejected.append(line)
                 continue
             files_to_review.append(file_path)
         except ValueError:
             logger.warning("Invalid file path in LLM response: %s", line)
+            rejected.append(line)
+
+    # The model sometimes "selects" a plausible-sounding path that isn't actually
+    # in the package (a hallucinated filename guessed from the package's purpose,
+    # e.g. a driver named after the package). We correctly drop those, but doing
+    # it silently hides a real coverage gap: the model wanted to review something
+    # we never reviewed. Surface it so the user knows what was intended but missed.
+    if rejected:
+        tui.finalize_step(
+            f"Note: the model selected {len(rejected)} path(s) not present in the "
+            f"package; these do not exist and were not reviewed: "
+            f"{', '.join(rejected)}",
+            status=SafeStatus.SKIPPED,
+        )
 
     return files_to_review
 
@@ -1533,6 +1569,7 @@ def do_agentic_audit(
 
     tui.update_status("Deciding which files to review next...")
     additional_review_files = decide_next_files_to_review(
+        tui,
         report,
         package_name,
         other_pkg_files,
@@ -1807,7 +1844,7 @@ def load_config():
                 "LLM_TOP_P",
                 "AUDIT_FAILURE_FATAL",
             ]:
-                if key in config_section:
+                if key in config_section and key not in os.environ:
                     logger.debug("Setting %s from %s", key, config_file)
                     os.environ[key] = config_section[key]
 
