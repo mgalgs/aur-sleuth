@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # review-audit.sh — Feed an aur-sleuth report to Claude for review and improvement
 #
-# Usage: bench/review-audit.sh <report-file>
+# Usage: bench/review-audit.sh <report-file> <scratch-dir>
 #   report-file: path to an aur-sleuth report (e.g. /tmp/aur-sleuth/aur-sleuth-report-foo.txt)
+#   scratch-dir: writable directory for outputs (commit-msg.txt, etc.)
 
 set -euo pipefail
 
@@ -82,5 +83,5 @@ ${REPORT_CONTENT}
 cd "$PROJECT_DIR"
 exec claude -p \
     --model opus \
-    --allowedTools "Read" "Edit" "Bash(./aur-sleuth *)" "Write(//${SCRATCH_DIR}/*)" \
+    --allowedTools "Read" "Edit" "Bash(./aur-sleuth *)" "Write(${SCRATCH_DIR}/*)" \
     <<< "$PROMPT"

@@ -58,9 +58,11 @@ if [[ ! -f "$REPORT_FILE" ]]; then
     REPORT_FILE="/tmp/aur-sleuth/last-run.txt"
 fi
 
+SCRATCH_DIR="$(mktemp -d /tmp/aur-sleuth/run-XXXXXX)"
+
 echo ""
 echo "=== Report: $REPORT_FILE ==="
 echo "=== Sending to Claude for review ==="
 echo ""
 
-exec "$SCRIPT_DIR/review-audit.sh" "$REPORT_FILE"
+exec "$SCRIPT_DIR/review-audit.sh" "$REPORT_FILE" "$SCRATCH_DIR"
