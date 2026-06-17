@@ -32,11 +32,11 @@ Arch User Repository (AUR) packages. Your job is to identify quality issues in
 this audit and, if warranted, improve the aur-sleuth tool itself.
 
 The aur-sleuth source is a single Python script at: ./aur-sleuth
-Key areas to know about:
-- SYSTEM_PROMPTS dict (~line 220): the system prompts sent to the auditing LLM
-- audit_file() function (~line 848): where individual files are audited
-- The XML response format prompt (~line 891): what we ask the LLM to produce
-- gen_user_prompt_for_agentic_audit() (~line 953): the file selection prompt
+Key areas to know about (use Read/grep to find exact locations):
+- SYSTEM_PROMPTS dict: the system prompts sent to the auditing LLM
+- audit_file() function: where individual files are audited
+- The XML response format prompt: what we ask the LLM to produce
+- gen_user_prompt_for_agentic_audit(): the file selection prompt
 
 Analyze the audit report below for:
 
