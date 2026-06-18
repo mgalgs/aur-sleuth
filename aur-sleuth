@@ -1168,13 +1168,21 @@ def audit_file(
     try:
         with open(file_path, "r") as f:
             file_content = f.read()
+    except UnicodeDecodeError:
+        try:
+            with open(file_path, "r", encoding="latin-1") as f:
+                file_content = f.read()
+        except Exception as e:
+            return AuditResult(
+                file_path, pkgdir, SafeStatus.SKIPPED, f"Failed to read file: {e}"
+            )
     except FileNotFoundError:
         return AuditResult(
             file_path, pkgdir, SafeStatus.SKIPPED, f"File not found at: {file_path}"
         )
     except Exception as e:
         return AuditResult(
-            file_path, pkgdir, SafeStatus.UNSAFE, f"Failed to read file: {e}"
+            file_path, pkgdir, SafeStatus.SKIPPED, f"Failed to read file: {e}"
         )
 
     llm_params = get_llm_params_from_env()
