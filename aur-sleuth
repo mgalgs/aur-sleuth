@@ -1500,10 +1500,10 @@ def get_source_listing(
 _DOC_STEMS = frozenset(
     {
         "readme", "license", "licence", "copying", "copyright", "notice",
-        "news", "changelog", "changes", "history", "authors", "thanks",
-        "maintainers", "contributors", "contributing", "install", "hacking",
-        "code_of_conduct", "code-of-conduct", "todo", "faq", "bugs",
-        "acknowledgements", "acknowledgments", "readme.first",
+        "news", "whatsnew", "changelog", "changes", "history", "authors",
+        "thanks", "acknow", "maintainers", "contributors", "contributing",
+        "install", "hacking", "code_of_conduct", "code-of-conduct", "todo",
+        "faq", "bugs", "acknowledgements", "acknowledgments", "readme.first",
     }
 )
 _DOC_EXTS = frozenset({".md", ".rst", ".markdown", ".adoc", ".pod", ".texi"})
@@ -1514,7 +1514,7 @@ _BINARY_EXTS = frozenset(
     {
         ".deb", ".rpm", ".tar", ".gz", ".xz", ".bz2", ".zst", ".lz4", ".lzma",
         ".zip", ".7z", ".rar", ".cab", ".cpio", ".ar",
-        ".so", ".a", ".o", ".dylib", ".dll", ".exe", ".bin", ".elf",
+        ".so", ".a", ".o", ".dylib", ".dll", ".exe", ".bin", ".elf", ".sfx",
         ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".ico", ".svg", ".webp",
         ".woff", ".woff2", ".ttf", ".otf", ".eot",
         ".pdf", ".doc", ".docx", ".xls", ".xlsx",
@@ -1658,6 +1658,7 @@ def decide_next_files_to_review(
     files_to_consider = [
         f for f in other_pkg_files
         if f not in already_reviewed_files and file_security_priority(f) >= 0
+        and file_is_plain_text(f)
     ]
     if len(files_to_consider) <= num_additional_files_to_review:
         return files_to_consider
