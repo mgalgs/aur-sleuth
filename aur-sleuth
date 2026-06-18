@@ -1301,7 +1301,9 @@ def is_remote_url(source):
         "scp",
     }
 
-    parsed = urlparse(source)
+    # Strip VCS prefixes (git+https://, hg+http://, etc.)
+    stripped = re.sub(r"^(git|hg|svn|bzr)\+", "", source)
+    parsed = urlparse(stripped)
     return parsed.scheme in remote_schemes
 
 
@@ -1363,6 +1365,10 @@ def get_source_listing(
                     local_name, url = value.split("::", 1)
                 else:
                     local_name, url = None, value
+                # VCS sources (git+, hg+, svn+, bzr+) are cloned as
+                # directories — their files are discovered by os.walk.
+                if re.match(r"^(git|hg|svn|bzr)\+", url):
+                    continue
                 if is_remote_url(url):
                     pfile = Path(local_name) if local_name else Path(Path(url).name)
                 else:
