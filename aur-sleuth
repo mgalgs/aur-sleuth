@@ -80,6 +80,7 @@ logger = logging.getLogger("aur-sleuth")
 DEFAULT_MODEL = "qwen/qwen3-235b-a22b-2507"
 DEFAULT_REASONING_EFFORT = "high"
 SESSION_AUDIT_LIMIT_TOKENS = 100_000  # 100k tokens for the entire session
+MAX_FILE_LINES = 2000
 IGNORED_DIRS = [".git"]
 GREY = "grey50"
 # Use ASCII icons to avoid ambiguous-width Unicode affecting box layout in some terminals
@@ -751,6 +752,74 @@ def _truncate_str(text: str, max_chars: int = 2000) -> str:
     return text[:max_chars] + "... (truncated)"
 
 
+_SUSPICIOUS_PATTERNS = re.compile(
+    r'\b(?:curl|wget|nc|ncat|socat)\b.*(?:https?://|ftp://)'
+    r'|\beval\b'
+    r'|\bexec\b\s'
+    r'|\bbase64\b'
+    r'|\b(?:xxd|od)\b.*\|'
+    r'|\$\(.*(?:curl|wget|nc)\b'
+    r'|\bpython[23]?\s+-c\b'
+    r'|\bperl\s+-e\b'
+    r'|\bruby\s+-e\b'
+    r'|\bxargs\b.*sh\b',
+    re.IGNORECASE,
+)
+
+
+def _smart_truncate_for_audit(content: str, max_lines: int = MAX_FILE_LINES) -> str:
+    """Truncate large files for audit, preserving the most security-relevant parts.
+
+    Keeps: head (setup/imports), tail (entry points), and any lines matching
+    suspicious patterns (with context). Language-agnostic.
+    """
+    lines = content.splitlines(keepends=True)
+    if len(lines) <= max_lines:
+        return content
+
+    head_lines = max_lines // 2
+    tail_lines = max_lines // 4
+    budget = max_lines - head_lines - tail_lines
+
+    # Find suspicious lines in the middle region (between head and tail)
+    middle_start = head_lines
+    middle_end = len(lines) - tail_lines
+    suspicious_ranges = set()
+    context = 3
+    for i in range(middle_start, middle_end):
+        if _SUSPICIOUS_PATTERNS.search(lines[i]):
+            for j in range(max(middle_start, i - context),
+                           min(middle_end, i + context + 1)):
+                suspicious_ranges.add(j)
+
+    # Take up to budget lines of suspicious matches
+    suspicious_indices = sorted(suspicious_ranges)[:budget]
+
+    parts = []
+    parts.append("".join(lines[:head_lines]))
+
+    if suspicious_indices:
+        parts.append(
+            f"\n... [{middle_end - middle_start} lines omitted — "
+            f"showing {len(suspicious_indices)} lines matching suspicious patterns] ...\n\n"
+        )
+        prev = None
+        for i in suspicious_indices:
+            if prev is not None and i > prev + 1:
+                parts.append("  ...\n")
+            parts.append(lines[i])
+            prev = i
+    else:
+        parts.append(
+            f"\n... [{middle_end - middle_start} lines of standard boilerplate omitted] ...\n\n"
+        )
+
+    parts.append(f"\n... [resuming at line {len(lines) - tail_lines + 1}] ...\n\n")
+    parts.append("".join(lines[-tail_lines:]))
+
+    return "".join(parts)
+
+
 def _safe_obj_preview(obj: object, max_chars: int = 2000) -> str:
     try:
         rendered = pprint.pformat(obj)
@@ -1185,6 +1254,10 @@ def audit_file(
             file_path, pkgdir, SafeStatus.SKIPPED, f"Failed to read file: {e}"
         )
 
+    total_lines = file_content.count("\n") + (1 if file_content and not file_content.endswith("\n") else 0)
+    file_content = _smart_truncate_for_audit(file_content)
+    was_truncated = file_content.count("\n") < total_lines
+
     llm_params = get_llm_params_from_env()
 
     llm_pkgbuild_auditor = LLM(
@@ -1196,7 +1269,15 @@ def audit_file(
         top_p=llm_params.top_p,
         reasoning_effort=llm_params.reasoning_effort,
     )
-    prompt = f"""{extra_instructions + "\n" if extra_instructions else ""}
+    truncation_note = ""
+    if was_truncated:
+        truncation_note = (
+            f"NOTE: This file was {total_lines} lines long and has been truncated for review. "
+            "The head, tail, and any lines matching suspicious patterns (curl, wget, eval, "
+            "base64, exec, etc.) are shown. Absence of suspicious matches in the omitted "
+            "region is a good sign but not conclusive.\n\n"
+        )
+    prompt = f"""{extra_instructions + "\n" if extra_instructions else ""}{truncation_note}
 Respond with a security assessment in the following XML format. Ensure that all special characters (e.g., &, <, >) within the XML tags are properly escaped (e.g., &amp;, &lt;, &gt;).
 Do not include any XML tags other than <security_assessment>, <decision>, <details>, and <summary>. If you must mention other XML-like tags (for example <defaults>), escape them like &lt;defaults&gt; instead of emitting raw tags.
 <security_assessment>
