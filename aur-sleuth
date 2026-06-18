@@ -1431,6 +1431,38 @@ def download_sources(tui: ConsoleUI):
         return False
 
 
+def extract_noextract_archives(pkgdir: Path, tui: ConsoleUI):
+    """Extract archive files in src/ that makepkg left unextracted (noextract)."""
+    srcdir = pkgdir / "src"
+    if not srcdir.is_dir():
+        return
+    for entry in srcdir.iterdir():
+        if not entry.is_file():
+            continue
+        try:
+            result = subprocess.run(
+                ["file", "--brief", "--mime-type", "--dereference", str(entry)],
+                capture_output=True, text=True, check=True,
+            )
+            mime = result.stdout.strip()
+        except subprocess.CalledProcessError:
+            continue
+        if mime not in (
+            "application/gzip", "application/x-gzip", "application/x-tar",
+            "application/x-bzip2", "application/x-xz", "application/x-zstd",
+            "application/zip", "application/x-7z-compressed",
+        ):
+            continue
+        try:
+            subprocess.run(
+                ["bsdtar", "xf", str(entry), "-C", str(srcdir)],
+                capture_output=True, text=True, check=True,
+            )
+            logger.info(f"Extracted noextract archive: {entry.name}")
+        except subprocess.CalledProcessError:
+            logger.debug(f"Could not extract {entry.name}, skipping")
+
+
 def get_source_info(pkgdir: Path):
     output = subprocess.run(
         ["makepkg", "--printsrcinfo"],
@@ -1970,6 +2002,8 @@ def do_agentic_audit(
         report.write(msg)
         tui.finalize_step(msg, SafeStatus.SKIPPED)
         return [AuditResult(None, pkgdir, SafeStatus.SKIPPED, msg)]
+
+    extract_noextract_archives(pkgdir, tui)
 
     required_review_files, other_pkg_files, has_vcs_source = get_source_listing(pkgdir, tui)
 
