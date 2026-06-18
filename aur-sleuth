@@ -1435,8 +1435,12 @@ _BINARY_EXTS = frozenset(
     }
 )
 
-# Auto-generated metadata files that cannot contain executable code.
-_AUTOGEN_NAMES = frozenset({".srcinfo"})
+# Files that cannot contain executable code and are never an attack vector.
+_INERT_NAMES = frozenset({
+    ".srcinfo", ".gitignore", ".gitattributes", ".gitmodules",
+    ".hgignore", ".hgtags", "debian-binary",
+})
+_INERT_EXTS = frozenset({".asc", ".sig", ".sign", ".gpg"})
 
 # Extensions/names where build- or install-time code runs, or that can inject
 # code into the build. Highest priority -- this is where supply-chain payloads hide.
@@ -1496,7 +1500,10 @@ def file_security_priority(path: Path) -> int:
     suffix = path.suffix.lower()
     stem = name.rsplit(".", 1)[0] if "." in name else name
 
-    if suffix in _BINARY_EXTS or name in _AUTOGEN_NAMES:
+    suffixes = {s.lower() for s in path.suffixes}
+    if (suffix in _BINARY_EXTS or suffixes & _BINARY_EXTS
+            or suffix in _INERT_EXTS or suffixes & _INERT_EXTS
+            or name in _INERT_NAMES):
         return -1
 
     # Build/install entry points run during makepkg regardless of where they
