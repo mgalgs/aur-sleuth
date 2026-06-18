@@ -99,16 +99,20 @@ Focus changes on the system prompts and audit instructions — that's where the 
 
 ## Step 6: Verify changes
 
-After making changes, run the synthetic test packages to check for regressions:
-```bash
-AUDIT_FAILURE_FATAL=true AUR_SLEUTH_ASCII_ICONS=1 ./aur-sleuth --pkgdir bench/synthetics/benign-skip-checksums --output plain -n 0
-AUDIT_FAILURE_FATAL=true AUR_SLEUTH_ASCII_ICONS=1 ./aur-sleuth --pkgdir bench/synthetics/malicious-obfuscated-install --output plain -n 0
-AUDIT_FAILURE_FATAL=true AUR_SLEUTH_ASCII_ICONS=1 ./aur-sleuth --pkgdir bench/synthetics/malicious-curl-exfil --output plain -n 0
-```
-Expected: benign passes (exit 0), both malicious fail (exit 1).
+After making changes, verify in two ways:
 
-Optionally re-run on the original package to see if the improvements help.
+**1. Regression tests** — run the synthetic test suite:
+```bash
+bash bench/run-synthetic-tests.sh -q
+```
+Expected: all 3 pass (benign → exit 0, both malicious → exit 1).
+
+**2. Re-run on the package where the issue was found** — this is mandatory, not optional. The synthetic tests verify nothing regressed, but only a re-run against the original package confirms the fix actually works for the case that motivated it. Compare the relevant output (file selection, verdicts, error messages) against the original run.
 
 ## Step 7: Archive the report
 
-Store the report on the `audit-reports` orphan branch using the same plumbing as `bench/self-improve.sh`'s `store_report()` function. Read that function for the exact git plumbing commands.
+Archive the report to the `audit-reports` orphan branch:
+```bash
+bash bench/archive-report.sh <package-name>
+```
+This extracts metadata from the report and commits it with YAML frontmatter.
