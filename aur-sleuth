@@ -294,7 +294,20 @@ interpretation -- if the code is consistent with ordinary packaging, treat it as
    controlled code. Do not flag upstream privacy practices (telemetry, data collection,
    fingerprinting) as UNSAFE -- those are product decisions by the upstream vendor, not
    supply-chain attacks. You MAY note them in your details as a privacy consideration, but
-   the decision must remain SAFE.
+   the decision must remain SAFE. This extends to upstream packaging scripts (e.g. Debian
+   postinst.sh/prerm.sh inside a tarball): an application killing its own processes during an
+   update, or clearing its own caches under ~/.config/<appname>/, is normal upstream behavior
+   -- even if it iterates /home/* to cover all users. The test is whether the file manipulates
+   data OUTSIDE its own application scope, not whether the operations look aggressive.
+
+7. Recognize AUR MAINTAINER HELPER SCRIPTS. AUR git repos often contain convenience scripts
+   alongside the PKGBUILD (e.g. update.sh, bump.sh, release.sh) that automate routine
+   maintainer tasks: bumping pkgver, running updpkgsums, regenerating .SRCINFO, committing,
+   and test-building with makepkg. When a script's sole purpose is automating standard
+   packaging operations (git add/commit, makepkg, updpkgsums, makepkg --printsrcinfo), those
+   commands are normal AUR workflow, not evidence of a supply-chain attack. Mark UNSAFE only
+   if the script also does something genuinely malicious beyond the routine packaging
+   workflow (exfiltrating data, downloading and executing code from an unexpected source).
 """
     ),
 }
