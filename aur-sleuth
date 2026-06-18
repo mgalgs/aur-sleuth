@@ -1731,16 +1731,31 @@ def decide_next_files_to_review(
         files_to_consider, key=lambda f: (-file_security_priority(f), str(f))
     )
 
+    # Deduplicate files with the same basename so the model doesn't waste
+    # review slots on near-identical copies (e.g. the same patch applied to
+    # 29 different Python versions). Keep the first (highest-priority) copy
+    # as the representative; annotate it with the duplicate count so the
+    # model knows it's picking one of many.
+    seen_basenames: Dict[str, int] = {}
+    deduped_files: List[Path] = []
+    for f in files_to_consider:
+        basename = f.name.lower()
+        if basename not in seen_basenames:
+            seen_basenames[basename] = 0
+            deduped_files.append(f)
+        seen_basenames[basename] += 1
+    basename_counts = {name: count for name, count in seen_basenames.items() if count > 1}
+
     # Limit files in prompt to prevent token overflow
     max_files_in_prompt = 50
-    files_for_prompt = files_to_consider[:max_files_in_prompt]
+    files_for_prompt = deduped_files[:max_files_in_prompt]
 
     # Large upstream trees (e.g. a forked library with hundreds of sources) can
     # have far more candidates than fit in the prompt. The selector can only pick
     # from what it sees, so anything past the cut is unreviewable -- make that
     # coverage limit visible instead of letting it look like the whole package
     # was offered for review.
-    num_omitted = len(files_to_consider) - len(files_for_prompt)
+    num_omitted = len(deduped_files) - len(files_for_prompt)
     if num_omitted > 0:
         tui.finalize_step(
             f"Note: {len(files_to_consider)} files available for selection; "
@@ -1760,7 +1775,14 @@ def decide_next_files_to_review(
         reasoning_effort=llm_params.reasoning_effort,
     )
     already_reviewed_str = "\n".join(f"- {f}" for f in already_reviewed_files)
-    listing_str = "\n".join(f"- {f}" for f in files_for_prompt)
+    listing_lines = []
+    for f in files_for_prompt:
+        count = basename_counts.get(f.name.lower())
+        if count:
+            listing_lines.append(f"- {f}  (×{count} copies with same filename across directories -- review just this one)")
+        else:
+            listing_lines.append(f"- {f}")
+    listing_str = "\n".join(listing_lines)
     prompt = f"""
 To continue the audit of the {sanitize_for_llm(package_name)} package, choose the {num_additional_files_to_review} files from the listing below that are MOST likely to contain malicious or dangerous code.
 
