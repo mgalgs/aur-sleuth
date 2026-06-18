@@ -1441,9 +1441,10 @@ def get_source_info(pkgdir: Path):
 
 def get_source_listing(
     pkgdir: Path, tui: ConsoleUI
-) -> Tuple[Optional[List[Path]], Optional[List[Path]]]:
+) -> Tuple[Optional[List[Path]], Optional[List[Path]], bool]:
     required_review_files = [Path("PKGBUILD")]
     other_pkg_files = []
+    has_vcs_source = False
     seen_files = {Path("PKGBUILD").resolve()}
 
     # Use `makepkg --printsrcinfo` to get source files and install scripts. These are
@@ -1461,6 +1462,7 @@ def get_source_listing(
                 # VCS sources (git+, hg+, svn+, bzr+) are cloned as
                 # directories — their files are discovered by os.walk.
                 if re.match(r"^(git|hg|svn|bzr)\+", url):
+                    has_vcs_source = True
                     continue
                 if is_remote_url(url):
                     pfile = Path(local_name) if local_name else Path(Path(url).name)
@@ -1481,7 +1483,7 @@ def get_source_listing(
             status=SafeStatus.UNSAFE,
         )
         logger.error(f"makepkg --printsrcinfo failed: {e.stderr}")
-        return None, None
+        return None, None, False
 
     # Create a recursive directory listing to pass to the audit agent
     for root, dirs, files in os.walk(pkgdir):
@@ -1503,7 +1505,7 @@ def get_source_listing(
             other_pkg_files.append(pkg_file)
             seen_files.add(pkg_file_resolved)
 
-    return required_review_files, other_pkg_files
+    return required_review_files, other_pkg_files, has_vcs_source
 
 
 # Filenames (case-insensitive, with or without an extension) that are pure
@@ -1665,6 +1667,7 @@ def decide_next_files_to_review(
     other_pkg_files: List[Path],
     already_reviewed_files: List[Path],
     llm_client: LLMClient,
+    has_vcs_source: bool = False,
 ) -> List[Path]:
     num_additional_files_to_review = int(os.environ.get("NUM_FILES_TO_REVIEW", "10"))
     files_to_consider = [
@@ -1738,7 +1741,11 @@ Two more rules for spending the budget well:
   - Spread your picks across DISTINCT files. When several files are near-identical copies (for example the same script duplicated across per-driver or per-test subdirectories), review just one representative and use the remaining slots on different files, so the limited budget covers as much unique code as possible.
 
 Do not select any files that have already been reviewed.
-
+{"" if not has_vcs_source else """
+NOTE: This package uses VCS sources (git/svn/hg). The cloned repository may contain files
+that are NOT installed by the package. Prioritize files that the PKGBUILD's package()
+function references over unrelated files in the repo.
+"""}
 <already_reviewed_files>
 {already_reviewed_str}
 </already_reviewed_files>
@@ -1951,7 +1958,7 @@ def do_agentic_audit(
         tui.finalize_step(msg, SafeStatus.SKIPPED)
         return [AuditResult(None, pkgdir, SafeStatus.SKIPPED, msg)]
 
-    required_review_files, other_pkg_files = get_source_listing(pkgdir, tui)
+    required_review_files, other_pkg_files, has_vcs_source = get_source_listing(pkgdir, tui)
 
     if required_review_files is None or other_pkg_files is None:
         msg = "Failed to get source files for agentic audit."
@@ -1990,6 +1997,7 @@ def do_agentic_audit(
         other_pkg_files,
         required_review_files,
         llm_client,
+        has_vcs_source=has_vcs_source,
     )
     tui.finalize_step(
         f"Decided to review {len(additional_review_files)} additional files: {', '.join(str(f) for f in additional_review_files)}"
