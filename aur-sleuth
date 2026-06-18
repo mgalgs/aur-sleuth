@@ -1413,6 +1413,23 @@ _DOC_STEMS = frozenset(
 )
 _DOC_EXTS = frozenset({".md", ".rst", ".markdown", ".adoc", ".pod", ".texi"})
 
+# Binary/archive files that cannot be read as text. The auditor will auto-SKIP
+# them, so offering them to the file-selection model wastes a review slot.
+_BINARY_EXTS = frozenset(
+    {
+        ".deb", ".rpm", ".tar", ".gz", ".xz", ".bz2", ".zst", ".lz4", ".lzma",
+        ".zip", ".7z", ".rar", ".cab", ".cpio", ".ar",
+        ".so", ".a", ".o", ".dylib", ".dll", ".exe", ".bin", ".elf",
+        ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".ico", ".svg", ".webp",
+        ".woff", ".woff2", ".ttf", ".otf", ".eot",
+        ".pdf", ".doc", ".docx", ".xls", ".xlsx",
+        ".pyc", ".pyo", ".class", ".wasm",
+    }
+)
+
+# Auto-generated metadata files that cannot contain executable code.
+_AUTOGEN_NAMES = frozenset({".srcinfo"})
+
 # Extensions/names where build- or install-time code runs, or that can inject
 # code into the build. Highest priority -- this is where supply-chain payloads hide.
 _HIGH_RISK_EXTS = frozenset(
@@ -1471,6 +1488,9 @@ def file_security_priority(path: Path) -> int:
     suffix = path.suffix.lower()
     stem = name.rsplit(".", 1)[0] if "." in name else name
 
+    if suffix in _BINARY_EXTS or name in _AUTOGEN_NAMES:
+        return -1
+
     # Build/install entry points run during makepkg regardless of where they
     # live (and a name like "meson.build" wins even when it sits under tests/),
     # so they always rank highest and are never demoted.
@@ -1506,7 +1526,10 @@ def decide_next_files_to_review(
     llm_client: LLMClient,
 ) -> List[Path]:
     num_additional_files_to_review = int(os.environ.get("NUM_FILES_TO_REVIEW", "10"))
-    files_to_consider = [f for f in other_pkg_files if f not in already_reviewed_files]
+    files_to_consider = [
+        f for f in other_pkg_files
+        if f not in already_reviewed_files and file_security_priority(f) >= 0
+    ]
     if len(files_to_consider) <= num_additional_files_to_review:
         return files_to_consider
 
