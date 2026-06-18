@@ -1460,9 +1460,29 @@ _HIGH_RISK_EXTS = frozenset(
 _HIGH_RISK_NAMES = frozenset(
     {
         "pkgbuild", ".install", "meson.build", "meson_options.txt",
-        "cmakelists.txt", "configure", "configure.ac", "configure.in",
-        "makefile", "makefile.am", "makefile.in", "gnumakefile", "sconstruct",
+        "cmakelists.txt", "configure.ac", "configure.in",
+        "makefile", "makefile.am", "gnumakefile", "sconstruct",
         "sconscript", "build.rs", "setup.py", "wscript", "package.json",
+    }
+)
+
+# Standard GNU helper scripts copied verbatim from the automake/autoconf
+# distribution. Identical across all autotools projects -- reviewing them
+# only catches a GNU supply-chain compromise, not a package-specific attack.
+_GNU_HELPER_NAMES = frozenset(
+    {
+        "compile", "config.guess", "config.sub", "depcomp", "install-sh",
+        "missing", "mkinstalldirs", "test-driver", "ylwrap", "ar-lib",
+        "py-compile", "mdate-sh", "texinfo.tex",
+    }
+)
+
+# Project-specific autotools output -- generated from configure.ac/Makefile.am
+# but can contain project-specific code paths. Higher than GNU helpers but
+# lower than hand-written build files.
+_AUTOGEN_PROJECT_NAMES = frozenset(
+    {
+        "configure", "makefile.in", "aclocal.m4", "ltmain.sh", "libtool",
     }
 )
 
@@ -1487,7 +1507,7 @@ _LOW_VALUE_DIRS = frozenset(
     {
         "test", "tests", "testing", "examples", "example", "demo", "demos",
         "doc", "docs", "benchmark", "benchmarks", "fuzz", "fuzzing", "samples",
-        "fixtures", "ci", ".github", "scripts", "tools",
+        "fixtures", "ci", ".github", "scripts", "tools", "m4",
     }
 )
 
@@ -1511,6 +1531,13 @@ def file_security_priority(path: Path) -> int:
             or suffix in _INERT_EXTS or suffixes & _INERT_EXTS
             or name in _INERT_NAMES):
         return -1
+
+    # Auto-generated build scaffolding: demote before high-risk checks so that
+    # e.g. ltmain.sh doesn't win via its .sh extension.
+    if name in _GNU_HELPER_NAMES:
+        return 0
+    if name in _AUTOGEN_PROJECT_NAMES:
+        return 1
 
     # Build/install entry points run during makepkg regardless of where they
     # live (and a name like "meson.build" wins even when it sits under tests/),
@@ -1597,11 +1624,18 @@ To continue the audit of the {sanitize_for_llm(package_name)} package, choose th
 
 Prioritize files where code can execute at build or install time, or that can inject code into the build -- that is where supply-chain payloads hide:
   - install hooks (*.install) and post_install/post_upgrade scripts
-  - build scripts (PKGBUILD, meson.build, CMakeLists.txt, configure, Makefile, build.rs, setup.py, ...)
+  - HAND-WRITTEN build scripts (PKGBUILD, meson.build, CMakeLists.txt, configure.ac, Makefile.am, build.rs, setup.py, ...)
   - shell, python, javascript, and other scripts (*.sh, *.py, *.js, ...) that run during the build/install
   - patches/diffs that modify upstream source (*.patch, *.diff)
   - .desktop/.service files (they can specify arbitrary commands to run)
-  - source code and config files, especially any that reference URLs or fetch/run remote content
+  - actual source code (*.c, *.h, *.cpp, *.rs, *.go, *.py, etc.) -- especially any that reference URLs, fetch remote content, or handle sensitive data
+  - config files that reference URLs or contain commands
+
+DEPRIORITIZE auto-generated build scaffolding. These files are mostly boilerplate with terrible signal-to-noise for review. Only pick them if nothing better remains:
+  - autotools generated files: configure (generated from configure.ac), Makefile.in (from Makefile.am), aclocal.m4, ltmain.sh
+  - standard GNU helper scripts: compile, config.guess, config.sub, depcomp, install-sh, missing, mkinstalldirs, test-driver, ylwrap, ar-lib
+  - libtool m4 macros: m4/libtool.m4, m4/lt*.m4
+  Prefer reviewing the hand-written inputs (configure.ac, Makefile.am) over these generated outputs.
 
 Do NOT spend reviews on pure documentation or license files (README, LICENSE/COPYING, NEWS, CHANGELOG, AUTHORS, THANKS, MAINTAINERS, CONTRIBUTING, INSTALL, HACKING, CODE_OF_CONDUCT, and similar). They cannot execute and are almost never an attack vector -- pick them only if there is genuinely nothing else worth reviewing. The listing is already ordered with the most security-relevant files first.
 
