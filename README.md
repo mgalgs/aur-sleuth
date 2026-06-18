@@ -104,17 +104,6 @@ The tool can be configured with environment variables:
 - `LLM_REASONING_EFFORT`: Reasoning effort for supported reasoning models (`low`, `medium`, `high`). Defaults to `high`.
 - `AUDIT_FAILURE_FATAL`: Whether audit failures should be fatal (exit with error). Set to `false` to make audit failures non-fatal. Defaults to `true`.
 
-### Audit Result Meanings
-
-`aur-sleuth` reports per-file statuses and an overall result:
-
-- `SAFE`: Audited successfully; no issues found.
-- `UNSAFE`: Issues found; do not install.
-- `INCONCLUSIVE`: The audit could not be completed (LLM/API errors, malformed model output, etc.).
-  This is treated as a failed audit by default (non-zero exit code).
-- `SKIPPED`: The file was intentionally not audited (e.g. detected as binary). This does **not**
-  fail the audit by itself, but it does reduce audit coverage.
-
 You can either set these environment variables directly in your shell, or add them to
 a configuration file. The tool will automatically load configuration from
 `/etc/aur-sleuth.conf` (system-wide) or `~/.config/aur-sleuth.conf` (user-specific),
@@ -164,6 +153,17 @@ OPENAI_MODEL = llama3.1:8b
 MAX_LLM_JOBS = 1
 AUDIT_FAILURE_FATAL = false
 ```
+
+### Audit Result Meanings
+
+`aur-sleuth` reports per-file statuses and an overall result:
+
+- `SAFE`: Audited successfully; no issues found.
+- `UNSAFE`: Issues found; do not install.
+- `INCONCLUSIVE`: The audit could not be completed (LLM/API errors, malformed model output, etc.).
+  This is treated as a failed audit by default (non-zero exit code).
+- `SKIPPED`: The file was intentionally not audited (e.g. detected as binary). This does **not**
+  fail the audit by itself, but it does reduce audit coverage.
 
 ## Usage
 
