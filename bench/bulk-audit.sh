@@ -109,11 +109,13 @@ mark_audited() {
     echo "$1" >> "$STATE_DIR/audited.txt"
 }
 
-# --- Run one audit ---
+# --- Run one audit (writes result to a model-specific report file) ---
 run_audit() {
     local pkg="$1"
     local model="$2"
-    local report_file="/tmp/aur-sleuth/aur-sleuth-report-${pkg}.txt"
+    local model_slug="${model//\//-}"
+    local report_dir="/tmp/aur-sleuth/bulk-reports/${model_slug}"
+    local report_file="${report_dir}/aur-sleuth-report-${pkg}.txt"
 
     log "Auditing $pkg with $model..."
 
@@ -122,43 +124,42 @@ run_audit() {
         return 0
     fi
 
+    mkdir -p "$report_dir"
+
     local start_time
     start_time=$(date +%s)
 
-    # Run the audit, capture exit code
+    # Each model gets its own report dir to avoid parallel collisions
     local exit_code=0
     AUDIT_FAILURE_FATAL=true AUR_SLEUTH_ASCII_ICONS=1 \
         OPENAI_MODEL="$model" \
+        AUR_SLEUTH_REPORT_DIR="$report_dir" \
         ./aur-sleuth --output plain "$pkg" 2>&1 || exit_code=$?
 
     local end_time
     end_time=$(date +%s)
     local elapsed=$(( end_time - start_time ))
 
+    local final_report="$report_file"
+
     # Extract cost from the report frontmatter
     local cost
-    cost=$(sed -n '/^---$/,/^---$/p' "$report_file" 2>/dev/null \
+    cost=$(sed -n '/^---$/,/^---$/p' "$final_report" 2>/dev/null \
         | grep "^cost:" | head -1 | sed 's/^cost: *//' || echo "0")
     if [[ -z "$cost" || "$cost" == "0" ]]; then
-        # Fall back to body parsing
-        cost=$(grep -oP 'Total Cost: \$\K\S+' "$report_file" 2>/dev/null || echo "0")
+        cost=$(grep -oP 'Total Cost: \$\K\S+' "$final_report" 2>/dev/null || echo "0")
     fi
 
     record_cost "$cost"
 
     local result
-    result=$(sed -n '/^---$/,/^---$/p' "$report_file" 2>/dev/null \
+    result=$(sed -n '/^---$/,/^---$/p' "$final_report" 2>/dev/null \
         | grep "^result:" | head -1 | sed 's/^result: *//' || echo "unknown")
 
     log "  -> $pkg [$model]: $result  cost=\$$cost  time=${elapsed}s  spent=\$$(get_spent)/\$$BUDGET"
 
-    # Archive and push
-    bash bench/archive-report.sh "$pkg" "$report_file"
-    if git push origin audit-reports 2>/dev/null; then
-        log "  -> Pushed to origin/audit-reports"
-    else
-        log "  -> Push failed (will retry later)"
-    fi
+    # Archive (push is batched after all models finish for a package)
+    bash bench/archive-report.sh "$pkg" "$final_report"
 
     return $exit_code
 }
@@ -186,16 +187,32 @@ main() {
 
         log "=== Round $round: $pkg ($mode) ==="
 
-        # Audit with each model
+        # Run all models for this package in parallel
+        local pids=()
         for model in "${MODEL_LIST[@]}"; do
-            if is_over_budget; then
-                log "Budget exhausted after \$$(get_spent)"
-                break 2
-            fi
-            run_audit "$pkg" "$model" || true
+            run_audit "$pkg" "$model" &
+            pids+=($!)
+        done
+        # Wait for all model audits to finish
+        for pid in "${pids[@]}"; do
+            wait "$pid" || true
         done
 
         mark_audited "$pkg"
+
+        # Batch push after all models finish for this package
+        if ! $DRY_RUN; then
+            if git push origin audit-reports 2>/dev/null; then
+                log "  -> Pushed to origin/audit-reports"
+            else
+                log "  -> Push failed (will retry later)"
+            fi
+        fi
+
+        if is_over_budget; then
+            log "Budget exhausted after \$$(get_spent)"
+            break
+        fi
 
         # Refresh metadata every 50 rounds to pick up new packages
         if (( round % 50 == 0 )); then
