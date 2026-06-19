@@ -47,7 +47,7 @@ RE_AUDIT_PENDING="${RE_AUDIT_PENDING:-false}"
 
 AUDIT_MODEL="${AUDIT_MODEL:-$JUDGE_MODEL}"
 
-mkdir -p "$JUDGE_DIR"
+mkdir -p "$JUDGE_DIR" "$(dirname "$LOCK_FILE")"
 
 log() { echo "[$(date '+%H:%M:%S')] $*"; }
 
@@ -354,9 +354,9 @@ print(d.get('verdict','error'), d.get('confidence','?'), d.get('re_audit',False)
         local judge_file="$JUDGE_DIR/${pkg}.json"
         if [[ -f "$judge_file" ]]; then
             (
-                flock -x 200
+                flock -x 9
                 archive_judge_report "$pkg" "$judge_file"
-            ) 200>"$LOCK_FILE"
+            ) 9>"$LOCK_FILE"
         fi
     fi
 
@@ -389,10 +389,7 @@ do_reaudit() {
 
         # Archive the audit report and capture the stored path
         local archive_output
-        archive_output=$(
-            flock -x 200
-            bash bench/archive-report.sh "$pkg" "$re_report"
-        ) 200>"$LOCK_FILE"
+        archive_output=$(flock -x 9 bash bench/archive-report.sh "$pkg" "$re_report") 9>"$LOCK_FILE"
 
         # Parse actual filename from archive output ("Stored: audit-reports:<pkg>/<filename>")
         local archived_path
@@ -412,9 +409,9 @@ json.dump(data, open(f, 'w'), indent=2)
 "
             # Re-archive updated judge report
             (
-                flock -x 200
+                flock -x 9 || { log "  WARNING: could not acquire lock"; true; }
                 archive_judge_report "$pkg" "$judge_file"
-            ) 200>"$LOCK_FILE"
+            ) 9>"$LOCK_FILE"
 
             log "  Updated judge report with re-audit: $re_result"
         fi

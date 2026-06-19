@@ -189,9 +189,9 @@ run_audit() {
 
     # Serialize archive operations with flock
     (
-        flock -x 200
+        flock -x 9
         bash bench/archive-report.sh "$pkg" "$report_file"
-    ) 200>"$LOCK_FILE"
+    ) 9>"$LOCK_FILE"
 
     return $exit_code
 }
@@ -217,13 +217,13 @@ audit_package() {
 push_reports() {
     if $DRY_RUN; then return 0; fi
     (
-        flock -x 200
+        flock -x 9
         if git push origin audit-reports 2>/dev/null; then
             log "Pushed to origin/audit-reports (spent: \$$(get_spent)/\$$BUDGET)"
         else
             log "Push failed (will retry)"
         fi
-    ) 200>"$LOCK_FILE"
+    ) 9>"$LOCK_FILE"
 }
 
 # --- Main loop ---
