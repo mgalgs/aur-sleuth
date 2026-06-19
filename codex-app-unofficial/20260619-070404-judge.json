@@ -1,0 +1,29 @@
+{
+  "package": "codex-app-unofficial",
+  "correct_verdict": "safe",
+  "confidence": "medium",
+  "reasoning": "The PKGBUILD is a straightforward binary-distribution package: it downloads two pinned-checksum assets from the project's own GitHub releases (github.com/better-slop/codex-app-linux), then the package() function only copies the unpacked Electron app to /opt, creates a /usr/bin symlink, installs an icon, generates a .desktop file, and copies a license. The .install script merely stops the running app process before upgrade/remove. No dynamic fetching, no eval/curl in build/package, checksums are pinned (not SKIP). DeepSeek reviewed PKGBUILD, the .install hook, and 10 representative bundled node_modules files (better-sqlite3, node-pty) \u2014 none of which execute during makepkg anyway. The qwen run only 'skipped' because makepkg --nobuild failed to download sources (a transient/network issue), not because of any security finding; its PKGBUILD pre-audit also concluded SAFE. There is no genuine safety disagreement here.",
+  "disagreement_analysis": "Not a true safety disagreement. qwen reached 'skipped' purely because makepkg --nobuild failed to download the release binaries (network/availability failure), preventing it from proceeding to file review. DeepSeek successfully downloaded sources and completed a full review with a SAFE verdict. Both models independently assessed the PKGBUILD as SAFE. The disagreement is an artifact of source-download success vs failure, not differing security judgments.",
+  "coverage_issues": [
+    "The bundled Electron app.asar (the actual application logic) was not extracted/reviewed by either model \u2014 DeepSeek only sampled a handful of unpacked node_modules library files. However, app.asar content does not execute during makepkg, so this is low relevance for AUR install safety.",
+    "The primary release binary (the unpacked Electron tarball) is opaque pre-built content; its integrity rests entirely on the pinned SHA-256 checksums against an unofficial upstream ('better-slop'). No model evaluated the trustworthiness of that upstream source."
+  ],
+  "false_positives": [],
+  "false_negatives": [
+    "Neither model flagged that this is an UNOFFICIAL repackaging of pre-built Electron binaries from a third-party GitHub org ('better-slop'). The supply-chain trust here depends entirely on that upstream \u2014 the pinned checksums only guarantee you get exactly what that org published, not that it is benign. This is a trust caveat rather than a detected malicious behavior, but worth surfacing to users."
+  ],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Distinguish 'skipped due to makepkg download failure' from 'skipped due to security concern' when computing disagreement \u2014 a download failure is a transient infrastructure issue and should not be treated as a conflicting safety verdict. Consider retrying source download before flagging disagreement.",
+    "For makepkg --nobuild failures, fall back to a PKGBUILD+.install-only static review (which qwen had already implicitly completed as SAFE) rather than a hard skip, since those are the only files that execute during build/install.",
+    "Reviewing bundled node_modules library files (better-sqlite3, node-pty) is low-value for AUR safety since they do not run during makepkg; file selection should prioritize PKGBUILD functions, .install hooks, and any scripts referenced therein. For pre-built binary packages, effort is better spent assessing upstream provenance and checksum pinning.",
+    "Add an explicit 'upstream trust' signal for packages that repackage pre-built binaries from non-official/unofficial third-party orgs, since checksum pinning alone does not establish content safety."
+  ],
+  "_judge_usage": {
+    "model": "anthropic/claude-opus-4.8",
+    "prompt_tokens": 14829,
+    "completion_tokens": 1298,
+    "cost": 0.106595
+  }
+}
