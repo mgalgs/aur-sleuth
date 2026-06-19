@@ -1,0 +1,30 @@
+{
+  "package": "ttf-ms-fonts",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The andale.inf file is a Windows INF file that is bundled INSIDE the upstream Microsoft self-extracting font archives (e.g., andale32.exe). These INF files contain Windows-specific directives like RunPostSetupCommands and references to fontinst.exe, but they are completely inert on Linux. The Arch package's PKGBUILD package() function only installs .ttf/.TTF files and the license text \u2014 it never executes fontinst.exe, never processes the INF directives, and never runs any Windows binary. The INF file is simply an extracted artifact that gets ignored. The qwen model misread a passive, never-executed Windows config file as if it would actually execute fontinst.exe during the Arch install. For an AUR package the only thing that matters is what PKGBUILD/build/package/.install actually do, and those only copy font files.",
+  "disagreement_analysis": "The disagreement stems entirely from andale.inf. deepseek correctly recognized it as a standard, inert Windows font INF file that is a normal byproduct of extracting Microsoft's self-extracting font installers. qwen treated the INF's Windows directives (RunPostSetupCommands, fontinst.exe references, HKLM registry keys) as if they would execute on the Arch system, concluding 'unauthorized execution of a binary.' This is a false positive: nothing in the PKGBUILD invokes the INF or fontinst.exe; these directives have no meaning or execution path on Linux.",
+  "coverage_issues": [
+    "Both models skipped the bundled webdin32.exe binary (and by extension did not analyze the other self-extracting .exe sources). This is acceptable since binaries cannot be meaningfully reviewed by an LLM and the PKGBUILD only extracts fonts from them, but it should be noted that the actual font payload integrity rests on the pinned sha256sums."
+  ],
+  "false_positives": [
+    "qwen's UNSAFE verdict on andale.inf: it flagged Windows INF directives (RunPostSetupCommands, fontinst.exe, HKLM registry keys) as malicious execution, but these are inert on Linux and never referenced by the PKGBUILD's build/package functions. The INF is merely an extracted artifact and is not run.",
+    "qwen's claim of 'package tampering' / 'deliberate suspicious bundling' \u2014 these INF files are the genuine, expected contents of Microsoft's original corefonts self-extracting archives."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models must distinguish between code that is EXECUTED by the PKGBUILD (build/package/prepare/check/.install) versus inert files merely extracted from source archives. The package() function here only copies .ttf files; the INF and .exe artifacts are never invoked.",
+    "Windows-specific constructs (INF directives, registry keys, .exe references) are non-executable and harmless in a Linux/Arch context unless the PKGBUILD explicitly invokes them under wine or similar \u2014 models should check for actual invocation before flagging.",
+    "When a file is flagged as 'unsafe,' the audit should require the model to trace the execution path from PKGBUILD to that file; an UNSAFE verdict for a file with no execution path should be downgraded.",
+    "Provide models with the well-known context that ttf-ms-fonts/corefonts packages extract fonts from official Microsoft self-extracting installers, which legitimately contain Windows INF scaffolding.",
+    "The judge/aggregation layer should weight findings by whether they tie back to makepkg-time execution; this would have correctly resolved this disagreement toward SAFE."
+  ],
+  "_judge_usage": {
+    "model": "anthropic/claude-opus-4.8",
+    "prompt_tokens": 8634,
+    "completion_tokens": 1297,
+    "cost": 0.07559500000000001
+  }
+}
