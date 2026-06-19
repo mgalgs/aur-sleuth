@@ -1,0 +1,29 @@
+{
+  "package": "pi-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD downloads prebuilt binaries from the official upstream GitHub repository (badlogic/pi-mono) with pinned SHA256 checksums and only installs files. Nothing malicious executes during makepkg. The qwen UNSAFE verdict is based on inline-bash.ts, an example extension that runs commands within `!{...}` syntax. This is the documented, intended feature of a coding-agent tool (executing shell commands is the whole point of pi). It is not invoked by PKGBUILD build/package/prepare functions or any .install hook, so it never executes during installation. The 'arbitrary command execution from user input' is the user's own input in the user's own interactive session \u2014 a normal capability, not a supply-chain compromise or backdoor. Therefore the correct verdict is SAFE.",
+  "disagreement_analysis": "Disagreement stems entirely from qwen flagging inline-bash.ts as UNSAFE. This is a false positive: qwen judged the inherent functionality of a coding agent (running user-entered shell commands) as a vulnerability, ignoring that (a) it is the documented purpose of the tool, (b) the input is the user's own, not an attacker's injected payload, and (c) the file is an example extension never executed during package installation. deepseek did not even select inline-bash.ts for review but correctly assessed the overall package as safe based on PKGBUILD and the other files.",
+  "coverage_issues": [
+    "Both models reviewed only ~10 of 196 files; neither examined the actual installed binary's behavior (expected, as it's a prebuilt blob and not auditable as source).",
+    "deepseek did not review inline-bash.ts, interactive-shell.ts, or file-trigger.ts (command/file-execution extensions), so its 'safe' verdict was reached without seeing the file that triggered qwen's concern \u2014 coverage was narrower but verdict still correct."
+  ],
+  "false_positives": [
+    "inline-bash.ts flagged UNSAFE by qwen: this is the intended feature of an interactive coding agent (run shell from user's own prompt via `!{...}`). Not attacker-controlled, not executed during makepkg/install, and not a supply-chain risk. Classic overreaction to normal application functionality."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Audit models should distinguish between 'code that runs during makepkg/.install' versus 'application runtime features.' Example extensions and runtime features (shell execution, file watching) that are never invoked by PKGBUILD functions should not drive an UNSAFE verdict.",
+    "Reinforce in the prompt that intended/documented application capabilities (a coding agent executing user-entered commands) are NOT vulnerabilities unless they introduce a hidden backdoor or process untrusted external input without user intent.",
+    "For -bin packages, the core safety determination rests on PKGBUILD source provenance + checksums + install logic; deeply scanning unrelated example/extension source files invites false positives.",
+    "Consider weighting verdict by whether a flagged file is reachable from PKGBUILD build/package/prepare/check or .install hooks; files not in that execution path should be downgraded from blocking severity."
+  ],
+  "_judge_usage": {
+    "model": "anthropic/claude-opus-4.8",
+    "prompt_tokens": 20808,
+    "completion_tokens": 1152,
+    "cost": 0.13284
+  }
+}
