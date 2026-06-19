@@ -14,9 +14,6 @@ if ! git rev-parse --verify "$REPORTS_BRANCH" &>/dev/null; then
     exit 1
 fi
 
-_FILE_LIST=$(git ls-tree -r "$REPORTS_BRANCH" --name-only)
-export _FILE_LIST
-
 BRANCH="$REPORTS_BRANCH" VIEW="$VIEW" python3 << 'PYEOF'
 import sys, os, re, json, subprocess
 from collections import defaultdict
@@ -24,7 +21,10 @@ from collections import defaultdict
 branch = os.environ["BRANCH"]
 view = os.environ["VIEW"]
 
-files = os.environ["_FILE_LIST"].strip().split("\n")
+files = subprocess.run(
+    ["git", "ls-tree", "-r", branch, "--name-only"],
+    capture_output=True, text=True, timeout=10,
+).stdout.strip().split("\n")
 
 audits = []
 judges = []
