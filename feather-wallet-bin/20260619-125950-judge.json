@@ -1,0 +1,29 @@
+{
+  "package": "feather-wallet-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "PKGBUILD uses pinned checksum for official GitHub release, contains no dangerous patterns (curl|bash, eval, etc.), and only standard installation logic. Binary skipping is expected limitation.",
+  "disagreement_analysis": null,
+  "coverage_issues": [
+    "Both models skipped binary file (feather-2.8.1-linux.zip) which contains the actual executable",
+    "No review of extracted binary contents for runtime behaviors (filesystem/network access)"
+  ],
+  "false_positives": [],
+  "false_negatives": [
+    "Potential binary risks: Models didn't analyze extracted wallet executable for suspicious behaviors (crypto-mining, data exfiltration)"
+  ],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Tool should prioritize executable binaries over archives when present",
+    "Implement basic binary analysis (strings output review) for common red flags",
+    "Clarify in reports that binary safety depends on upstream trust",
+    "Improve handling of zip contents: PKGBUILD extracts to /opt/feather - these files warrant review"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 3306,
+    "completion_tokens": 2416,
+    "cost": 0.008354199999999999
+  }
+}
