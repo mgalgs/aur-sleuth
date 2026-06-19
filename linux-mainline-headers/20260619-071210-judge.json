@@ -1,0 +1,35 @@
+{
+  "package": "linux-mainline-headers",
+  "correct_verdict": "inconclusive",
+  "confidence": "high",
+  "reasoning": "Both models skipped the only reviewed file (PKGBUILD) because it was misclassified as a 'binary file'. No actual content was analyzed by either model \u2014 zero tokens consumed, zero files reviewed. This is a tooling failure, not a security finding. No verdict on package safety can be reached because the PKGBUILD, the most critical file determining what executes during makepkg, was never examined.",
+  "disagreement_analysis": "There is no disagreement. Both models reached identical 'skipped' results for the identical reason: the PKGBUILD was flagged as a binary file by the pre-filter and never passed to the model for review.",
+  "coverage_issues": [
+    "PKGBUILD was never reviewed \u2014 misclassified as a binary file by the file-type detection logic",
+    "Zero files were actually analyzed across both reports; the audit provides no security coverage whatsoever",
+    "No .install hooks, source files, or supplementary scripts were enumerated or reviewed (though for a headers package these are typically minimal)"
+  ],
+  "false_positives": [],
+  "false_negatives": [
+    "Entire PKGBUILD content unexamined \u2014 any build/package function behavior, network fetches, or sources are completely unknown",
+    "Any .install script (common for kernel/header packages to run depmod or similar) was not enumerated or reviewed"
+  ],
+  "re_audit_recommended": true,
+  "re_audit_focus": [
+    "PKGBUILD (force text-mode review; fix binary misclassification)",
+    "Any .install scripts",
+    "sources array and validpgpkeys / sha256sums for upstream tarball integrity"
+  ],
+  "learnings": [
+    "The binary-file detection heuristic incorrectly flagged a plain-text PKGBUILD as binary, blocking all review. PKGBUILD should be whitelisted/forced to text-mode parsing since it is always a shell script.",
+    "When the initial PKGBUILD safety check fails due to file-type misclassification (not actual content concern), the tool should retry with explicit text decoding rather than aborting the whole audit.",
+    "A 'skipped' result with 0 files reviewed and 0 tokens should never be treated as a substantive verdict \u2014 surface it distinctly as a tooling error requiring re-run, not a package-level conclusion.",
+    "Consider detecting unusual byte sequences (e.g., null bytes, encoding artifacts, trailing binary blobs appended to a script) \u2014 if the PKGBUILD genuinely contained binary data that would itself be a notable finding worth escalating rather than silently skipping."
+  ],
+  "_judge_usage": {
+    "model": "anthropic/claude-opus-4.8",
+    "prompt_tokens": 2883,
+    "completion_tokens": 918,
+    "cost": 0.037365
+  }
+}
