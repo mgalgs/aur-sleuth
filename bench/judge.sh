@@ -98,12 +98,14 @@ check_triggers() {
         fi
     done
 
-    # Error reports
+    # Error reports (only check reports that have frontmatter)
     for r in "${reports[@]}"; do
+        # Skip reports without frontmatter (pre-frontmatter era)
+        head -1 "$r" | grep -q '^---$' || continue
         local res cost
         res=$(fm "$r" result)
         cost=$(fm "$r" cost)
-        if [[ "$res" == "unknown" || "$res" == "skipped" || -z "$res" || "$cost" == "0" || -z "$cost" ]]; then
+        if [[ "$res" == "unknown" || "$res" == "skipped" || "$cost" == "0" ]]; then
             echo "error ($(fm "$r" model): result=$res cost=$cost)"
             return 0
         fi
@@ -151,19 +153,26 @@ except ImportError:
     print(json.dumps({"error": "openai or requests package not installed"}))
     sys.exit(1)
 
-# Fetch model pricing from OpenRouter
-def get_model_cost(model, prompt_tokens, completion_tokens):
+# Fetch model pricing from OpenRouter (cached for the process lifetime)
+_pricing_cache = {}
+def _fetch_pricing():
+    if _pricing_cache:
+        return _pricing_cache
     try:
-        resp = requests.get("https://openrouter.ai/api/v1/models", timeout=10)
-        for m in resp.json().get("data", []):
-            if m["id"] == model:
-                pricing = m.get("pricing", {})
-                p_cost = float(pricing.get("prompt", 0)) * prompt_tokens
-                c_cost = float(pricing.get("completion", 0)) * completion_tokens
-                return p_cost + c_cost
+        r = requests.get("https://openrouter.ai/api/v1/models", timeout=10)
+        for m in r.json().get("data", []):
+            _pricing_cache[m["id"]] = m.get("pricing", {})
     except Exception:
         pass
-    return None
+    return _pricing_cache
+
+def get_model_cost(model, prompt_tokens, completion_tokens):
+    pricing = _fetch_pricing().get(model, {})
+    if not pricing:
+        return None
+    p_cost = float(pricing.get("prompt", 0)) * prompt_tokens
+    c_cost = float(pricing.get("completion", 0)) * completion_tokens
+    return p_cost + c_cost
 
 # Read all reports, truncating very long ones
 MAX_REPORT_LEN = 30000
