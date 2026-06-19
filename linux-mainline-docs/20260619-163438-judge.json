@@ -1,0 +1,40 @@
+{
+  "package": "linux-mainline-docs",
+  "correct_verdict": "inconclusive",
+  "confidence": "high",
+  "reasoning": "Both models incorrectly skipped PKGBUILD as a binary file, preventing any meaningful audit. PKGBUILD is critical for assessing build/install behavior.",
+  "disagreement_analysis": null,
+  "coverage_issues": [
+    "PKGBUILD skipped entirely by both models",
+    "No review of install hooks or build scripts",
+    "Network/filesystem access risks unassessed"
+  ],
+  "false_positives": [],
+  "false_negatives": [
+    "Potential risks in PKGBUILD (build commands, source validation)",
+    "Undetected malicious hooks/scripts",
+    "Untrusted source handling in package functions"
+  ],
+  "re_audit_recommended": true,
+  "re_audit_focus": [
+    "PKGBUILD (package functions: build, package, prepare)",
+    "Any .install hooks",
+    "Scripts executed during makepkg"
+  ],
+  "learnings": [
+    "Fix binary file detection: PKGBUILD should never be skipped as binary",
+    "Prioritize PKGBUILD/.install files even if other files are skipped",
+    "Add fallback mechanism when critical files are misclassified",
+    "Improve pre-audit checks to validate file types before processing"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 1879,
+    "completion_tokens": 803,
+    "cost": 0.0033228
+  },
+  "reaudit_date": "2026-06-19T16:34:38Z",
+  "reaudit_model": "anthropic/claude-sonnet-4.6",
+  "reaudit_result": "skipped",
+  "reaudit_report": "linux-mainline-docs/20260619-163438-anthropic-claude-sonnet-4.6.md"
+}
