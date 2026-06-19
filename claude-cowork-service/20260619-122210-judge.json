@@ -1,0 +1,32 @@
+{
+  "package": "claude-cowork-service",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The unsafe findings in qwen's report (install-rpm.sh, install.sh, extract-cowork-svc.sh) are packaging scripts for other distributions or development tools not executed during AUR build/install. PKGBUILD and .install scripts are safe.",
+  "disagreement_analysis": "qwen misinterpreted distribution-specific packaging scripts as AUR threats. deepseek correctly focused on AUR-relevant execution context.",
+  "coverage_issues": [
+    "Both models skipped claude-cowork-service-1.0.62.tar.gz source archive. While checksum-verified, deeper binary inspection might be warranted.",
+    "qwen missed src/claude-cowork-service-1.0.62/vm/qemu.go (VM management) and preflight.go reviewed by deepseek"
+  ],
+  "false_positives": [
+    "qwen: install-rpm.sh (RPM-specific script not used in AUR build)",
+    "qwen: install.sh (APT helper irrelevant to Arch)",
+    "qwen: extract-cowork-svc.sh (development tool not invoked by PKGBUILD)"
+  ],
+  "false_negatives": [
+    "deepseek noted command-injection risk in build-pkg.sh (though not malicious) - qwen missed this"
+  ],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "File selection: Prioritize files referenced in PKGBUILD (prepare/build/package) and .install scripts. Deprioritize distro-specific packaging/CI scripts.",
+    "Prompt improvement: Clarify that non-AUR packaging scripts are out-of-scope unless executed during makepkg.",
+    "Common failure: Models confuse development/reverse-engineering tools with malicious behavior. Add heuristics to flag 'curl|bash' only if used in PKGBUILD/.install."
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 16352,
+    "completion_tokens": 2015,
+    "cost": 0.0164839
+  }
+}
