@@ -1,0 +1,33 @@
+{
+  "package": "harbor-stremio-git",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The deepseek model skipped (makepkg download failed) and the qwen model flagged two files as UNSAFE, but both findings are false positives in the context of an AUR package security audit. (1) setup-libmpv.ps1 is a Windows PowerShell setup script that is NOT referenced by any PKGBUILD build/package/prepare function or .install hook \u2014 it never executes during makepkg on Arch Linux. Its download-unverified-binary behavior is irrelevant to the AUR install path. (2) config.ts contains a hardcoded token exchange URL (https://bugs.harbor.site/v1/anilist/token), but this is part of the upstream application's runtime OAuth flow (a proxy endpoint operated by the Harbor project itself, a common pattern to keep OAuth client secrets server-side). It is application runtime behavior, not build-time code execution, and routing OAuth through the app's own backend is standard practice. Neither finding represents code that runs during makepkg. The PKGBUILD itself was assessed as safe by both models, and the actually build-relevant files (build.rs, generate-art.mjs, package.json) were reviewed and found safe.",
+  "disagreement_analysis": "The disagreement stems from deepseek being unable to download sources (skipped) versus qwen completing a full review and flagging two UNSAFE files. The qwen UNSAFE verdict is driven by two findings that conflate application runtime behavior and a non-executed Windows script with build-time security risks. Neither file executes during makepkg, so they should not drive an UNSAFE verdict for AUR install safety.",
+  "coverage_issues": [
+    "deepseek failed entirely due to makepkg --nobuild download failure (transient/network or VCS source issue) \u2014 produced zero file review.",
+    "qwen reviewed PKGBUILD and 10 source files but did not explicitly confirm whether setup-libmpv.ps1 or the setup:* scripts are invoked by any PKGBUILD function; the PKGBUILD review noted symlink creation to system ffmpeg/ffprobe/yt-dlp, suggesting the Windows setup scripts are not used on Arch."
+  ],
+  "false_positives": [
+    "setup-libmpv.ps1 'downloads unverified binaries' \u2014 FP for AUR safety: it is a Windows-only PowerShell developer setup script never referenced by PKGBUILD build/package/prepare or .install; it does not execute during makepkg on Linux.",
+    "config.ts 'token exchange routed through untrusted third-party domain' \u2014 FP: bugs.harbor.site is the upstream Harbor project's own backend used as an OAuth token-exchange proxy (standard pattern to protect client secrets). This is application runtime behavior, not build-time code execution, and out of scope for AUR install-time safety."
+  ],
+  "false_negatives": [
+    "No genuine build-time risks appear missed. The build()/package() flow (pnpm install, cargo/tauri build, .deb extraction via bsdtar) was reviewed at the PKGBUILD level and found standard. Worth noting pnpm/cargo pull arbitrary upstream dependencies at build time, an inherent supply-chain consideration for any JS/Rust package, but not specific to this package."
+  ],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models should explicitly check whether flagged source files are reachable from PKGBUILD functions (prepare/build/package/check) or .install hooks before raising them as UNSAFE. A '.ps1' Windows-only script in a Linux AUR build is almost never in scope.",
+    "Distinguish application runtime behavior (OAuth endpoints, network calls in app source) from build-time execution. Runtime endpoints like config.ts URLs are not AUR install-time threats and should at most be informational notes, not UNSAFE verdicts.",
+    "The skipped-due-to-makepkg-failure outcome (deepseek) should trigger a retry rather than being treated as a substantive disagreement; transient download failures shouldn't count as a security signal.",
+    "File-selection heuristics correctly surfaced build.rs, build scripts, and package.json \u2014 but the prompt should reinforce a scope filter: 'Only escalate to UNSAFE if the code executes during makepkg or post-install hooks.'",
+    "Add a check for upstream-owned domains: when a flagged domain matches the project's own domain (harbor.site for Harbor), treat as first-party infrastructure rather than 'untrusted third party'."
+  ],
+  "_judge_usage": {
+    "model": "anthropic/claude-opus-4.8",
+    "prompt_tokens": 13889,
+    "completion_tokens": 1583,
+    "cost": 0.10902
+  }
+}
