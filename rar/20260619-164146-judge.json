@@ -1,0 +1,36 @@
+{
+  "package": "rar",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The unsafe verdict was based on a false positive in order.htm. The email obfuscation technique is legitimate anti-spam protection for the official sales@win-rar.com address. No code executes during makepkg, and all other files are benign documentation/configs.",
+  "disagreement_analysis": "Qwen misidentified legitimate email obfuscation in order.htm as phishing due to domain confusion (win-rar.com is legitimate). Deepseek correctly recognized this as safe.",
+  "coverage_issues": [
+    "Both models skipped auditing the binary tarball (rarlinux-x64-722.tar.gz) containing the actual executables. This is a critical gap since binaries pose the highest risk."
+  ],
+  "false_positives": [
+    "order.htm (Qwen): Flagged legitimate anti-spam email obfuscation as phishing. win-rar.com is the official domain, not a fake."
+  ],
+  "false_negatives": [
+    "Binary executables: Both models skipped reviewing the rar/unrar binaries in the tarball, leaving potential malware risks undetected."
+  ],
+  "re_audit_recommended": true,
+  "re_audit_focus": [
+    "rarlinux-x64-722.tar.gz (extract and audit binaries using strings/behavioral analysis)",
+    "Verify order.htm email decoding logic"
+  ],
+  "learnings": [
+    "File selection: Prioritize binaries/scripts over documentation. Implement binary analysis (strings extraction, heuristic scanning).",
+    "Prompt quality: Add training for common anti-spam patterns to reduce false positives.",
+    "Failure modes: Models confuse legitimate domains/obfuscation; over-index on non-executable files; skip critical binaries."
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 9986,
+    "completion_tokens": 1768,
+    "cost": 0.011410199999999999
+  },
+  "reaudit_date": "2026-06-19T16:41:46Z",
+  "reaudit_model": "anthropic/claude-sonnet-4.6",
+  "reaudit_result": "safe",
+  "reaudit_report": "rar/20260619-164146-anthropic-claude-sonnet-4.6.md"
+}
