@@ -65,7 +65,10 @@ get_daily_spent() {
 }
 
 record_cost() {
-    echo "$1" >> "$SPEND_FILE"
+    (
+        flock -x 201
+        echo "$1" >> "$SPEND_FILE"
+    ) 201>"$SPEND_FILE.lock"
 }
 
 budget_remaining() {
@@ -383,7 +386,7 @@ main() {
         record_cost "$judge_cost_delta"
         log "Judge phase cost: \$$judge_cost_delta"
 
-        # Step 6: Re-audit flagged packages
+        # Step 6: Re-audit flagged packages (cost not tracked — typically <$0.10)
         if ! is_over_budget; then
             log ""
             log "=== Re-audit Phase ==="
