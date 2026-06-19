@@ -1,0 +1,36 @@
+{
+  "package": "clion-jre",
+  "correct_verdict": "inconclusive",
+  "confidence": "high",
+  "reasoning": "Both models skipped the critical PKGBUILD file due to false binary detection, preventing any security assessment of build/install logic.",
+  "disagreement_analysis": null,
+  "coverage_issues": [
+    "PKGBUILD skipped (misclassified as binary)",
+    "No review of install hooks or build scripts"
+  ],
+  "false_positives": [],
+  "false_negatives": [
+    "Entire package risk unknown: PKGBUILD defines all build/install behavior but was skipped"
+  ],
+  "re_audit_recommended": true,
+  "re_audit_focus": [
+    "PKGBUILD",
+    "Any .install scripts"
+  ],
+  "learnings": [
+    "Fix binary detection: Use MIME/header checks instead of naive heuristics to prevent skipping text files like PKGBUILD",
+    "Prioritize critical files: Always force-review PKGBUILD/.install files first before other content",
+    "Add fallback mechanism: When file is skipped as binary, attempt hexdump analysis for critical files",
+    "Improve error handling: Fail audits explicitly when PKGBUILD can't be read"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 1877,
+    "completion_tokens": 1246,
+    "cost": 0.0044289
+  },
+  "reaudit_date": "2026-06-19T16:47:11Z",
+  "reaudit_model": "anthropic/claude-sonnet-4.6",
+  "reaudit_result": "skipped",
+  "reaudit_report": "clion-jre/20260619-164711-anthropic-claude-sonnet-4.6.md"
+}
