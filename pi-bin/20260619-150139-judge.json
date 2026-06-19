@@ -1,0 +1,28 @@
+{
+  "package": "pi-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The flagged 'inline-bash.ts' is an example extension not executed during makepkg. PKGBUILD safely handles verified binaries with no build-time risks.",
+  "disagreement_analysis": "qwen incorrectly treated an example runtime extension as an install-time threat, while deepseek focused on actual build/install execution paths.",
+  "coverage_issues": [
+    "deepseek missed reviewing 'inline-bash.ts' (low-risk example file)",
+    "Both models skipped .install hooks (none exist) and PKGBUILD helper scripts (none found)"
+  ],
+  "false_positives": [
+    "qwen: 'inline-bash.ts' \u2013 example extension not invoked during build/install; runtime behavior out of AUR audit scope"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "File selection: Prioritize PKGBUILD functions and install hooks over examples/extensions",
+    "Prompt quality: Clarify scope \u2013 runtime app features \u2260 package safety risk unless executed during makepkg",
+    "Failure mode: Models overemphasize application code risks unrelated to packaging"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 13333,
+    "completion_tokens": 1885,
+    "cost": 0.014045600000000002
+  }
+}
