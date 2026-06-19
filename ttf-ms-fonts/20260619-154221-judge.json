@@ -1,0 +1,27 @@
+{
+  "package": "ttf-ms-fonts",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The unsafe verdict was based on misinterpreting Windows INF files as executable threats in Linux context. PKGBUILD only installs font/license files, never executes INF files or binaries during makepkg.",
+  "disagreement_analysis": "qwen incorrectly flagged src/andale.inf as unsafe due to misunderstanding Windows INF behavior in Linux packaging context.",
+  "coverage_issues": [
+    "Both skipped webdin32.exe binary, but PKGBUILD doesn't execute it so gap is acceptable"
+  ],
+  "false_positives": [
+    "qwen's src/andale.inf verdict: INF files are inert data in Linux builds unless explicitly executed (not done here)"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Improve Windows/Linux context awareness: INF files shouldn't be flagged unless referenced in PKGBUILD",
+    "Prioritize files actually used in build/install (PKGBUILD hooks) over inert data files",
+    "Enhance binary handling: skipped EXEs should be cross-referenced with PKGBUILD for execution attempts"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 5573,
+    "completion_tokens": 1019,
+    "cost": 0.0064486000000000005
+  }
+}
