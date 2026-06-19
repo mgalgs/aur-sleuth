@@ -1,0 +1,29 @@
+{
+  "package": "conky-lua-nv",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The 'unsafe' verdict was based solely on build.sh, which is an AppImage build script unused during makepkg execution. PKGBUILD and install scripts show no malicious behavior.",
+  "disagreement_analysis": "Qwen incorrectly flagged an unused build.sh script as a supply-chain risk, while Deepseek correctly focused on relevant build files.",
+  "coverage_issues": [
+    "Qwen failed to review critical PKGBUILD build functions (prepare/build/package) despite their execution during makepkg",
+    "Both models skipped source tarball inspection (v1.22.1.tar.gz)"
+  ],
+  "false_positives": [
+    "build.sh (Qwen): AppImage script unused in PKGBUILD build process; normal dev tooling"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Prioritize PKGBUILD functions (prepare/build/package) and .install scripts over unused dev/CI files",
+    "Improve model context: Emphasize that only makepkg-executed code is relevant",
+    "Add checksum verification for skipped binary files like source tarballs",
+    "Reduce false positives by validating file execution context before flagging risks"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 15082,
+    "completion_tokens": 1332,
+    "cost": 0.0138874
+  }
+}
