@@ -1,0 +1,29 @@
+{
+  "package": "rime-wanxiang-gram-zh-hans",
+  "correct_verdict": "safe",
+  "confidence": "medium",
+  "reasoning": "Both models independently audited the PKGBUILD before the source download failed, and both reached a SAFE verdict on the PKGBUILD itself with well-reasoned analysis. The PKGBUILD declares a single source: a static grammar data file fetched over HTTPS from the upstream GitHub release (amzxyz/RIME-LMDG), pinned with a fixed SHA-256 checksum (not SKIP). There is no pkgver() function, no command substitutions, no .install hook referenced, and no top-level code execution. This is a data-only package (a grammar/language model file), which carries inherently low execution risk. The 'skipped' result was purely due to makepkg being unable to download the source (likely a network/release-asset availability issue at audit time), not due to any detected risk. The package() function was not reviewed since sources never materialized, but for a data package this typically only installs the file into place. Overall the PKGBUILD-level evidence strongly supports SAFE; medium confidence because package() was never inspected.",
+  "disagreement_analysis": "No disagreement. Both models agreed the PKGBUILD is SAFE and both skipped due to the identical makepkg download failure. The triggering note ('shallow, reviewed 0 files') reflects the download failure rather than a substantive split in judgment.",
+  "coverage_issues": [
+    "Neither model reviewed the package() function body or any extracted source, since makepkg --nobuild failed to download the source file.",
+    "No .install script appears present, but this could not be positively confirmed from the source tree because the audit aborted early."
+  ],
+  "false_positives": [],
+  "false_negatives": [
+    "package() function contents were never inspected; for a data package this is low risk, but an unverified install step (e.g., chmod, symlink, or post-install hook) cannot be fully ruled out."
+  ],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "The 'shallow / reviewed 0 files' trigger conflates two distinct cases: (a) a model that lazily skipped review, and (b) a hard environmental failure (makepkg could not download sources). These should be distinguished, as the latter is not a model quality issue and re-auditing with a stronger model will not help unless the download succeeds.",
+    "When source download fails, the tool could fall back to parsing the PKGBUILD package()/prepare()/build() function bodies directly (static text analysis) so a verdict isn't lost entirely \u2014 both models already proved the PKGBUILD source text was available.",
+    "For data-only packages (grammar files, dictionaries) with a pinned checksum and no install hook, the audit pipeline could apply a lower-risk classification rather than escalating to manual review, reducing noise.",
+    "Consider adding retry/mirror logic or tolerating download failures for checksummed static assets, since transient AUR/GitHub release availability is a common cause of false 'skipped' results."
+  ],
+  "_judge_usage": {
+    "model": "anthropic/claude-opus-4.8",
+    "prompt_tokens": 3573,
+    "completion_tokens": 1036,
+    "cost": 0.043765000000000005
+  }
+}
