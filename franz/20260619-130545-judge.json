@@ -1,0 +1,30 @@
+{
+  "package": "franz",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The unsafe verdict was based on a false positive in ensure-mac-dependency.js, which is macOS-specific and inert on Linux. The script is part of upstream code, not malicious, and doesn't execute during Arch builds.",
+  "disagreement_analysis": "qwen incorrectly flagged ensure-mac-dependency.js as unsafe due to runtime npm installs, while deepseek correctly recognized it's inert on Linux and part of normal upstream behavior.",
+  "coverage_issues": [
+    "Neither model reviewed critical install hooks or .install scripts",
+    "Network/filesystem access points in src/franz/src/api/server/ServerApi.js weren't deeply analyzed"
+  ],
+  "false_positives": [
+    "qwen's unsafe verdict on ensure-mac-dependency.js: macOS-specific script that does nothing on Linux, part of upstream code"
+  ],
+  "false_negatives": [
+    "Both missed potential analysis of network calls in ServerApi.js during actual app runtime"
+  ],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Prioritize OS context: Models should emphasize target OS (Linux) when evaluating platform-specific code",
+    "Improve build/runtime distinction: Clarify prompt to differentiate build-time helpers vs installed application code",
+    "Focus file selection: Weight PKGBUILD, install hooks, and code with network/filesystem access higher than UI modules"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 12885,
+    "completion_tokens": 2103,
+    "cost": 0.014277
+  }
+}
