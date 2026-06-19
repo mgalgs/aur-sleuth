@@ -1,0 +1,38 @@
+{
+  "package": "kanidm-server",
+  "correct_verdict": "inconclusive",
+  "confidence": "high",
+  "reasoning": "Both models skipped the PKGBUILD file (misclassified as binary), making it impossible to analyze build/install behavior. Without reviewing PKGBUILD, critical security risks cannot be assessed.",
+  "disagreement_analysis": null,
+  "coverage_issues": [
+    "PKGBUILD (critical build script)",
+    "Potential .install hooks (if present)",
+    "Source files referenced in build()/package() functions"
+  ],
+  "false_positives": [],
+  "false_negatives": [
+    "All build/install risks: PKGBUILD defines makepkg execution flow, so malicious code, unsafe downloads, or privilege escalation could be present but undetected"
+  ],
+  "re_audit_recommended": true,
+  "re_audit_focus": [
+    "PKGBUILD (primary)",
+    "*.install files",
+    "Source files referenced in PKGBUILD functions"
+  ],
+  "learnings": [
+    "Improve binary file detection: PKGBUILDs are text files; tool should never misclassify them",
+    "Prioritization failure: Models must always review PKGBUILD first; skip should trigger manual review",
+    "Add fallback mechanism: If PKGBUILD is skipped, audit should attempt hex/view analysis before aborting",
+    "Prompt enhancement: Explicitly require PKGBUILD review before proceeding to other files"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 1875,
+    "completion_tokens": 754,
+    "cost": 0.0031975
+  },
+  "reaudit_date": "2026-06-19T16:55:07Z",
+  "reaudit_model": "anthropic/claude-sonnet-4.6",
+  "reaudit_result": "skipped",
+  "reaudit_report": "kanidm-server/20260619-165507-anthropic-claude-sonnet-4.6.md"
+}
