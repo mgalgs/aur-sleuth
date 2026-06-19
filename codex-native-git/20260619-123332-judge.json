@@ -1,0 +1,29 @@
+{
+  "package": "codex-native-git",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The macOS binary download is from OpenAI's official CDN (oaistatic.com) with pinned SHA256 checksum. It's used only to extract platform-agnostic ASAR assets, not executed during Linux build. All other files show standard build behavior.",
+  "disagreement_analysis": "Qwen misinterpreted the macOS binary as untrusted executable code for Linux, while Deepseek correctly recognized it as a verified resource for asset extraction.",
+  "coverage_issues": [
+    "Qwen failed to review any build/install scripts beyond PKGBUILD",
+    "Neither reviewed Rust source code handling the ASAR extraction"
+  ],
+  "false_positives": [
+    "Qwen's 'untrusted macOS binary' verdict: The file is from official OpenAI infrastructure and verified by checksum"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Improve binary handling: Treat verified CDN resources as safe when used for asset extraction",
+    "Prioritize files referenced in PKGBUILD functions over deep node_modules",
+    "Add context: Flag macOS-specific scripts as irrelevant for Linux builds",
+    "Handle LLM truncation errors better for large files like install.sh"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 11540,
+    "completion_tokens": 2021,
+    "cost": 0.0131305
+  }
+}
