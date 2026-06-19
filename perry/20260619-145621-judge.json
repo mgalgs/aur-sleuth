@@ -1,0 +1,28 @@
+{
+  "package": "perry",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The flagged eval usage in wasm_runtime.js is contextually safe - it operates in browser runtime and isn't executed during AUR build/install. No risks found in PKGBUILD or build hooks.",
+  "disagreement_analysis": "Qwen misclassified wasm_runtime.js as unsafe due to eval usage without considering it only runs in browser contexts, not during AUR operations.",
+  "coverage_issues": [
+    "Both models skipped perry-0.5.1182.tar.gz binary (acceptable for size)",
+    "Qwen didn't review critical test scripts (run_tests.sh, run_parity_tests.sh) that DeepSeek validated"
+  ],
+  "false_positives": [
+    "Qwen's wasm_runtime.js verdict: eval usage is constrained to same-origin iframes in browser runtime, not executed during makepkg"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Improve context-awareness: Models should prioritize files referenced in PKGBUILD (build/check/install hooks) over general source code",
+    "Enhance eval detection: Differentiate between browser-context eval (often safe) vs. build-time eval (high-risk)",
+    "Refine file selection: Test scripts should be higher priority if referenced in PKGBUILD check() function"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 15448,
+    "completion_tokens": 1533,
+    "cost": 0.0146461
+  }
+}
