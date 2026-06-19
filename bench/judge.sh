@@ -19,11 +19,12 @@ cd "$(dirname "$0")/.."
 JUDGE_MODEL="anthropic/claude-opus-4.8"
 AUDIT_MODEL="anthropic/claude-sonnet-4.6"
 RE_AUDIT=false
-REPORTS_DIR="/tmp/aur-sleuth/bulk-reports"
-JUDGE_DIR="/tmp/aur-sleuth/judge"
+DATA_DIR="${AUR_SLEUTH_DATA_DIR:-$HOME/aur-sleuth-data}"
+REPORTS_DIR="$DATA_DIR/bulk-reports"
+JUDGE_DIR="$DATA_DIR/judge"
 PACKAGE=""
 ALL=false
-LOCK_FILE="/tmp/aur-sleuth/bulk-audit/archive.lock"
+LOCK_FILE="$DATA_DIR/bulk-audit/archive.lock"
 
 # --- Parse args ---
 while [[ $# -gt 0 ]]; do

@@ -14,9 +14,10 @@ BUDGET=20.00
 MODELS="qwen/qwen3-235b-a22b-2507,deepseek/deepseek-v4-flash"
 JOBS=4
 DRY_RUN=false
-METADATA_CACHE="/tmp/aur-sleuth/packages-meta-ext-v1.json.gz"
+DATA_DIR="${AUR_SLEUTH_DATA_DIR:-$HOME/aur-sleuth-data}"
+METADATA_CACHE="$DATA_DIR/packages-meta-ext-v1.json.gz"
 METADATA_URL="https://aur.archlinux.org/packages-meta-ext-v1.json.gz"
-STATE_DIR="/tmp/aur-sleuth/bulk-audit"
+STATE_DIR="$DATA_DIR/bulk-audit"
 COST_LOG="$STATE_DIR/cost.log"
 LOCK_FILE="$STATE_DIR/archive.lock"
 
@@ -145,7 +146,7 @@ run_audit() {
     local pkg="$1"
     local model="$2"
     local model_slug="${model//\//-}"
-    local report_dir="/tmp/aur-sleuth/bulk-reports/${model_slug}"
+    local report_dir="$DATA_DIR/bulk-reports/${model_slug}"
     local report_file="${report_dir}/aur-sleuth-report-${pkg}.txt"
 
     log "  [$pkg] Starting $model"
