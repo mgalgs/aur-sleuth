@@ -1,0 +1,31 @@
+{
+  "package": "harbor-stremio-git",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Both flagged issues are false positives: 1) setup-libmpv.ps1 is Windows-only and unused in Linux builds 2) config.ts token routing is a runtime app behavior irrelevant to package safety. No actual risks exist in build/install execution paths.",
+  "disagreement_analysis": "Deepseek skipped due to build failure while Qwen overinterpreted non-build-relevant files as unsafe",
+  "coverage_issues": [
+    "Deepseek failed to review any files due to makepkg failure",
+    "Qwen missed reviewing PKGBUILD build/install functions despite their critical importance"
+  ],
+  "false_positives": [
+    "setup-libmpv.ps1: Windows-only build script irrelevant to Linux package",
+    "config.ts: Runtime application behavior outside AUR safety scope"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "File selection: Prioritize PKGBUILD functions (build/package) over application source code",
+    "Prompt quality: Emphasize that runtime app behavior is out-of-scope unless triggered during build/install",
+    "Common failure: Models confuse application functionality with package build risks",
+    "Tool improvement: Add Linux context awareness to ignore platform-specific files (e.g. .ps1)",
+    "Audit reliability: Require successful source retrieval before file review"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 8875,
+    "completion_tokens": 2731,
+    "cost": 0.01304
+  }
+}
