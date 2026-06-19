@@ -146,9 +146,24 @@ api_key = os.environ.get("OPENAI_API_KEY", "")
 
 try:
     from openai import OpenAI
+    import requests
 except ImportError:
-    print(json.dumps({"error": "openai package not installed"}))
+    print(json.dumps({"error": "openai or requests package not installed"}))
     sys.exit(1)
+
+# Fetch model pricing from OpenRouter
+def get_model_cost(model, prompt_tokens, completion_tokens):
+    try:
+        resp = requests.get("https://openrouter.ai/api/v1/models", timeout=10)
+        for m in resp.json().get("data", []):
+            if m["id"] == model:
+                pricing = m.get("pricing", {})
+                p_cost = float(pricing.get("prompt", 0)) * prompt_tokens
+                c_cost = float(pricing.get("completion", 0)) * completion_tokens
+                return p_cost + c_cost
+    except Exception:
+        pass
+    return None
 
 # Read all reports, truncating very long ones
 MAX_REPORT_LEN = 30000
@@ -228,12 +243,17 @@ try:
 
     result = json.loads(content.strip())
 
+    pt = ct = 0
     if resp.usage:
-        result["_judge_usage"] = {
-            "model": judge_model,
-            "prompt_tokens": resp.usage.prompt_tokens,
-            "completion_tokens": resp.usage.completion_tokens,
-        }
+        pt = resp.usage.prompt_tokens or 0
+        ct = resp.usage.completion_tokens or 0
+    cost = get_model_cost(judge_model, pt, ct)
+    result["_judge_usage"] = {
+        "model": judge_model,
+        "prompt_tokens": pt,
+        "completion_tokens": ct,
+        "cost": cost,
+    }
 
     # Write judge report
     judge_file = os.path.join(judge_dir, f"{pkg}.json")
@@ -246,6 +266,8 @@ try:
         "confidence": result.get("confidence", "unknown"),
         "re_audit": result.get("re_audit_recommended", False),
         "learnings_count": len(result.get("learnings", [])),
+        "prompt_tokens": pt,
+        "completion_tokens": ct,
     }))
 
 except json.JSONDecodeError as e:
@@ -265,13 +287,13 @@ PYEOF
         return 1
     fi
 
-    local v c ra lc
-    v=$(echo "$verdict" | python3 -c "import json,sys; print(json.load(sys.stdin).get('verdict','error'))")
-    c=$(echo "$verdict" | python3 -c "import json,sys; print(json.load(sys.stdin).get('confidence','?'))")
-    ra=$(echo "$verdict" | python3 -c "import json,sys; print(json.load(sys.stdin).get('re_audit',False))")
-    lc=$(echo "$verdict" | python3 -c "import json,sys; print(json.load(sys.stdin).get('learnings_count',0))")
+    local v c ra lc pt ct
+    read -r v c ra lc pt ct < <(echo "$verdict" | python3 -c "
+import json,sys; d=json.load(sys.stdin)
+print(d.get('verdict','error'), d.get('confidence','?'), d.get('re_audit',False), d.get('learnings_count',0), d.get('prompt_tokens',0), d.get('completion_tokens',0))
+")
 
-    log "  Verdict: $v (confidence: $c) | re-audit: $ra | learnings: $lc"
+    log "  Verdict: $v (confidence: $c) | re-audit: $ra | learnings: $lc | tokens: ${pt}+${ct}"
 
     # Re-audit if recommended and --re-audit flag is set
     if $RE_AUDIT && [[ "$ra" == "True" ]]; then
@@ -321,6 +343,7 @@ main() {
     log "Judge starting. Model: $JUDGE_MODEL, Candidates: ${#packages[@]}"
 
     local judged=0 skipped=0 flagged=0
+    local judged_pkgs=()
 
     for pkg in "${packages[@]}"; do
         local trigger
@@ -339,6 +362,7 @@ main() {
         }
 
         judged=$((judged + 1))
+        judged_pkgs+=("$pkg")
 
         local judge_file="$JUDGE_DIR/${pkg}.json"
         if [[ -f "$judge_file" ]]; then
@@ -352,20 +376,23 @@ main() {
     log "Judged: $judged | Skipped (no trigger): $skipped | Flagged for re-audit: $flagged"
     log "Reports: $JUDGE_DIR/"
 
-    # Print summary of learnings across all judged packages
+    # Print learnings only from packages judged this run
     if (( judged > 0 )); then
         log ""
         log "=== Aggregated Learnings ==="
-        python3 << PYEOF
-import json, glob, os
-judge_dir = "$JUDGE_DIR"
+        local pkgs_json
+        pkgs_json=$(printf '%s\n' "${judged_pkgs[@]}" | python3 -c "import json,sys; print(json.dumps(sys.stdin.read().strip().split('\n')))")
+        JUDGE_DIR="$JUDGE_DIR" JUDGED_PKGS="$pkgs_json" python3 << 'PYEOF'
+import json, os
+judge_dir = os.environ["JUDGE_DIR"]
+judged_pkgs = set(json.loads(os.environ["JUDGED_PKGS"]))
 learnings = []
-for f in sorted(glob.glob(os.path.join(judge_dir, "*.json"))):
-    if f.endswith(".error.json"):
+for pkg in sorted(judged_pkgs):
+    f = os.path.join(judge_dir, f"{pkg}.json")
+    if not os.path.exists(f):
         continue
     try:
         data = json.load(open(f))
-        pkg = data.get("package", os.path.basename(f))
         for l in data.get("learnings", []):
             learnings.append(f"  [{pkg}] {l}")
     except Exception:
