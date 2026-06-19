@@ -1,0 +1,25 @@
+{
+  "package": "stockfish",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The net.sh script flagged by Qwen is part of Stockfish's standard build process to download NNUE files from official domains, already accounted for in PKGBUILD's verified sources. The script isn't executed during AUR packaging (NNUE files are pre-downloaded via PKGBUILD's source array with checksums), making this a false positive. DeepSeek correctly recognized the script's benign nature when contextualized with the full build process.",
+  "disagreement_analysis": "Qwen overreacted to net.sh's download functionality without considering 1) PKGBUILD's pre-download verification 2) script context in build workflow",
+  "coverage_issues": [],
+  "false_positives": [
+    "net.sh (Qwen): Normal build-time NNUE fetch from official sources, already validated via PKGBUILD checksums"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Improve build process awareness: Audit tools should verify whether scripts are actually invoked by PKGBUILD/Makefile targets",
+    "Enhance FP filtering: Whitelist common build-time download patterns from official project domains when checksums are verified",
+    "Prioritize files referenced in PKGBUILD functions over general source code"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 13730,
+    "completion_tokens": 1569,
+    "cost": 0.0135335
+  }
+}
