@@ -1,0 +1,39 @@
+{
+  "package": "fontconfig-ubuntu-docs",
+  "correct_verdict": "inconclusive",
+  "confidence": "high",
+  "reasoning": "All models failed to audit the critical PKGBUILD file due to erroneous binary file detection, making safety determination impossible.",
+  "disagreement_analysis": null,
+  "coverage_issues": [
+    "PKGBUILD was skipped by all models due to false binary file detection",
+    "No other files (install hooks, source scripts) were reviewed despite being potentially critical"
+  ],
+  "false_positives": [],
+  "false_negatives": [
+    "Entire package build process risks were missed due to PKGBUILD skip",
+    "Potential malicious commands in build/install functions were not assessed",
+    "Source file handling and artifact installation paths were not verified"
+  ],
+  "re_audit_recommended": true,
+  "re_audit_focus": [
+    "PKGBUILD (with forced text mode decoding)",
+    "Any .install hooks or build scripts"
+  ],
+  "learnings": [
+    "Implement robust text file detection: PKGBUILD should never be classified as binary",
+    "Add fallback mechanism: When PKGBUILD fails initial scan, attempt hexdump/strings analysis",
+    "Prioritize PKGBUILD above all other files in audit workflow",
+    "Include file type verification in pre-audit checks to prevent false binary classification",
+    "Add warning system for packages where PKGBUILD is the only file"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 2568,
+    "completion_tokens": 1329,
+    "cost": 0.005120100000000001
+  },
+  "reaudit_date": "2026-06-19T16:31:11Z",
+  "reaudit_model": "anthropic/claude-sonnet-4.6",
+  "reaudit_result": "skipped",
+  "reaudit_report": "fontconfig-ubuntu-docs/20260619-163111-anthropic-claude-sonnet-4.6.md"
+}
