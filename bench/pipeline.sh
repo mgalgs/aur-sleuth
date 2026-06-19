@@ -267,19 +267,17 @@ push_reports() {
     ) 200>"$LOCK_FILE"
 }
 
-# --- Snapshot judge report costs for delta tracking ---
-snapshot_judge_costs() {
-    python3 -c "
-import json, os, glob
-total = 0
-for f in glob.glob(os.path.join('$DATA_DIR', 'judge', '*.json')):
-    try:
-        d = json.load(open(f))
-        total += d.get('_judge_usage', {}).get('cost') or 0
-    except Exception:
-        pass
-print(f'{total:.6f}')
-"
+# --- Sum judge costs for reports modified after a given timestamp ---
+sum_judge_costs_since() {
+    local since="$1"
+    find "$DATA_DIR/judge" -name '*.json' -newer "$since" 2>/dev/null \
+        | while read -r f; do
+            python3 -c "
+import json
+d = json.load(open('$f'))
+print(d.get('_judge_usage', {}).get('cost') or 0)
+" 2>/dev/null
+        done | awk '{s+=$1} END {printf "%.6f", s+0}'
 }
 
 # --- Main ---
@@ -374,23 +372,33 @@ main() {
     if ! $SKIP_JUDGE && ! is_over_budget; then
         log ""
         log "=== Judge Phase ==="
-        local judge_cost_before
-        judge_cost_before=$(snapshot_judge_costs)
+        local judge_marker="$PIPELINE_DIR/.judge-start-marker"
+        touch "$judge_marker"
 
         bash bench/judge.sh --judge-model "$JUDGE_MODEL" 2>&1
 
-        local judge_cost_after
-        judge_cost_after=$(snapshot_judge_costs)
-        local judge_cost_delta
-        judge_cost_delta=$(python3 -c "print(f'{$judge_cost_after - $judge_cost_before:.4f}')")
-        record_cost "$judge_cost_delta"
-        log "Judge phase cost: \$$judge_cost_delta"
+        local judge_cost
+        judge_cost=$(sum_judge_costs_since "$judge_marker")
+        record_cost "$judge_cost"
+        log "Judge phase cost: \$$judge_cost"
 
-        # Step 6: Re-audit flagged packages (cost not tracked — typically <$0.10)
+        # Step 6: Re-audit flagged packages
         if ! is_over_budget; then
             log ""
             log "=== Re-audit Phase ==="
+            local reaudit_marker="$PIPELINE_DIR/.reaudit-start-marker"
+            touch "$reaudit_marker"
+
             bash bench/judge.sh --re-audit-pending --audit-model "$REAUDIT_MODEL" 2>&1
+
+            # Re-audit costs are in audit reports, not judge reports —
+            # track via judge report updates (re-audit metadata gets added)
+            local reaudit_cost
+            reaudit_cost=$(sum_judge_costs_since "$reaudit_marker")
+            if python3 -c "import sys; sys.exit(0 if float('$reaudit_cost') > 0 else 1)" 2>/dev/null; then
+                record_cost "$reaudit_cost"
+                log "Re-audit phase cost: \$$reaudit_cost"
+            fi
         fi
 
         push_reports
