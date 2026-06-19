@@ -1,0 +1,29 @@
+{
+  "package": "warp-ai-terminal-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard '-bin' AppImage wrapper. The PKGBUILD downloads a single AppImage from the official releases.warp.dev domain (matching the project's stated URL) with a pinned version and SHA256 checksum (not SKIP). The prepare() function uses the standard --appimage-extract, and package() installs the binary to /opt, creates a symlink, and installs desktop/icon files. No network calls during build, no eval/base64/obfuscation, no install hooks, and no out-of-tree file modifications. Both models independently reached the same SAFE verdict with consistent, accurate reasoning. The AppImage binary itself cannot be statically reviewed but is integrity-verified by checksum and sourced from the official upstream host.",
+  "disagreement_analysis": null,
+  "coverage_issues": [
+    "Both models correctly skipped the Warp-x86_64.AppImage binary (binaries cannot be meaningfully reviewed by LLMs), but this means the actual application payload is never inspected. This is an inherent limitation for -bin packages, not a model failure.",
+    "Only 2 files exist in this repo (PKGBUILD + AppImage); there are no .install hooks or auxiliary scripts to miss, so coverage is effectively complete for what's reviewable."
+  ],
+  "false_positives": [],
+  "false_negatives": [
+    "Neither model could inspect the AppImage contents \u2014 if the upstream binary were trojaned, the checksum would only verify it matches whatever the packager pinned, not that the binary is benign. This is unverifiable risk inherent to all -bin packages, not a packaging-level concern."
+  ],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "The 'shallow' trigger (1 file reviewed) is misleading here: the repo genuinely contains only a PKGBUILD plus an unreviewable binary. File-count-based shallow-review triggers should account for repos where the only unreviewed file is a binary that is intentionally skipped.",
+    "Both models correctly applied the makepkg-execution-scope reasoning (prepare/package not run during --nobuild --noprepare) \u2014 this reasoning is accurate and should be reinforced as a positive pattern.",
+    "For -bin AppImage packages, the key trust anchor is (1) source domain matches project URL, (2) checksum is not SKIP, (3) no extra network fetches in build/package. Both models verified all three; this checklist could be formalized in the prompt.",
+    "Consider distinguishing 'reviewable file count' from 'total file count' when deciding whether a review was shallow, to avoid spurious re-audit triggers on legitimately minimal -bin packages."
+  ],
+  "_judge_usage": {
+    "model": "anthropic/claude-opus-4.8",
+    "prompt_tokens": 5341,
+    "completion_tokens": 968,
+    "cost": 0.050905000000000006
+  }
+}
