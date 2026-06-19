@@ -2096,7 +2096,7 @@ def do_agentic_audit(
     return required_audit_results + additional_audit_results
 
 
-def _write_json_metadata(
+def _write_report_frontmatter(
     report_file: Path,
     package_name: str,
     pkgdir: Path,
@@ -2146,14 +2146,14 @@ def _write_json_metadata(
         # Build YAML frontmatter by hand to avoid a PyYAML dependency
         verdicts_yaml = ""
         for v in file_verdicts:
-            f = v["file"] or "(package-level)"
+            f = _yaml_escape(v["file"] or "(package-level)")
             verdicts_yaml += f"  - file: {f}\n    status: {v['status']}\n    summary: {_yaml_escape(v['summary'])}\n"
 
         frontmatter = (
             f"---\n"
-            f"package: {package_name}\n"
-            f"pkgver: {source_info.get('pkgver', '')}\n"
-            f"pkgrel: {source_info.get('pkgrel', '')}\n"
+            f"package: {_yaml_escape(package_name)}\n"
+            f"pkgver: {_yaml_escape(source_info.get('pkgver', ''))}\n"
+            f"pkgrel: {_yaml_escape(source_info.get('pkgrel', ''))}\n"
             f"result: {overall_status.name.lower()}\n"
             f"model: {model}\n"
             f"provider: {provider}\n"
@@ -2252,7 +2252,6 @@ def run_aur_sleuth_audit(
             for skip in results_by_status[SafeStatus.SKIPPED]:
                 report.write(str(skip) + "\n")
 
-        # Write JSON metadata sidecar
         _write_json_metadata(
             report_file, package_name, pkgdir, model,
             overall_status, audit_results, results_by_status,

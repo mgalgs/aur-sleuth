@@ -50,6 +50,7 @@ is_over_budget() {
 
 record_cost() {
     local cost="$1"
+    mkdir -p "$(dirname "$COST_LOG")"
     echo "$cost" >> "$COST_LOG"
 }
 
