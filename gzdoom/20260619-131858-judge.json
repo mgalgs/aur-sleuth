@@ -1,0 +1,29 @@
+{
+  "package": "gzdoom",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The 'auto-setup-linux.sh' script flagged as unsafe is not executed during AUR build/install (not referenced in PKGBUILD functions or install hooks). It's a development script outside audit scope per guidelines.",
+  "disagreement_analysis": "Qwen incorrectly flagged 'auto-setup-linux.sh' as a supply-chain risk despite it not being executed during AUR packaging operations.",
+  "coverage_issues": [
+    "Both models missed reviewing PKGBUILD's build/package functions for actual execution risks",
+    "No review of .install hooks if present (though none exist here)"
+  ],
+  "false_positives": [
+    "Qwen's unsafe verdict on 'auto-setup-linux.sh': Script not executed during makepkg, normal upstream dev tool"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Improve file prioritization: Weight PKGBUILD functions and install hooks higher than source-tree scripts",
+    "Enhance prompt: Explicitly state development/CI scripts are out-of-scope unless invoked by PKGBUILD",
+    "Add context: Flag files not referenced in build/install as low-risk automatically",
+    "Detect build system context: Recognize CMake-based projects don't typically execute .sh scripts directly"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 13834,
+    "completion_tokens": 1749,
+    "cost": 0.0140563
+  }
+}
