@@ -1,0 +1,27 @@
+{
+  "package": "kalu",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Both models found standard security practices in PKGBUILD (pinned source, checksum) and .install (group management). Qwen's deeper source code review confirmed network/file operations are legitimate for the package's update-checking purpose. No security risks detected.",
+  "disagreement_analysis": null,
+  "coverage_issues": [
+    "deepseek failed to review critical source files (curl.c, updater.c) handling network operations",
+    "deepseek skipped 72 available files vs qwen's 12 reviewed"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Prioritize extracting/unpacked source code review over tarball skipping",
+    "Focus selection on build-related scripts (autogen.sh, Makefile.am) and code (src/*.c)",
+    "Improve model guidance to recognize network-critical files (curl.c) as high priority",
+    "Handle binary files better - consider extracting tarballs for source review"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 10260,
+    "completion_tokens": 687,
+    "cost": 0.0088995
+  }
+}
