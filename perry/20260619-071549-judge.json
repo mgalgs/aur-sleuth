@@ -1,0 +1,32 @@
+{
+  "package": "perry",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD is a standard Rust package build: it fetches a pinned GitHub release tarball with a valid SHA256 checksum, runs cargo update/fetch/build, and a local smoke test in check(). None of the files flagged execute during makepkg build/install. The qwen 'unsafe' verdict is based on a `contentWindow?.eval(js)` call inside wasm_runtime.js, a browser-side UI runtime that is application source code shipped in the upstream repo \u2014 it is NOT executed during package build/install and is not referenced by any PKGBUILD function or .install hook. An eval inside a same-origin iframe for a UI framework's eval-JS feature is application functionality, not a supply-chain/build-time threat against the user installing the package. This is a false positive in the AUR audit context.",
+  "disagreement_analysis": "qwen3 flagged wasm_runtime.js as unsafe due to `el.contentWindow?.eval(js)` in a ui_eval_js function. This is a runtime feature of the Perry UI/WASM framework (an intentional 'evaluate JS in iframe' capability), not malicious injection and not executed during package installation. deepseek correctly contextualized this as legitimate same-origin iframe functionality. The disagreement stems from qwen applying a web-application XSS/vulnerability lens rather than an AUR build-time threat-model lens.",
+  "coverage_issues": [
+    "Neither model could inspect the contents of perry-0.5.1182.tar.gz beyond extracted source (binary skip is expected); the actual prebuilt binary distributed via npm/homebrew installers was not analyzable, but those installers are not invoked by the PKGBUILD.",
+    "Both models reviewed essentially the same high-priority set; qwen added index.ts and cli.ts/parity_status.sh while deepseek added run_tests/run_module_parity/run_parity_tests \u2014 minor divergence, no critical file uniquely missed."
+  ],
+  "false_positives": [
+    "qwen3's UNSAFE on wasm_runtime.js: `contentWindow?.eval(js)` is an intentional same-origin iframe JS-eval feature of the UI framework, application runtime code not executed during makepkg build/install \u2014 out of scope for AUR build-time threat model.",
+    "Base64 WASM decoding (getWasmBinary) flagged as contributing risk \u2014 base64-embedded WASM is a normal browser packaging technique, not malicious."
+  ],
+  "false_negatives": [
+    "None of significance for the build-time threat model. install.sh and perry.rb use unverified curl downloads (no checksum/GPG), correctly noted as hygiene-only; these are not invoked by the PKGBUILD so pose no build-time risk."
+  ],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Reinforce in the prompt that findings in application/runtime source (browser JS, WASM runtimes, UI framework code) are only relevant if executed during PKGBUILD prepare/build/check/package or .install hooks; eval/XSS-style findings in shipped app code are out of scope unless build-invoked.",
+    "Add explicit guidance distinguishing 'vulnerability in the software' (web-app security) from 'supply-chain threat to the user running makepkg' \u2014 qwen conflated the two.",
+    "When a model flags eval/exec, require it to trace whether the code path is reachable from the PKGBUILD build/install chain before assigning UNSAFE.",
+    "Models should consistently note that auxiliary installers (install.sh, homebrew .rb) not referenced by the PKGBUILD are informational-only; both did this correctly here."
+  ],
+  "_judge_usage": {
+    "model": "anthropic/claude-opus-4.8",
+    "prompt_tokens": 23139,
+    "completion_tokens": 1289,
+    "cost": 0.14792
+  }
+}
