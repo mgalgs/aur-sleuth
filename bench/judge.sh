@@ -2,7 +2,7 @@
 # Judge audit reports: detect disagreements, shallow coverage, and quality issues.
 # A high-intelligence "judge" model reviews reports and optionally triggers re-audits.
 #
-# Usage: judge.sh [--package PKG | --all] [--re-audit] [--re-audit-pending] [--judge-model MODEL] [--audit-model MODEL]
+# Usage: judge.sh [--package PKG | --all] [--re-audit] [--re-audit-pending] [--judge-model MODEL] [--audit-model MODEL] [--judge-dir DIR] [--no-archive]
 #
 # Triggers (automatic):
 #   - Result disagreement between models (safe vs unsafe)
@@ -25,6 +25,7 @@ JUDGE_DIR="$DATA_DIR/judge"
 PACKAGE=""
 ALL=false
 LOCK_FILE="$DATA_DIR/bulk-audit/archive.lock"
+NO_ARCHIVE=false
 
 # --- Parse args ---
 while [[ $# -gt 0 ]]; do
@@ -36,6 +37,8 @@ while [[ $# -gt 0 ]]; do
         --judge-model) JUDGE_MODEL="$2"; shift 2 ;;
         --audit-model) AUDIT_MODEL="$2"; shift 2 ;;
         --reports-dir) REPORTS_DIR="$2"; shift 2 ;;
+        --judge-dir) JUDGE_DIR="$2"; shift 2 ;;
+        --no-archive) NO_ARCHIVE=true; shift ;;
         *) echo "Unknown arg: $1" >&2; exit 1 ;;
     esac
 done
@@ -347,12 +350,14 @@ print(d.get('verdict','error'), d.get('confidence','?'), d.get('re_audit',False)
     log "  Verdict: $v (confidence: $c) | re-audit: $ra | learnings: $lc | tokens: ${pt}+${ct}"
 
     # Archive judge report to audit-reports branch
-    local judge_file="$JUDGE_DIR/${pkg}.json"
-    if [[ -f "$judge_file" ]]; then
-        (
-            flock -x 200
-            archive_judge_report "$pkg" "$judge_file"
-        ) 200>"$LOCK_FILE"
+    if ! $NO_ARCHIVE; then
+        local judge_file="$JUDGE_DIR/${pkg}.json"
+        if [[ -f "$judge_file" ]]; then
+            (
+                flock -x 200
+                archive_judge_report "$pkg" "$judge_file"
+            ) 200>"$LOCK_FILE"
+        fi
     fi
 
     # Re-audit if recommended and --re-audit flag is set
