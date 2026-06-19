@@ -44,6 +44,18 @@ mkdir -p "$JUDGE_DIR"
 
 log() { echo "[$(date '+%H:%M:%S')] $*"; }
 
+# Fetch pricing once at startup, pass to Python via env
+_PRICING_JSON=$(python3 -c "
+import requests, json, sys
+try:
+    r = requests.get('https://openrouter.ai/api/v1/models', timeout=10)
+    pricing = {m['id']: m.get('pricing', {}) for m in r.json().get('data', [])}
+    print(json.dumps(pricing))
+except Exception:
+    print('{}')
+" 2>/dev/null)
+export _PRICING_JSON
+
 # --- Extract frontmatter field from a report ---
 fm() {
     local file="$1" field="$2"
@@ -148,26 +160,15 @@ api_key = os.environ.get("OPENAI_API_KEY", "")
 
 try:
     from openai import OpenAI
-    import requests
 except ImportError:
-    print(json.dumps({"error": "openai or requests package not installed"}))
+    print(json.dumps({"error": "openai package not installed"}))
     sys.exit(1)
 
-# Fetch model pricing from OpenRouter (cached for the process lifetime)
-_pricing_cache = {}
-def _fetch_pricing():
-    if _pricing_cache:
-        return _pricing_cache
-    try:
-        r = requests.get("https://openrouter.ai/api/v1/models", timeout=10)
-        for m in r.json().get("data", []):
-            _pricing_cache[m["id"]] = m.get("pricing", {})
-    except Exception:
-        pass
-    return _pricing_cache
+# Use pre-fetched pricing from environment
+_pricing = json.loads(os.environ.get("_PRICING_JSON", "{}"))
 
 def get_model_cost(model, prompt_tokens, completion_tokens):
-    pricing = _fetch_pricing().get(model, {})
+    pricing = _pricing.get(model, {})
     if not pricing:
         return None
     p_cost = float(pricing.get("prompt", 0)) * prompt_tokens
