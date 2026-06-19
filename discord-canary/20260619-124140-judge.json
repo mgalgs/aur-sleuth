@@ -1,0 +1,26 @@
+{
+  "package": "discord-canary",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The flagged launcher behavior is Discord's standard update mechanism, not malicious. It executes at runtime, not during package build/install which is our security boundary. Both models agree all build/install scripts are safe.",
+  "disagreement_analysis": "Qwen misinterpreted Discord's standard update mechanism in discord-canary launcher as a supply-chain risk. Deepseek correctly contextualized it as normal application behavior.",
+  "coverage_issues": [],
+  "false_positives": [
+    "Qwen's 'unsafe' verdict on discord-canary: Flags standard application auto-update behavior that runs post-installation, not during AUR build process."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Improve scope awareness: Enhance prompts to clarify AUR security boundaries (build/install hooks only), explicitly excluding application runtime behavior.",
+    "Prioritize file review: Models should focus first on PKGBUILD, .install scripts, and any executed hooks before reviewing application binaries.",
+    "Reduce false positives: Train models to distinguish between build-time risks vs. application design patterns like auto-updaters.",
+    "Handling disagreements: Implement cross-model validation for conflicting verdicts, especially for common patterns like updaters."
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 7332,
+    "completion_tokens": 1541,
+    "cost": 0.0089849
+  }
+}
