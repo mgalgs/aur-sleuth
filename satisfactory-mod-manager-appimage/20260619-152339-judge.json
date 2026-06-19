@@ -1,0 +1,30 @@
+{
+  "package": "satisfactory-mod-manager-appimage",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Both models agree the PKGBUILD uses trusted sources with pinned checksums and contains only standard AppImage packaging operations. LICENSE is verified as standard GPLv3 text.",
+  "disagreement_analysis": null,
+  "coverage_issues": [
+    "Neither model reviewed the AppImage binary itself, which executes at runtime and could contain malicious behavior",
+    "No review of extracted AppImage contents (e.g. .desktop files, icons) modified in prepare()/package()"
+  ],
+  "false_positives": [],
+  "false_negatives": [
+    "AppImage binary analysis gap: Models didn't assess the actual executable despite it being the primary payload",
+    "Extraction safety: AppImage --appimage-extract could theoretically execute code during extraction (though low risk for official builds)"
+  ],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Prioritize executable binaries when present - especially for AppImage/Flatpak packages",
+    "Improve handling of extracted payloads: Files created during build functions need review",
+    "Add binary analysis caveat to reports when executables aren't inspected",
+    "Prompt models to explicitly acknowledge/justify skipped binary analysis"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 3463,
+    "completion_tokens": 1925,
+    "cost": 0.007236600000000001
+  }
+}
