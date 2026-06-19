@@ -382,15 +382,16 @@ do_reaudit() {
         re_result=$(fm "$re_report" result)
         log "  Re-audit result: $re_result"
 
-        # Archive the audit report
-        (
+        # Archive the audit report and capture the stored path
+        local archive_output
+        archive_output=$(
             flock -x 200
             bash bench/archive-report.sh "$pkg" "$re_report"
         ) 200>"$LOCK_FILE"
 
-        # Determine the archived filename for the reference
-        local archived_filename
-        archived_filename="$(date -u +%Y%m%d-%H%M%S)-${audit_model_slug}.md"
+        # Parse actual filename from archive output ("Stored: audit-reports:<pkg>/<filename>")
+        local archived_path
+        archived_path=$(echo "$archive_output" | grep -oP 'Stored: audit-reports:\K.*' || echo "")
 
         # Update judge report with re-audit metadata
         if [[ -f "$judge_file" ]]; then
@@ -401,7 +402,7 @@ data = json.load(open(f))
 data['reaudit_date'] = '$(date -u +%Y-%m-%dT%H:%M:%SZ)'
 data['reaudit_model'] = '$AUDIT_MODEL'
 data['reaudit_result'] = '$re_result'
-data['reaudit_report'] = '${pkg}/${archived_filename}'
+data['reaudit_report'] = '${archived_path}'
 json.dump(data, open(f, 'w'), indent=2)
 "
             # Re-archive updated judge report
