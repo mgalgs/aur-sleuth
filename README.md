@@ -27,6 +27,10 @@ Set `AUDIT_FAILURE_FATAL=false` (see "Configuration" section below) if you just 
 to see the audit results but you *don't* want to block the actual install (in case of
 high rate of false positives -- highly model dependent).
 
+## Dashboard
+
+Browse audit results at **[mgalgs.io/aur-sleuth](https://mgalgs.io/aur-sleuth/)** — a static dashboard generated from the [`audit-reports`](https://github.com/mgalgs/aur-sleuth/tree/audit-reports) branch.
+
 ## Demo
 
 Here it is in action catching the shenanigans from the infamous [malicious `google-chrome-stable` package](https://www.reddit.com/r/archlinux/comments/1me632m/is_this_another_aur_infect_package/):
