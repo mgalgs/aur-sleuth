@@ -56,6 +56,43 @@ except Exception:
 " 2>/dev/null)
 export _PRICING_JSON
 
+# --- Archive judge report to audit-reports branch ---
+REPORTS_BRANCH="audit-reports"
+
+archive_judge_report() {
+    local pkg="$1" judge_file="$2"
+    local filename
+    filename="$(date -u +%Y%m%d-%H%M%S)-judge.json"
+
+    local tmpindex
+    tmpindex="$(mktemp)"
+    rm -f "$tmpindex"
+
+    if git rev-parse --verify "$REPORTS_BRANCH" &>/dev/null; then
+        GIT_INDEX_FILE="$tmpindex" git read-tree "$REPORTS_BRANCH"
+    fi
+
+    local blob_hash
+    blob_hash="$(git hash-object -w "$judge_file")"
+    GIT_INDEX_FILE="$tmpindex" git update-index --add \
+        --cacheinfo "100644,${blob_hash},${pkg}/${filename}"
+    local tree_hash
+    tree_hash="$(GIT_INDEX_FILE="$tmpindex" git write-tree)"
+
+    local parent_args=()
+    if git rev-parse --verify "$REPORTS_BRANCH" &>/dev/null; then
+        parent_args=(-p "$REPORTS_BRANCH")
+    fi
+
+    local commit_hash
+    commit_hash="$(git commit-tree "$tree_hash" \
+        "${parent_args[@]}" \
+        -m "judge: ${pkg} ($(python3 -c "import json; print(json.load(open('$judge_file')).get('correct_verdict','unknown'))"))")"
+
+    git update-ref "refs/heads/${REPORTS_BRANCH}" "$commit_hash"
+    rm -f "$tmpindex"
+}
+
 # --- Extract frontmatter field from a report ---
 fm() {
     local file="$1" field="$2"
@@ -304,6 +341,15 @@ print(d.get('verdict','error'), d.get('confidence','?'), d.get('re_audit',False)
 ")
 
     log "  Verdict: $v (confidence: $c) | re-audit: $ra | learnings: $lc | tokens: ${pt}+${ct}"
+
+    # Archive judge report to audit-reports branch
+    local judge_file="$JUDGE_DIR/${pkg}.json"
+    if [[ -f "$judge_file" ]]; then
+        (
+            flock -x 200
+            archive_judge_report "$pkg" "$judge_file"
+        ) 200>"$LOCK_FILE"
+    fi
 
     # Re-audit if recommended and --re-audit flag is set
     if $RE_AUDIT && [[ "$ra" == "True" ]]; then
