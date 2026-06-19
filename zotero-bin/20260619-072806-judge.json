@@ -1,0 +1,29 @@
+{
+  "package": "zotero-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD downloads official Zotero binaries from www.zotero.org over HTTPS with verified checksums and performs only benign packaging operations (rename, install, sed to optimize launcher, icon setup). Critically, the PKGBUILD does NOT install the bundled src/Zotero_linux-x86_64/zotero.desktop \u2014 it ships its own top-level zotero.desktop which uses the safe 'Exec=/usr/bin/zotero -url %U' invocation (reviewed as SAFE). The qwen finding flags the upstream-bundled zotero.desktop's relative-path Exec line, but that file is part of Zotero's own upstream tarball, not something executed during makepkg, and is the standard relocatable-launcher pattern Mozilla/Zotero ship. It is not an install-time risk and is replaced by the packaged desktop file. This is a false positive.",
+  "disagreement_analysis": "deepseek skipped entirely because makepkg --nobuild failed to download sources (likely a transient/network issue), so it reviewed 0 files and produced no verdict. qwen reviewed all 12 files and flagged the upstream-bundled src/.../zotero.desktop as UNSAFE due to its dynamic %k-based Exec line. The disagreement is really skip-vs-reviewed plus a single contested finding, not two substantive opposing verdicts.",
+  "coverage_issues": [
+    "deepseek-v4-flash reviewed 0 files due to makepkg source download failure; provided no usable audit coverage.",
+    "Neither model explicitly cross-checked which desktop file the PKGBUILD actually installs (the top-level zotero.desktop) versus the upstream-bundled one \u2014 this distinction is decisive for adjudicating the flagged finding."
+  ],
+  "false_positives": [
+    "qwen UNSAFE on src/Zotero_linux-x86_64/zotero.desktop: the relative-path %k-based Exec is upstream Zotero's standard relocatable launcher and is not the desktop file installed by PKGBUILD (the packaged zotero.desktop uses /usr/bin/zotero). It executes nothing during makepkg/install, so it poses no packaging-time risk. The 'attacker plants malicious binary' scenario already presupposes attacker write access and is not introduced by this package."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "When a model flags a file inside the extracted source tree (src/), the tool should verify whether PKGBUILD's package()/prepare()/install actually deploys or executes that file before escalating to UNSAFE. Upstream-bundled artifacts that are not installed/executed at build time should be treated as out-of-scope or low-severity.",
+    "Desktop .desktop Exec lines that run only at user GUI-launch time (not during makepkg) are not install-time threats; the prompt should clarify that runtime-launch behavior of upstream binaries is generally out of audit scope unless the PKGBUILD modifies/installs it.",
+    "makepkg source-download failures should trigger a retry or fallback (e.g., proceed with static file review of the cloned repo) rather than a full skip, since transient network errors should not block coverage \u2014 as shown by qwen successfully reviewing the same package.",
+    "Add adjudication logic to distinguish 'two genuinely conflicting verdicts' from 'one skip + one reviewed', so disagreement triggers are not falsely raised by skipped audits."
+  ],
+  "_judge_usage": {
+    "model": "anthropic/claude-opus-4.8",
+    "prompt_tokens": 13516,
+    "completion_tokens": 1243,
+    "cost": 0.098655
+  }
+}
