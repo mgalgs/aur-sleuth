@@ -1,0 +1,24 @@
+{
+  "package": "yandex-messenger",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD is a simple binary wrapper that downloads a precompiled .deb from Yandex's official download infrastructure (downloader.disk.yandex.ru), verifies it via a b2sum checksum (not SKIP), and the package() function extracts it with bsdtar and creates a symlink. There is no pkgver() function, no command substitution, no .install script, no prepare/build functions, and nothing executes during makepkg sourcing beyond the static URL fetch. Both models reviewed the only relevant text file (PKGBUILD) and reached consistent conclusions. The .deb binary is correctly skipped as a binary blob \u2014 its contents are upstream proprietary software whose trust derives from the official source domain and checksum, which is the normal AUR pattern for binary repackaging.",
+  "disagreement_analysis": null,
+  "coverage_issues": [],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "The 'shallow' trigger (1 file reviewed) is misleading here: the package legitimately contains only 2 files (PKGBUILD + binary .deb), and the .deb is correctly unanalyzable text-wise. File count alone is a poor proxy for audit depth \u2014 the trigger should account for total reviewable text files in the repo, not just count reviewed.",
+    "Both models correctly handled the binary-wrapper pattern: trust anchored on official upstream domain + non-SKIP checksum. This is the right heuristic and should be reinforced in prompts as a recognized safe pattern.",
+    "Worth noting (not a finding): trust here ultimately rests on the binary .deb contents which neither model can inspect. For binary-only AUR packages, the tool could surface an explicit 'trust delegated to upstream binary; not statically verified' caveat rather than an unqualified 'safe' to set accurate user expectations.",
+    "No install hooks were present; models correctly noted the absence of pkgver(), prepare(), build(), and .install scripts, demonstrating appropriate scoping to makepkg-executed code."
+  ],
+  "_judge_usage": {
+    "model": "anthropic/claude-opus-4.8",
+    "prompt_tokens": 5315,
+    "completion_tokens": 769,
+    "cost": 0.04580000000000001
+  }
+}
