@@ -10,7 +10,7 @@
 #   - Error reports (unknown result, zero cost)
 # With --all, also reviews packages where models agree (routine coverage check).
 #
-# Judge reports are written to /tmp/aur-sleuth/judge/<pkg>.json
+# Judge reports are written to $AUR_SLEUTH_DATA_DIR/judge/<pkg>.json (default: ~/aur-sleuth-data/judge/)
 set -euo pipefail
 
 cd "$(dirname "$0")/.."

@@ -109,13 +109,15 @@ for model in "${MODELS[@]}"; do
 
         log "  [$pkg_idx/$total_packages] Judging $pkg..."
 
-        if bash bench/judge.sh \
+        if output=$(bash bench/judge.sh \
             --package "$pkg" \
             --judge-model "$model" \
             --judge-dir "$model_dir" \
-            --no-archive 2>&1 | tail -3; then
+            --no-archive 2>&1); then
+            echo "$output" | tail -3
             echo "{\"model\":\"$model\",\"package\":\"$pkg\",\"ok\":true}" >> "$RESULTS_FILE"
         else
+            echo "$output" | tail -3
             log "  ERROR: Failed for $pkg"
             echo "{\"model\":\"$model\",\"package\":\"$pkg\",\"ok\":false}" >> "$RESULTS_FILE"
         fi
