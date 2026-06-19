@@ -1,0 +1,33 @@
+{
+  "package": "posthog-cli",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD builds a Rust CLI from a pinned, checksum-verified GitHub release tarball. The build/package functions only run standard cargo commands (fetch --locked, build --frozen, test --frozen) and install the binary and LICENSE. None of the files flagged as 'unsafe' by qwen3 (.claude/hooks/*.sh, .flox/env/direnv-setup.sh) are referenced or executed by any PKGBUILD function (prepare/build/check/package) or an .install script. They are developer environment / CI / Claude-agent tooling that ships in the upstream source tree but never executes during makepkg. Per the AUR audit threat model, they are out of scope. The curl|bash and binary-download patterns qwen3 identified are real anti-patterns in those scripts, but they only run if a developer explicitly invokes the flox/Claude tooling \u2014 not when building the package.",
+  "disagreement_analysis": "deepseek-v4-flash selected and reviewed only the bin/ build helper scripts (the ones plausibly closest to build relevance) and correctly concluded safe. qwen3 selected the .claude/hooks and .flox/env shell scripts, found genuine curl|bash and unverified-binary-download behavior, and ruled unsafe. The disagreement is driven by (a) different file selection and (b) qwen3 failing to apply the AUR threat model \u2014 it flagged dev tooling that is never invoked by the PKGBUILD as if it executed during package build/install.",
+  "coverage_issues": [
+    "Neither model verified the critical question explicitly: whether any .install file exists, and whether PKGBUILD's prepare/build/package functions invoke any of the .claude/.flox scripts. The verdict hinges on this, yet neither model traced the execution path from PKGBUILD to those scripts.",
+    "deepseek did not review the .claude/hooks or .flox scripts at all, so it never even saw the curl|bash patterns (got the right answer for incomplete reasons).",
+    "qwen3 did not review the bin/ codegen scripts that deepseek covered, so coverage between the two models was complementary but neither was comprehensive."
+  ],
+  "false_positives": [
+    "qwen3 'direnv-setup.sh executes curl|bash' \u2014 real anti-pattern but the file is .flox dev-environment tooling never invoked by makepkg; out of scope for AUR build safety.",
+    "qwen3 'install-tool-versions.sh downloads/replaces uv binary' \u2014 Claude-agent hook, not referenced by PKGBUILD; out of scope.",
+    "qwen3 'setup-cloud.sh executes unverified local hook; cloud backdoor risk' \u2014 gated on CLAUDE_CODE_REMOTE env var and only runs inside the upstream Claude/CI sandbox, not during package build; overreaction calling it a 'backdoor'."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Audit models must explicitly trace whether a flagged script is reachable from PKGBUILD functions (prepare/build/check/package) or .install hooks before assigning an unsafe verdict. Reachability, not mere presence of a dangerous pattern, determines AUR risk.",
+    "The prompt should reinforce that source-tree dev tooling (.claude/, .flox/, CI scripts, editor configs) is NOT in scope unless referenced by build/package/install \u2014 qwen3 ignored this guidance and over-escalated.",
+    "File selection should be normalized: a single audit run ideally covers BOTH the build-relevant bin/ scripts AND confirms the non-execution of dev tooling, rather than each model sampling a disjoint subset. Consider always forcing review of PKGBUILD + any .install + a check for whether selected scripts are invoked.",
+    "When a model flags an out-of-scope dangerous pattern, the verdict should be downgraded to a 'note/informational' finding rather than 'unsafe', to avoid false-positive-driven disagreements like this one.",
+    "Add a deterministic pre-check: grep PKGBUILD and .install for references to any source-tree script paths; surface this to the model so it can reason about reachability rather than guessing."
+  ],
+  "_judge_usage": {
+    "model": "anthropic/claude-opus-4.8",
+    "prompt_tokens": 24528,
+    "completion_tokens": 1491,
+    "cost": 0.15991500000000003
+  }
+}
