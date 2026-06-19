@@ -1,0 +1,38 @@
+{
+  "package": "ruffle-selfhosted-nightly",
+  "correct_verdict": "inconclusive",
+  "confidence": "high",
+  "reasoning": "Both models skipped the only reviewed file (PKGBUILD) due to a false 'binary file' detection. No content was actually analyzed by either model \u2014 0 files reviewed, 0 tokens consumed. The PKGBUILD is almost certainly a normal text file that was misclassified as binary, likely due to an encoding heuristic failure (e.g., non-ASCII characters, BOM, or null-byte detection edge case). Without any actual review of the PKGBUILD or accompanying scripts/install hooks, no safety determination can be made.",
+  "disagreement_analysis": "There is no disagreement \u2014 both models produced identical SKIPPED verdicts due to the same tooling-level binary-file misdetection, not differing reasoning.",
+  "coverage_issues": [
+    "PKGBUILD was never reviewed (misclassified as binary)",
+    "No .install hooks, source files, or auxiliary scripts were enumerated or reviewed \u2014 the tool stopped at the initial PKGBUILD gate",
+    "Entire package effectively unaudited (0 files reviewed across both models)"
+  ],
+  "false_positives": [
+    "'Skipping binary file: PKGBUILD' \u2014 PKGBUILDs are shell scripts (text); this is a tool-level false positive in the file-type classifier, not a security finding"
+  ],
+  "false_negatives": [
+    "Unknown \u2014 because nothing was reviewed, any real risk in PKGBUILD (network fetches, sources= URLs, build()/package() commands, .install scripts) would be entirely missed"
+  ],
+  "re_audit_recommended": true,
+  "re_audit_focus": [
+    "PKGBUILD (force text decoding / fix binary-detection heuristic before audit)",
+    "Any .install scripts",
+    "sources= array URLs and integrity (this is a 'nightly' package \u2014 likely pulls remote artifacts at build time)",
+    "build(), prepare(), package(), check() functions for download/exec patterns"
+  ],
+  "learnings": [
+    "The binary-file detection heuristic is misclassifying PKGBUILD (a known text/shell file). PKGBUILD and .install files should be whitelisted as text and never skipped as binary.",
+    "When the initial PKGBUILD gate fails due to a SKIP (not a security concern), the tool should retry with forced UTF-8/latin-1 decoding rather than aborting the entire audit.",
+    "A skip on the critical gating file should not silently end the audit with 0 files reviewed \u2014 this should escalate to mandatory re-audit, which the trigger correctly caught.",
+    "'Nightly' self-hosted packages commonly fetch remote binaries at build time; the tool should flag these for extra scrutiny once content is actually readable.",
+    "Investigate whether the PKGBUILD contains a BOM, null bytes, or unusual encoding that trips the classifier \u2014 worth logging the specific bytes that triggered 'binary' detection for diagnosis."
+  ],
+  "_judge_usage": {
+    "model": "anthropic/claude-opus-4.8",
+    "prompt_tokens": 2929,
+    "completion_tokens": 1054,
+    "cost": 0.040995000000000004
+  }
+}
