@@ -1,0 +1,24 @@
+{
+  "package": "beeper-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Both models reviewed the PKGBUILD, which is the only text/script file in this package and the sole thing that executes during makepkg. The PKGBUILD downloads a single AppImage from Beeper's official domain (beeper-desktop.download.beeper.com) with a pinned SHA-256 checksum, extracts it, patches the AppRun script for path relocation, and noops a registerLinuxConfig export via sed. No network calls beyond the verified source, no eval/obfuscation, no install hooks, and all filesystem operations are scoped to standard install paths (/opt/beeper, /usr/bin). The binary AppImage cannot be statically reviewed and was appropriately skipped \u2014 its contents are upstream-controlled and checksum-pinned, which is the standard trust model for -bin packages.",
+  "disagreement_analysis": null,
+  "coverage_issues": [],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "The 'shallow' trigger (1 file reviewed) is misleading here: the package only contains a PKGBUILD and a binary AppImage. Reviewing 1 of 2 files where the other is an unreviewable binary is actually complete coverage. The trigger heuristic should account for whether skipped files are binaries with no static analysis value before flagging shallowness.",
+    "Both models correctly identified that build()/package() functions are out of scope for the narrow makepkg gate but still reviewed their content in the second pass \u2014 good behavior that should be reinforced.",
+    "For -bin packages, the binary blob is inherently uninspectable; the meaningful trust anchor is the checksum + source domain. The tool could explicitly note this trust model rather than treating the skipped binary as a coverage gap.",
+    "The sed patch noop'ing registerLinuxConfig is a slightly unusual modification; future audits could benefit from a flag noting 'upstream behavior modified' even when benign, to aid human reviewers without raising it to unsafe."
+  ],
+  "_judge_usage": {
+    "model": "anthropic/claude-opus-4.8",
+    "prompt_tokens": 5368,
+    "completion_tokens": 741,
+    "cost": 0.045365
+  }
+}
