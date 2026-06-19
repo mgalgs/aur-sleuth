@@ -1,0 +1,31 @@
+{
+  "package": "ttf-mac-fonts",
+  "correct_verdict": "safe",
+  "confidence": "medium",
+  "reasoning": "Both models independently audited the PKGBUILD (the only file requiring evaluation in this VCS-based font package) and reached the same SAFE verdict with sound reasoning. The PKGBUILD fetches fonts via SVN from SourceForge (SKIP checksum, normal for VCS) and a license PDF from Apple (HTTP but with a valid sha256sum). The pkgver() function only runs 'svn info' on the local checkout \u2014 a standard pattern. No build()/package()/prepare() code could be reviewed because makepkg --nobuild failed to download sources (likely a dead/stale SVN source from a 2010-era MacBuntu project), so the audit was marked 'skipped' rather than fully completed. The top-level sourcing is safe, but the package() function and any install logic were never inspected.",
+  "disagreement_analysis": "No substantive disagreement. Both models agreed the PKGBUILD sourcing is safe and both skipped for the same reason (source download failure). The 'shallow' trigger reflects that 0 files beyond the initial PKGBUILD gate were reviewed, not a verdict conflict.",
+  "coverage_issues": [
+    "Neither model reviewed package()/build() function bodies because makepkg --nobuild failed to fetch sources, leaving the actual install logic unaudited.",
+    "No .install hook or supplementary files were enumerated/confirmed absent \u2014 the reports do not explicitly state whether a .install file exists in the repo."
+  ],
+  "false_positives": [],
+  "false_negatives": [
+    "Potential risk in package() function not assessed (e.g., where/how fonts are installed, any chmod/symlink/post-install actions) since source download blocked the agent stage. For a simple font package this is low risk, but it remains unverified."
+  ],
+  "re_audit_recommended": false,
+  "re_audit_focus": [
+    "If re-attempted: the package() function and any .install hook; verify font installation paths and absence of post-install scripts."
+  ],
+  "learnings": [
+    "Source-download failures (common for old/dead VCS upstreams like this 2010 MacBuntu SVN) should still allow a static review of all in-repo files (full PKGBUILD body, .install scripts) rather than skipping entirely \u2014 the agent stage depends on downloaded sources but the local repo files are always available.",
+    "The 'shallow (0 files reviewed)' trigger conflates 'agent could not run' with 'nothing was reviewed'; the initial PKGBUILD gate audit was actually substantive and should be credited as a partial review.",
+    "For font packages with mutable/dead VCS sources, the tool should fall back to static analysis of PKGBUILD functions even when makepkg --nobuild fails, so package()/install logic isn't left entirely unreviewed.",
+    "Both models' reasoning quality was good and consistent; the limitation was infrastructure (dead source), not model capability \u2014 a stronger model would hit the same download wall."
+  ],
+  "_judge_usage": {
+    "model": "anthropic/claude-opus-4.8",
+    "prompt_tokens": 3763,
+    "completion_tokens": 1044,
+    "cost": 0.044915000000000004
+  }
+}
