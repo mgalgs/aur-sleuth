@@ -1,0 +1,31 @@
+{
+  "package": "windsurf-next",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD downloads a .deb from windsurf-stable.codeiumdata.com, which is the legitimate official distribution host for Windsurf (formerly Codeium). The random-looking path segment is a standard pattern for vendor APT repositories (and is consistent across the official upstream). Sources are pinned with SHA256 checksums and fetched over HTTPS. The prepare()/package() functions perform standard .deb extraction and installation with no malicious commands. The deepseek model reviewed 12 files including all shell scripts and key extension JS files, finding only standard VS Code fork behavior. The qwen model's UNSAFE verdict is a false positive based on misunderstanding the official upstream domain and conflating 'proprietary closed-source binary repackaging' with malice.",
+  "disagreement_analysis": "qwen3 flagged the package UNSAFE solely on the basis that the source URL contains a random-looking path segment and the codeiumdata.com domain, interpreting these as 'obfuscation' and a trust-boundary red flag. This is a misjudgment: codeiumdata.com is the legitimate Codeium/Windsurf distribution domain, and tokenized APT repo paths are normal. qwen also only reviewed 2 files and never inspected the extracted contents, while deepseek performed a thorough 12-file review and correctly identified all content as standard VS Code fork artifacts.",
+  "coverage_issues": [
+    "qwen3 reviewed only 2 files (PKGBUILD + one .desktop) and skipped all extracted source/scripts, aborting additional review after marking PKGBUILD unsafe.",
+    "Neither model can verify the contents of the prebuilt binary itself (inherent limitation of binary repackaging), but this is not a package-specific defect."
+  ],
+  "false_positives": [
+    "qwen3: 'Suspicious binary source from obfuscated third-party domain' \u2014 codeiumdata.com is the official Windsurf/Codeium distribution host and the tokenized path is a normal vendor APT repo structure, not obfuscation.",
+    "qwen3: 'supply-chain risk because auto-generated via GitHub Actions and proprietary binary' \u2014 repackaging an official upstream binary with pinned checksums over HTTPS is standard and accepted AUR practice (cf. many -bin packages)."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models should be instructed that vendor distribution domains with tokenized/random-looking path segments are common and NOT inherently 'obfuscation'; verdicts should not hinge on URL aesthetics alone.",
+    "Repackaging an official upstream prebuilt binary (.deb) with pinned SHA256 checksums over HTTPS is normal AUR practice and should not by itself constitute an UNSAFE verdict \u2014 distinguish 'closed-source / unverifiable' from 'malicious'.",
+    "When a model marks a required file UNSAFE early it aborts further review (qwen did 2 files); the tool should still complete content review to avoid premature, under-informed verdicts.",
+    "Cross-model token/cost disparity is telling: qwen used 10k tokens / 2 files vs deepseek 444k / 12 files \u2014 extremely shallow audits should be weighted lower in adjudication.",
+    "Add a known-good vendor domain allowlist or context hint (e.g., codeiumdata.com = Windsurf upstream) to reduce trust-boundary false positives."
+  ],
+  "_judge_usage": {
+    "model": "anthropic/claude-opus-4.8",
+    "prompt_tokens": 16501,
+    "completion_tokens": 1246,
+    "cost": 0.113655
+  }
+}
