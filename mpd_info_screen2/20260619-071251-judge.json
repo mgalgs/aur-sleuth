@@ -1,0 +1,30 @@
+{
+  "package": "mpd_info_screen2",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The qwen model performed a thorough review of all relevant files. Its single UNSAFE finding is on CMakeLists.txt's download-and-build of raylib. However, this is a false positive in two important respects. First, the PKGBUILD's prepare() copies the pre-downloaded, checksummed raylib-6.0.tar.gz (verified against sha256sums in the PKGBUILD) into the third_party directory, so the CMake/Makefile download-if-not-exists logic does not actually execute during makepkg \u2014 the file already exists. Second, even when the download path is taken, the tarball is verified against a hardcoded SHA256 checksum (2b3ee1e2120c7a...) before extraction, which is integrity protection. The model's TOCTOU concern (checksum 'in the same command chain could be bypassed if interrupted') is overstated: an interrupted build simply fails, and the pinned checksum prevents tampered content from being used. This is a standard, acceptable dependency-bundling pattern. The deepseek report is non-substantive (skipped due to source download failure). All actual application source files (main.cc, mpd_client.cc, args.cc, mpd_display.cc, helpers.cc, signal_handler.cc) and patches were reviewed and found benign with accurate reasoning.",
+  "disagreement_analysis": "deepseek skipped entirely because 'makepkg --nobuild failed, unable to download sources' \u2014 an infrastructure/network failure, not a security signal. qwen successfully downloaded sources and reviewed 11 files, flagging CMakeLists.txt as unsafe. The disagreement is therefore between a non-verdict (skip due to environment failure) and a substantive verdict containing a likely false positive on a normal checksummed-download build pattern.",
+  "coverage_issues": [
+    "deepseek reviewed 0 files (only the gate-level PKGBUILD audit) due to source download failure, providing no real coverage.",
+    "raylib-6.0.tar.gz was skipped as a binary by qwen \u2014 acceptable since it is checksum-verified in the PKGBUILD against a known upstream release, but the bundled-library contents themselves were not inspected."
+  ],
+  "false_positives": [
+    "CMakeLists.txt UNSAFE verdict: the raylib download is gated on the file not already existing (PKGBUILD prepare() pre-supplies the checksummed tarball, so no download occurs during makepkg) and is SHA256-verified before use. The TOCTOU/interrupted-build argument does not yield code execution of tampered content. This is standard vendored-dependency packaging, not a supply-chain vulnerability.",
+    "CMakeLists.txt 'git describe --long --tags' concern: running git for version string generation against the source tree is benign and normal; the hypothetical submodule scenario is speculative and not applicable to this AUR build."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "When a model flags a build script's download-and-build pattern, the tool should cross-reference whether the PKGBUILD source array already supplies the artifact with a verified sha256sum and whether prepare() pre-places it \u2014 this frequently turns 'download during build' findings into false positives.",
+    "Models should weight the presence of a hardcoded SHA256 verification before extraction as strong mitigation; 'checksum after download in the same command chain' is not a meaningful TOCTOU vector when content is pinned by hash.",
+    "A 'skipped' result caused purely by makepkg source-download/network failure is an environment failure, not evidence of risk, and should not be conflated with a security verdict during adjudication \u2014 consider retrying source fetch before treating it as a disagreement.",
+    "The tool should distinguish 'unsafe (malicious/exfiltration)' from 'packaging hygiene concern (non-reproducible/unpinned download)'; the latter, when checksummed, generally does not warrant a DO NOT INSTALL verdict for an AUR package."
+  ],
+  "_judge_usage": {
+    "model": "anthropic/claude-opus-4.8",
+    "prompt_tokens": 13816,
+    "completion_tokens": 1406,
+    "cost": 0.10423
+  }
+}
