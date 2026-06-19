@@ -1,0 +1,36 @@
+{
+  "package": "emby-server-beta",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The unsafe verdict was based on a frontend tracking link irrelevant to build/install security. PKGBUILD and install scripts show no malicious behavior during makepkg execution.",
+  "disagreement_analysis": "qwen incorrectly flagged a frontend tracking link as a supply-chain risk, while deepseek correctly focused on build/install security.",
+  "coverage_issues": [
+    "Neither model reviewed the FFmpeg bundle (critical binary executed at runtime)",
+    "Qwen missed PKGBUILD's prepare()/package() implementation details"
+  ],
+  "false_positives": [
+    "qwen's 'unsafe' verdict on libraryoptionseditor.js: Tracking link is an upstream privacy issue, not a build/install risk"
+  ],
+  "false_negatives": [
+    "Both missed potential runtime risks in un-reviewed binaries (FFmpeg)",
+    "Deepseek didn't verify service file's supplementaryGroups duplication impact"
+  ],
+  "re_audit_recommended": true,
+  "re_audit_focus": [
+    "FFmpeg binary (src/ffmpeg/ffmpeg)",
+    "PKGBUILD prepare()/package() functions",
+    "emby-server binary runtime behavior"
+  ],
+  "learnings": [
+    "Prioritize binaries executed at runtime over frontend code",
+    "Improve model training on AUR-specific threat scope (build/install vs runtime)",
+    "Enforce review of all PKGBUILD functions and installed binaries",
+    "Add binary analysis capability for compiled dependencies"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 12947,
+    "completion_tokens": 1582,
+    "cost": 0.013017899999999999
+  }
+}
