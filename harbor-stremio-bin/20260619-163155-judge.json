@@ -1,0 +1,40 @@
+{
+  "package": "harbor-stremio-bin",
+  "correct_verdict": "inconclusive",
+  "confidence": "medium",
+  "reasoning": "All audits failed at source download stage (makepkg --nobuild), preventing review of critical files. PKGBUILD appears safe but actual binary/install scripts couldn't be examined.",
+  "disagreement_analysis": null,
+  "coverage_issues": [
+    "Source .deb file not reviewed due to download failure",
+    "Package() function and install hooks not audited",
+    "Extracted binary contents completely unchecked"
+  ],
+  "false_positives": [],
+  "false_negatives": [
+    "Potential malicious payload in .deb binary",
+    "Risks in package() function handling extracted files",
+    "Missing verification of GitHub source authenticity"
+  ],
+  "re_audit_recommended": true,
+  "re_audit_focus": [
+    "Source .deb file contents",
+    "PKGBUILD package() function",
+    "Download integrity (retry with fixed URL)"
+  ],
+  "learnings": [
+    "Improve download resilience: Implement retries for transient network failures",
+    "Pre-audit source URL validation: Check GitHub release existence before audit",
+    "Fallback procedure: When source download fails, attempt manual inspection of PKGBUILD install logic",
+    "Prioritize binary inspection: For -bin packages, flag .deb/.zip as critical files even if extracted automatically"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 3449,
+    "completion_tokens": 1545,
+    "cost": 0.006276800000000001
+  },
+  "reaudit_date": "2026-06-19T16:31:55Z",
+  "reaudit_model": "anthropic/claude-sonnet-4.6",
+  "reaudit_result": "skipped",
+  "reaudit_report": "harbor-stremio-bin/20260619-163155-anthropic-claude-sonnet-4.6.md"
+}
