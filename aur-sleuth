@@ -23,6 +23,7 @@ import argparse
 import colorsys
 import concurrent.futures
 import configparser
+import datetime
 import html
 import json
 import logging
@@ -2095,6 +2096,94 @@ def do_agentic_audit(
     return required_audit_results + additional_audit_results
 
 
+def _write_json_metadata(
+    report_file: Path,
+    package_name: str,
+    pkgdir: Path,
+    model: str,
+    overall_status: SafeStatus,
+    audit_results: list,
+    results_by_status: dict,
+    llm_client: "LLMClient",
+    execution_time: float,
+):
+    """Prepend YAML frontmatter with audit metadata to the report file."""
+    try:
+        base_url = get_base_url()
+        provider = re.sub(r"https?://([^/]+).*", r"\1", base_url)
+
+        source_info = {}
+        try:
+            source_info = get_source_info(pkgdir)
+        except Exception:
+            pass
+
+        file_verdicts = []
+        for r in audit_results:
+            fname = str(r.file_path.relative_to(pkgdir)) if r.file_path else None
+            file_verdicts.append({
+                "file": fname,
+                "status": r.status.name.lower(),
+                "summary": r.summary,
+            })
+
+        prompt_tokens = sum(llm_client.prompt_tokens.values())
+        completion_tokens = sum(llm_client.completion_tokens.values())
+        total_cost = sum(llm_client.total_cost.values())
+        files_reviewed = len([
+            r for r in audit_results
+            if r.status in (SafeStatus.SAFE, SafeStatus.UNSAFE, SafeStatus.INCONCLUSIVE)
+            and r.file_path
+        ])
+        files_skipped = len(results_by_status.get(SafeStatus.SKIPPED, []))
+        sleuth_rev = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            capture_output=True, text=True,
+            cwd=Path(__file__).resolve().parent,
+        ).stdout.strip()
+        date_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        # Build YAML frontmatter by hand to avoid a PyYAML dependency
+        verdicts_yaml = ""
+        for v in file_verdicts:
+            f = v["file"] or "(package-level)"
+            verdicts_yaml += f"  - file: {f}\n    status: {v['status']}\n    summary: {_yaml_escape(v['summary'])}\n"
+
+        frontmatter = (
+            f"---\n"
+            f"package: {package_name}\n"
+            f"pkgver: {source_info.get('pkgver', '')}\n"
+            f"pkgrel: {source_info.get('pkgrel', '')}\n"
+            f"result: {overall_status.name.lower()}\n"
+            f"model: {model}\n"
+            f"provider: {provider}\n"
+            f"base_url: {base_url}\n"
+            f"aur_sleuth_rev: {sleuth_rev}\n"
+            f"prompt_tokens: {prompt_tokens}\n"
+            f"completion_tokens: {completion_tokens}\n"
+            f"total_tokens: {prompt_tokens + completion_tokens}\n"
+            f"cost: {total_cost}\n"
+            f"execution_time: {round(execution_time, 2)}\n"
+            f"files_reviewed: {files_reviewed}\n"
+            f"files_skipped: {files_skipped}\n"
+            f"date: {date_str}\n"
+            f"file_verdicts:\n{verdicts_yaml}"
+            f"---\n\n"
+        )
+
+        existing = report_file.read_text(encoding="utf-8")
+        report_file.write_text(frontmatter + existing, encoding="utf-8")
+    except Exception as e:
+        logger.warning("Failed to write report frontmatter: %s", e)
+
+
+def _yaml_escape(s: str) -> str:
+    """Escape a string for safe inline YAML value."""
+    if not s or any(c in s for c in ":#{}[]|>&*!%@`'\"\n"):
+        return '"' + s.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n") + '"'
+    return s
+
+
 def run_aur_sleuth_audit(
     tui: ConsoleUI,
     report: Report,
@@ -2162,6 +2251,13 @@ def run_aur_sleuth_audit(
             report.write("\nAudit Skips:\n")
             for skip in results_by_status[SafeStatus.SKIPPED]:
                 report.write(str(skip) + "\n")
+
+        # Write JSON metadata sidecar
+        _write_json_metadata(
+            report_file, package_name, pkgdir, model,
+            overall_status, audit_results, results_by_status,
+            llm_client, execution_time,
+        )
 
     return 0 if audit_ok else 1
 
