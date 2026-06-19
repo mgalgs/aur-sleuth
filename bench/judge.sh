@@ -2,7 +2,7 @@
 # Judge audit reports: detect disagreements, shallow coverage, and quality issues.
 # A high-intelligence "judge" model reviews reports and optionally triggers re-audits.
 #
-# Usage: judge.sh [--package PKG | --all] [--re-audit] [--judge-model MODEL] [--audit-model MODEL]
+# Usage: judge.sh [--package PKG | --all] [--re-audit] [--re-audit-pending] [--judge-model MODEL] [--audit-model MODEL]
 #
 # Triggers (automatic):
 #   - Result disagreement between models (safe vs unsafe)
@@ -32,12 +32,15 @@ while [[ $# -gt 0 ]]; do
         --package) PACKAGE="$2"; shift 2 ;;
         --all) ALL=true; shift ;;
         --re-audit) RE_AUDIT=true; shift ;;
+        --re-audit-pending) RE_AUDIT_PENDING=true; shift ;;
         --judge-model) JUDGE_MODEL="$2"; shift 2 ;;
         --audit-model) AUDIT_MODEL="$2"; shift 2 ;;
         --reports-dir) REPORTS_DIR="$2"; shift 2 ;;
         *) echo "Unknown arg: $1" >&2; exit 1 ;;
     esac
 done
+
+RE_AUDIT_PENDING="${RE_AUDIT_PENDING:-false}"
 
 AUDIT_MODEL="${AUDIT_MODEL:-$JUDGE_MODEL}"
 
@@ -354,31 +357,77 @@ print(d.get('verdict','error'), d.get('confidence','?'), d.get('re_audit',False)
 
     # Re-audit if recommended and --re-audit flag is set
     if $RE_AUDIT && [[ "$ra" == "True" ]]; then
-        log "  Re-auditing $pkg with $AUDIT_MODEL..."
-        local audit_model_slug="${AUDIT_MODEL//\//-}"
-        local report_dir="${REPORTS_DIR}/${audit_model_slug}"
-        mkdir -p "$report_dir"
+        do_reaudit "$pkg"
+    fi
+}
 
-        AUDIT_FAILURE_FATAL=true AUR_SLEUTH_ASCII_ICONS=1 \
-            OPENAI_MODEL="$AUDIT_MODEL" \
-            AUR_SLEUTH_REPORT_DIR="$report_dir" \
-            ./aur-sleuth --output plain "$pkg" 2>&1 || true
+# --- Run re-audit and update judge report with results ---
+do_reaudit() {
+    local pkg="$1"
+    local judge_file="$JUDGE_DIR/${pkg}.json"
 
-        local re_report="${report_dir}/aur-sleuth-report-${pkg}.txt"
-        if [[ -f "$re_report" ]]; then
-            local re_result
-            re_result=$(fm "$re_report" result)
-            log "  Re-audit result: $re_result"
+    log "  Re-auditing $pkg with $AUDIT_MODEL..."
+    local audit_model_slug="${AUDIT_MODEL//\//-}"
+    local report_dir="${REPORTS_DIR}/${audit_model_slug}"
+    mkdir -p "$report_dir"
 
-            # Archive with flock for safety
+    AUDIT_FAILURE_FATAL=true AUR_SLEUTH_ASCII_ICONS=1 \
+        OPENAI_MODEL="$AUDIT_MODEL" \
+        AUR_SLEUTH_REPORT_DIR="$report_dir" \
+        ./aur-sleuth --output plain "$pkg" 2>&1 || true
+
+    local re_report="${report_dir}/aur-sleuth-report-${pkg}.txt"
+    if [[ -f "$re_report" ]]; then
+        local re_result
+        re_result=$(fm "$re_report" result)
+        log "  Re-audit result: $re_result"
+
+        # Archive the audit report
+        (
+            flock -x 200
+            bash bench/archive-report.sh "$pkg" "$re_report"
+        ) 200>"$LOCK_FILE"
+
+        # Determine the archived filename for the reference
+        local archived_filename
+        archived_filename="$(date -u +%Y%m%d-%H%M%S)-${audit_model_slug}.md"
+
+        # Update judge report with re-audit metadata
+        if [[ -f "$judge_file" ]]; then
+            python3 -c "
+import json, sys
+f = '$judge_file'
+data = json.load(open(f))
+data['reaudit_date'] = '$(date -u +%Y-%m-%dT%H:%M:%SZ)'
+data['reaudit_model'] = '$AUDIT_MODEL'
+data['reaudit_result'] = '$re_result'
+data['reaudit_report'] = '${pkg}/${archived_filename}'
+json.dump(data, open(f, 'w'), indent=2)
+"
+            # Re-archive updated judge report
             (
                 flock -x 200
-                bash bench/archive-report.sh "$pkg" "$re_report"
+                archive_judge_report "$pkg" "$judge_file"
             ) 200>"$LOCK_FILE"
-        else
-            log "  Re-audit produced no report"
+
+            log "  Updated judge report with re-audit: $re_result"
         fi
+    else
+        log "  Re-audit produced no report"
     fi
+}
+
+# --- Find packages with pending re-audits ---
+find_pending_reaudits() {
+    find "$JUDGE_DIR" -name '*.json' ! -name '*.error.json' -print0 \
+        | while IFS= read -r -d '' f; do
+            python3 -c "
+import json, sys
+data = json.load(open('$f'))
+if data.get('re_audit_recommended') and not data.get('reaudit_date'):
+    print(data.get('package', ''))
+" 2>/dev/null
+        done | grep -v '^$'
 }
 
 # --- Main ---
@@ -386,6 +435,28 @@ main() {
     if [[ -z "${OPENAI_API_KEY:-}" ]]; then
         echo "Error: OPENAI_API_KEY not set" >&2
         exit 1
+    fi
+
+    # Handle --re-audit-pending mode: just run re-audits on flagged packages
+    if $RE_AUDIT_PENDING; then
+        local pending=()
+        while IFS= read -r pkg; do
+            pending+=("$pkg")
+        done < <(find_pending_reaudits)
+
+        if [[ ${#pending[@]} -eq 0 ]]; then
+            log "No pending re-audits found."
+            return 0
+        fi
+
+        log "Re-auditing ${#pending[@]} pending packages with $AUDIT_MODEL..."
+        local completed=0
+        for pkg in "${pending[@]}"; do
+            do_reaudit "$pkg"
+            completed=$((completed + 1))
+        done
+        log "=== Re-audit complete: $completed packages ==="
+        return 0
     fi
 
     local packages=()
