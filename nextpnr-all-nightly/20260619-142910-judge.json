@@ -1,0 +1,31 @@
+{
+  "package": "nextpnr-all-nightly",
+  "correct_verdict": "unsafe",
+  "confidence": "high",
+  "reasoning": "The qwen model identified a critical risk in picorv32.sh that downloads+executes unverified code during build. This violates AUR security practices and introduces supply-chain risks. Deepseek missed this file entirely.",
+  "disagreement_analysis": "Deepseek reviewed different files (CMake configs) while qwen found the risky build script. Coverage gap in deepseek's analysis caused disagreement.",
+  "coverage_issues": [
+    "deepseek failed to review src/nextpnr/ice40/picorv32.sh - the critical unsafe component"
+  ],
+  "false_positives": [],
+  "false_negatives": [
+    "deepseek missed picorv32.sh's unsafe download+execution pattern",
+    "Both models missed verifying if PKGBUILD actually runs picorv32.sh (needs build process analysis)"
+  ],
+  "re_audit_recommended": true,
+  "re_audit_focus": [
+    "Verify if picorv32.sh is executed during build via PKGBUILD functions",
+    "Review all ice40/ scripts for similar patterns"
+  ],
+  "learnings": [
+    "File selection must prioritize build-related scripts (especially .sh/.py in src subdirs)",
+    "Models should cross-reference PKGBUILD functions to identify executed files",
+    "Improve risk detection for build-time network access patterns (wget/curl in scripts)"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 14446,
+    "completion_tokens": 903,
+    "cost": 0.0123697
+  }
+}
