@@ -1,0 +1,35 @@
+{
+  "package": "wordnet-common",
+  "correct_verdict": "inconclusive",
+  "confidence": "high",
+  "reasoning": "Both models skipped the PKGBUILD file after misclassifying it as binary, making safety assessment impossible since PKGBUILD defines build/install behavior.",
+  "disagreement_analysis": null,
+  "coverage_issues": [
+    "PKGBUILD (critical build script) was skipped by both models due to erroneous binary file classification",
+    "No .install hooks or other executables were reviewed"
+  ],
+  "false_positives": [],
+  "false_negatives": [
+    "Entire PKGBUILD content including build()/package() functions were skipped - could contain malicious code, unsafe permissions, or network calls"
+  ],
+  "re_audit_recommended": true,
+  "re_audit_focus": [
+    "PKGBUILD (verify text format and analyze)"
+  ],
+  "learnings": [
+    "Improve binary detection: PKGBUILD should never be classified as binary. Add text file validation heuristics.",
+    "Fail-safe mechanism: Abort audit with error if PKGBUILD can't be read rather than skipping",
+    "Prioritization: Always force PKGBUILD review first before proceeding to other files",
+    "Tool robustness: Add fallback decoding for suspected text files with encoding issues"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 1883,
+    "completion_tokens": 1145,
+    "cost": 0.0041806
+  },
+  "reaudit_date": "2026-06-19T17:05:26Z",
+  "reaudit_model": "anthropic/claude-sonnet-4.6",
+  "reaudit_result": "skipped",
+  "reaudit_report": "wordnet-common/20260619-170526-anthropic-claude-sonnet-4.6.md"
+}
