@@ -110,7 +110,7 @@ def load_reports():
                 judges.append({"package": pkg, "filename": filename, "data": data})
             except (json.JSONDecodeError, KeyError):
                 pass
-        elif path.endswith(".md"):
+        elif path.endswith(".md") or path.endswith(".txt"):
             fm, body = parse_frontmatter(raw)
             audits.append({
                 "package": pkg,
@@ -275,7 +275,9 @@ def generate_html():
 
 def commit_to_branch(files):
     """Commit generated files to the audit-reports branch using git plumbing."""
-    tmpindex = tempfile.mktemp()
+    fd, tmpindex = tempfile.mkstemp()
+    os.close(fd)
+    os.remove(tmpindex)
 
     try:
         env = os.environ.copy()
