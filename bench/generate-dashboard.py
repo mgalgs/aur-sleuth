@@ -738,7 +738,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                     html += '</tbody></table>';
                 }
 
-                const bodyId = 'body-' + name + '-' + a.filename.replace(/[^a-zA-Z0-9]/g, '_');
+                const bodyId = 'body-' + name.replace(/[^a-zA-Z0-9-]/g, '_') + '-' + a.filename.replace(/[^a-zA-Z0-9]/g, '_');
                 html += `<button onclick="document.getElementById('${bodyId}').classList.toggle('open')"
                     class="text-xs text-blue-400 hover:text-blue-300 mt-1">Toggle full report</button>
                     <pre id="${bodyId}" class="report-body mt-2 text-xs text-slate-400 whitespace-pre-wrap bg-slate-900 rounded p-3 border border-slate-700 max-h-96 overflow-y-auto">${escapeHtml(a.body || '')}</pre>
