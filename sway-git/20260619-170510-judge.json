@@ -1,0 +1,41 @@
+{
+  "package": "sway-git",
+  "correct_verdict": "inconclusive",
+  "confidence": "medium",
+  "reasoning": "Both audits failed at source download stage (makepkg --nobuild), preventing review of critical build/install scripts and source code. PKGBUILD appears safe but full package safety can't be verified without source.",
+  "disagreement_analysis": null,
+  "coverage_issues": [
+    "Critical files not reviewed: PKGBUILD functions (prepare/build/package), .install hooks, sway source code with filesystem/network access",
+    "No review of meson.build or other build scripts executed during installation"
+  ],
+  "false_positives": [],
+  "false_negatives": [
+    "Potential risks in un-reviewed build scripts (e.g., unsafe command substitutions in meson.build)",
+    "Undetected issues in .install hooks or package() function",
+    "Source code vulnerabilities (e.g., unsafe setuid usage, path traversal)"
+  ],
+  "re_audit_recommended": true,
+  "re_audit_focus": [
+    "PKGBUILD build/package functions",
+    "meson.build and build scripts",
+    "src/sway source code (particularly main.c and IPC modules)",
+    "sway.install hooks"
+  ],
+  "learnings": [
+    "Improve error handling for source download failures - retry mechanism or fallback to partial audit",
+    "Prioritize PKGBUILD functions over pkgver() during initial review",
+    "Include build system files (meson.build) in critical review list",
+    "Add network/filesystem access detection in source code as high-priority check",
+    "Implement better dependency resolution for VCS packages during audit prep"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 2563,
+    "completion_tokens": 1189,
+    "cost": 0.0047666
+  },
+  "reaudit_date": "2026-06-19T17:05:10Z",
+  "reaudit_model": "anthropic/claude-sonnet-4.6",
+  "reaudit_result": "skipped",
+  "reaudit_report": "sway-git/20260619-170510-anthropic-claude-sonnet-4.6.md"
+}
