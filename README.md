@@ -60,7 +60,13 @@ you run on your machine. This will only be possible in the world of open source!
 
 ## Installation
 
-*(AUR package coming soon...)*
+### From the AUR
+
+```bash
+yay -S aur-sleuth-git
+```
+
+### Manual installation
 
 1. Install dependencies:
    ```bash
@@ -87,7 +93,7 @@ you run on your machine. This will only be possible in the world of open source!
    ```
    This will install the scripts to `$HOME/.local/bin`. Make sure this directory is in your `PATH`.
 
-Alternatively you can simply download [`aur-sleuth`](https://raw.githubusercontent.com/mgalgs/aur-sleuth/refs/heads/master/aur-sleuth), and [`makepkg-with-sleuthing`](https://raw.githubusercontent.com/mgalgs/aur-sleuth/refs/heads/master/makepkg-with-sleuthing) drop them in your PATH.
+Alternatively you can simply download [`aur-sleuth`](https://raw.githubusercontent.com/mgalgs/aur-sleuth/refs/heads/master/aur-sleuth) and [`makepkg-with-sleuthing`](https://raw.githubusercontent.com/mgalgs/aur-sleuth/refs/heads/master/makepkg-with-sleuthing) and drop them in your PATH.
 
 ## Configuration
 
@@ -106,8 +112,7 @@ The tool can be configured with environment variables:
 
 You can either set these environment variables directly in your shell, or add them to
 a configuration file. The tool will automatically load configuration from
-`/etc/aur-sleuth.conf` (system-wide) or `~/.config/aur-sleuth.conf` (user-specific),
-with user-specific configuration taking precedence.
+`~/.config/aur-sleuth.conf`.
 
 The configuration file should be in INI format:
 
