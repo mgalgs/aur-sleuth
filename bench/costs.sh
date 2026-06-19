@@ -68,22 +68,23 @@ for path in files:
                     if m:
                         fm[m.group(1)] = m.group(2).strip()
 
-        cost_val = fm.get("cost", "0")
-        try:
-            cost = float(cost_val)
-        except ValueError:
-            cost = 0
+        def safe_int(v, default=0):
+            try: return int(v)
+            except (ValueError, TypeError): return default
+        def safe_float(v, default=0.0):
+            try: return float(v)
+            except (ValueError, TypeError): return default
 
         audits.append({
             "package": pkg,
             "model": fm.get("model", "unknown"),
-            "cost": cost,
-            "prompt_tokens": int(fm.get("prompt_tokens", 0)),
-            "completion_tokens": int(fm.get("completion_tokens", 0)),
+            "cost": safe_float(fm.get("cost", 0)),
+            "prompt_tokens": safe_int(fm.get("prompt_tokens", 0)),
+            "completion_tokens": safe_int(fm.get("completion_tokens", 0)),
             "result": fm.get("result", "unknown"),
             "date": fm.get("date", "")[:10],
-            "execution_time": float(fm.get("execution_time", 0)),
-            "files_reviewed": int(fm.get("files_reviewed", 0)),
+            "execution_time": safe_float(fm.get("execution_time", 0)),
+            "files_reviewed": safe_int(fm.get("files_reviewed", 0)),
             "type": "audit",
         })
 
