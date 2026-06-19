@@ -1,0 +1,43 @@
+{
+  "package": "moshpit-keygen",
+  "correct_verdict": "inconclusive",
+  "confidence": "medium",
+  "reasoning": "Both models declared the package safe but failed to audit the source code tarball containing Rust implementation. The critical executable code (build.rs, main.rs) and cryptographic operations were never reviewed.",
+  "disagreement_analysis": null,
+  "coverage_issues": [
+    "Source tarball (moshpit-keygen-0.9.2.tar.gz) skipped by both models despite containing build.rs and Rust source files",
+    "No review of cryptographic implementation in keygen functionality",
+    "Critical build-time files like build.rs and Cargo.toml not examined"
+  ],
+  "false_positives": [
+    "Shell completion scripts (fish/bash) flagged for review despite being low-risk static configs",
+    "Service files reviewed despite being inert systemd configs"
+  ],
+  "false_negatives": [
+    "Unverified cryptographic operations in Rust source code",
+    "Potential unsafe Rust code patterns in network/filesystem access",
+    "build.rs execution risks during cargo build"
+  ],
+  "re_audit_recommended": true,
+  "re_audit_focus": [
+    "Extracted source files: build.rs, Cargo.toml, agent/src/main.rs",
+    "Cryptographic implementation in keygen modules",
+    "Filesystem/network operations in Rust source"
+  ],
+  "learnings": [
+    "Prioritize build artifacts: Always extract/review source archives containing build scripts",
+    "Improve Rust awareness: Auto-prioritize build.rs, Cargo.toml, and main entrypoints",
+    "Filter false positives: De-prioritize static configs (completion scripts, service files)",
+    "Handle binary files: Implement source extraction for compressed archives"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 10400,
+    "completion_tokens": 1745,
+    "cost": 0.0116425
+  },
+  "reaudit_date": "2026-06-19T16:59:34Z",
+  "reaudit_model": "anthropic/claude-sonnet-4.6",
+  "reaudit_result": "safe",
+  "reaudit_report": "moshpit-keygen/20260619-165934-anthropic-claude-sonnet-4.6.md"
+}
