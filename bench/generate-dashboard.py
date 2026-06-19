@@ -623,15 +623,15 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         tbody.innerHTML = entries.map(([name, pkg]) => {
             const result = pkg.latest_result;
             const judgeInfo = pkg.judge
-                ? `<span class="badge-${pkg.judge.verdict} px-1.5 py-0.5 rounded text-xs">${pkg.judge.verdict}</span>`
+                ? `<span class="badge-${escapeHtml(pkg.judge.verdict)} px-1.5 py-0.5 rounded text-xs">${escapeHtml(pkg.judge.verdict)}</span>`
                 + (pkg.judge.re_audit ? ' <span class="text-yellow-500 text-xs" title="Re-audit recommended">&#x26a0;</span>' : '')
                 : '<span class="text-slate-600">—</span>';
             const date = pkg.latest_date ? pkg.latest_date.split('T')[0] : '—';
 
-            return `<tr class="border-b border-slate-700/50 hover:bg-slate-750 cursor-pointer pkg-row" data-pkg="${name}">
-                <td class="px-4 py-2.5 font-medium text-blue-400">${name}</td>
-                <td class="px-4 py-2.5 text-slate-400">${pkg.pkgver || '—'}</td>
-                <td class="px-4 py-2.5"><span class="badge-${result} px-1.5 py-0.5 rounded text-xs">${result}</span></td>
+            return `<tr class="border-b border-slate-700/50 hover:bg-slate-750 cursor-pointer pkg-row" data-pkg="${escapeHtml(name)}">
+                <td class="px-4 py-2.5 font-medium text-blue-400">${escapeHtml(name)}</td>
+                <td class="px-4 py-2.5 text-slate-400">${escapeHtml(pkg.pkgver || '—')}</td>
+                <td class="px-4 py-2.5"><span class="badge-${escapeHtml(result)} px-1.5 py-0.5 rounded text-xs">${escapeHtml(result)}</span></td>
                 <td class="px-4 py-2.5">${judgeInfo}</td>
                 <td class="px-4 py-2.5 text-right text-slate-400">${pkg.audit_count}</td>
                 <td class="px-4 py-2.5 text-right text-slate-400">${pkg.files_reviewed}</td>
@@ -689,14 +689,14 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                 <h3 class="text-sm font-semibold text-slate-300 uppercase tracking-wide mb-2">Judge Verdict</h3>
                 <div class="bg-slate-800 rounded p-4 border border-slate-700">
                     <div class="flex gap-4 mb-3 text-sm">
-                        <span>Verdict: <span class="result-${d.correct_verdict} font-bold">${d.correct_verdict}</span></span>
-                        <span>Confidence: <strong>${d.confidence}</strong></span>
-                        <span>Model: <span class="text-slate-400">${(d._judge_usage || {}).model || '?'}</span></span>
+                        <span>Verdict: <span class="result-${escapeHtml(d.correct_verdict)} font-bold">${escapeHtml(d.correct_verdict)}</span></span>
+                        <span>Confidence: <strong>${escapeHtml(d.confidence)}</strong></span>
+                        <span>Model: <span class="text-slate-400">${escapeHtml((d._judge_usage || {}).model || '?')}</span></span>
                         ${d.re_audit_recommended ? '<span class="text-yellow-500">&#x26a0; Re-audit recommended</span>' : ''}
                     </div>
                     <p class="text-sm text-slate-300 whitespace-pre-wrap">${escapeHtml(d.reasoning || '')}</p>
-                    ${d.coverage_issues && d.coverage_issues.length ? '<div class="mt-2 text-xs text-yellow-400">Coverage issues: ' + d.coverage_issues.join(', ') + '</div>' : ''}
-                    ${d.re_audit_focus && d.re_audit_focus.length ? '<div class="mt-1 text-xs text-yellow-400">Re-audit focus: ' + d.re_audit_focus.join(', ') + '</div>' : ''}
+                    ${d.coverage_issues && d.coverage_issues.length ? '<div class="mt-2 text-xs text-yellow-400">Coverage issues: ' + d.coverage_issues.map(escapeHtml).join(', ') + '</div>' : ''}
+                    ${d.re_audit_focus && d.re_audit_focus.length ? '<div class="mt-1 text-xs text-yellow-400">Re-audit focus: ' + d.re_audit_focus.map(escapeHtml).join(', ') + '</div>' : ''}
                 </div>
             </div>`;
         }
@@ -713,8 +713,8 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 
                 html += `<div class="bg-slate-800 rounded p-4 border border-slate-700 mb-3">
                     <div class="flex flex-wrap gap-4 text-sm mb-2">
-                        <span class="result-${result} font-bold">${result}</span>
-                        <span class="text-slate-400">${model}</span>
+                        <span class="result-${escapeHtml(result)} font-bold">${escapeHtml(result)}</span>
+                        <span class="text-slate-400">${escapeHtml(model)}</span>
                         <span class="text-slate-500">${date}</span>
                         <span class="text-slate-500">${fm.files_reviewed || 0} files</span>
                         <span class="text-slate-500">$${(parseFloat(fm.cost) || 0).toFixed(4)}</span>
