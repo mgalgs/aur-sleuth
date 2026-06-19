@@ -1,0 +1,30 @@
+{
+  "package": "pandoc-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The flagged macOS uninstall script isn't executed during Arch Linux package build/install. All PKGBUILD operations use verified upstream sources and standard packaging patterns with no malicious behavior.",
+  "disagreement_analysis": "qwen incorrectly flagged src/pandoc-3.10/macos/uninstall-pandoc.pl as unsafe despite it being macOS-specific and unused in Arch context",
+  "coverage_issues": [
+    "Both models skipped pandoc-bin-3.10.tar.gz binary (acceptable for AUR audit)",
+    "qwen reviewed wasm patches but missed Linux/macOS build scripts reviewed by deepseek"
+  ],
+  "false_positives": [
+    "uninstall-pandoc.pl: macOS script incorrectly flagged as unsafe (never executed in Arch context)",
+    "Privilege escalation claim: Requires macOS admin rights but irrelevant to Arch build"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Improve OS-context awareness: De-prioritize OS-specific files (e.g., macOS scripts) for Linux packages",
+    "Enhance risk contextualization: Build/install hooks should override irrelevant file findings",
+    "Optimize file selection: Prioritize PKGBUILD, install hooks, and build scripts over patches/web assets",
+    "Reduce false positives: Train models to distinguish between actual build-time risks and unused auxiliary scripts"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 14177,
+    "completion_tokens": 1327,
+    "cost": 0.0132414
+  }
+}
