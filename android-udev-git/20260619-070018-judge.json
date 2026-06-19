@@ -1,0 +1,29 @@
+{
+  "package": "android-udev-git",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard udev rules installer. The PKGBUILD only installs two static files (51-android.rules, android-udev.conf) via `install` in package() and does not reference install.sh in any way (no build/prepare/check/package call, no .install hook). The install.sh script ships in the upstream source tree but is never executed during makepkg or pacman install. Its contents (groupadd, usermod, udev service restart) are entirely normal for a udev rules package and would only run if a user manually invoked the upstream installer \u2014 which is not what this AUR package does. The qwen UNSAFE verdict is a false positive driven by reviewing the script's behavior in isolation rather than asking whether the PKGBUILD actually invokes it.",
+  "disagreement_analysis": "The disagreement stems entirely from install.sh. qwen flagged it UNSAFE because it performs privileged operations (usermod, groupadd, service restart) and uses environment-variable-controlled logic. However, qwen never verified whether the PKGBUILD references install.sh \u2014 it does not. deepseek correctly judged the same script as benign/expected behavior for a udev package. The core issue is that qwen evaluated standard sysadmin operations as if they were inherently malicious and ignored the execution context (the script is dormant in the source tree).",
+  "coverage_issues": [
+    "qwen reviewed only 4 files and skipped the git hook samples and CI workflow; though these are low-risk, deepseek's broader coverage was more complete. Neither model explicitly confirmed install.sh is unreferenced by PKGBUILD, which is the decisive fact."
+  ],
+  "false_positives": [
+    "qwen's UNSAFE verdict on install.sh: groupadd/usermod/udev restart are normal udev package operations; more importantly the script is never invoked by the PKGBUILD or any .install hook, so it does not execute during makepkg or pacman install. The 'environment-variable-controlled logic' concern is standard configurability, not obfuscation."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models should explicitly trace whether a flagged script is invoked by PKGBUILD functions (prepare/build/check/package) or .install hooks before raising severity. A dormant script in the upstream source tree is not an install-time risk.",
+    "Standard sysadmin operations (groupadd, usermod, systemctl restart) for the package's stated purpose should not be auto-flagged as UNSAFE without an actual malicious indicator (exfiltration, remote payload, obfuscation).",
+    "Treating environment-variable-driven configuration as inherently a 'hiding' technique is a recurring false-positive pattern; configurability != obfuscation.",
+    "Consider adding a guardrail prompt step: 'Is this file executed during the AUR build/install lifecycle? If not, downgrade severity unless it is referenced.'",
+    "File-selection variance (qwen 4 vs deepseek 11) suggests enforcing a minimum coverage of all source scripts plus PKGBUILD-referenced files would improve consistency."
+  ],
+  "_judge_usage": {
+    "model": "anthropic/claude-opus-4.8",
+    "prompt_tokens": 12935,
+    "completion_tokens": 1085,
+    "cost": 0.0918
+  }
+}
