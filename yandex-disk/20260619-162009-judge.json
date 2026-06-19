@@ -1,0 +1,33 @@
+{
+  "package": "yandex-disk",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The flagged issues in postinst/postrm are Debian-specific scripts inert on Arch systems. They're never executed during AUR packaging/installation and pose no runtime risk.",
+  "disagreement_analysis": "Qwen incorrectly treated inert Debian maintenance scripts as executable threats in Arch context, while DeepSeek properly contextualized them.",
+  "coverage_issues": [
+    "Both models missed reviewing the actual yandex-disk binary (security-critical but closed-source)",
+    "No analysis of systemd service's %h expansion (potential user isolation issue)"
+  ],
+  "false_positives": [
+    "Qwen: postinst 'unsafe' - HTTP key fetch irrelevant since script never runs",
+    "Qwen: postrm 'unsafe' - apt-key usage impossible on Arch systems"
+  ],
+  "false_negatives": [
+    "Both missed potential privilege issues: systemd service uses %h without User= directive",
+    "Neither verified GPG key handling in PKGBUILD (deprecated MD5 checksums)"
+  ],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Prioritize executable context: Weight files by likelihood of execution during makepkg/pacman ops",
+    "Improve distro-awareness: Flag foreign package artifacts (deb/rpm scripts) as inert unless explicitly invoked",
+    "Enhance binary handling: Explicitly note closed-source limitations in reports",
+    "Reduce hygiene-overreactions: Deprecate flagging non-executable configs/license files"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 11474,
+    "completion_tokens": 2114,
+    "cost": 0.0133168
+  }
+}
