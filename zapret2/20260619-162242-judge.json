@@ -1,0 +1,29 @@
+{
+  "package": "zapret2",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The flagged unsafe script (get_reestr_preresolved_smart.sh) is not executed during makepkg build/install steps. Its runtime behavior falls outside AUR audit scope.",
+  "disagreement_analysis": "qwen incorrectly classified a runtime blocklist download script as unsafe despite it not being executed during package build/installation.",
+  "coverage_issues": [
+    "deepseek missed src/zapret2/ipset/get_reestr_preresolved_smart.sh which was central to qwen's unsafe verdict",
+    "Both models under-prioritized network-access scripts during file selection"
+  ],
+  "false_positives": [
+    "qwen's unsafe verdict on get_reestr_preresolved_smart.sh: Script is only executed post-installation during service runtime, not during makepkg"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Improve file selection heuristics to prioritize scripts with network/filesystem access called by PKGBUILD/.install",
+    "Clarify prompt boundaries: Emphasize that runtime application behavior is out-of-scope unless triggered by build/install hooks",
+    "Address false-positive tendency: Train models to distinguish build-time vs runtime execution contexts",
+    "Implement cross-model gap detection: Flag files reviewed by one model but missed by another"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 13649,
+    "completion_tokens": 2329,
+    "cost": 0.0153768
+  }
+}
