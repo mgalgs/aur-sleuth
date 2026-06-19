@@ -1,0 +1,29 @@
+{
+  "package": "visual-studio-code-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Unsafe findings are false positives; flagged scripts are application-level components not executed during AUR build/install. Critical files (PKGBUILD, install hooks) show no malicious behavior.",
+  "disagreement_analysis": "Qwen incorrectly flagged application runtime scripts (copilotCLIShim.js, copilotCLITodoWorker.js) as build-time risks. Deepseek's inconclusive was due to token limits on irrelevant files.",
+  "coverage_issues": [
+    "Both models failed to prioritize build-critical files over application code (e.g., ignored possible post-install hooks in .install)",
+    "Qwen skipped reviewing git-editor.sh/ssh-askpass.sh despite inclusion in file list"
+  ],
+  "false_positives": [
+    "copilotCLIShim.js: 'curl|bash' pattern is for Copilot CLI install during VS Code runtime, not AUR build",
+    "copilotCLITodoWorker.js: SQLite access is extension functionality, not executed during package installation"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "File selection: Prioritize PKGBUILD, .install, and referenced scripts over application source code. Suppress files >1MB unless directly executed during build.",
+    "Prompt quality: Explicitly instruct models to ignore application runtime behavior unless triggered by PKGBUILD/.install hooks.",
+    "Failure modes: Flagging 'curl|bash' in application code is common FP; add context that IDE extensions are out-of-scope unless build-triggered."
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 15417,
+    "completion_tokens": 1821,
+    "cost": 0.015344400000000001
+  }
+}
