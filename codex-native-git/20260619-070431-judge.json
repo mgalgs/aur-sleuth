@@ -1,0 +1,35 @@
+{
+  "package": "codex-native-git",
+  "correct_verdict": "safe",
+  "confidence": "medium",
+  "reasoning": "The PKGBUILD fetches its frontend asset bundle (Codex-darwin-arm64-*.zip) from persistent.oaistatic.com, which is in fact OpenAI's official static CDN (oaistatic.com is the documented domain serving OpenAI/Codex app assets). The download is pinned with a SHA256 checksum, so it is reproducible and tamper-evident. The build compiles the Rust 'codex-native' shell from the project's own GitHub source and uses it to extract app.asar from the verified zip \u2014 this is the normal architecture for a native shell wrapping an upstream Electron frontend. Nothing executes the downloaded payload during makepkg (it is only unpacked via the locally-built binary), and no install hooks, prepare/check scripts, or network exfiltration were found. The deepseek review covered PKGBUILD plus numerous bundled files and found everything benign. By the AUR threat model (what executes during makepkg/install), this package is safe.",
+  "disagreement_analysis": "qwen3 flagged the package UNSAFE based purely on the PKGBUILD, treating persistent.oaistatic.com as an 'untrusted, non-vendor' domain and objecting to a macOS binary being repackaged for Linux. This is largely a misjudgment: oaistatic.com is OpenAI's actual asset CDN, the download is checksum-pinned, and bundling a frontend asset (app.asar) extracted from a darwin zip is a deliberate, legitimate design choice \u2014 the asar is platform-agnostic JS, not a macOS executable being run on Linux. deepseek reached 'inconclusive' only because of a transient LLM API error on install.sh (content was empty), not because of any real finding; its truncated reasoning actually concluded install.sh was benign and a macOS-only file never executed on Linux.",
+  "coverage_issues": [
+    "deepseek's inconclusive verdict stems from an API/transport error (empty LLM response) on install.sh, not a genuine inability to assess \u2014 the file was never actually evaluated to completion.",
+    "qwen3 reviewed only the PKGBUILD (1 file) and skipped all source-tree analysis, giving it minimal basis for a confident UNSAFE verdict.",
+    "The large bundled Electron tree (app.asar contents) is opaque to both reviewers; neither extracted/inspected app.asar JS, but this is acceptable since it is not executed during makepkg."
+  ],
+  "false_positives": [
+    "qwen3: 'untrusted domain persistent.oaistatic.com' \u2014 this is OpenAI's official static CDN, not an unknown third party; the claim of non-vendor provenance is incorrect.",
+    "qwen3: 'macOS binary repurposed in a Linux package raises red flags' \u2014 the extracted artifact is app.asar (platform-agnostic JavaScript bundle), and it is checksum-pinned; repackaging upstream frontend assets is standard and not inherently malicious.",
+    "qwen3: 'could contain malicious JavaScript enabling sandbox escapes/exfiltration' \u2014 speculative; the asset is checksum-pinned to a specific upstream release with no evidence of tampering or runtime execution during build."
+  ],
+  "false_negatives": [
+    "Neither model inspected the contents of app.asar itself; if a deeper audit were desired, the runtime JS shipped in the package is the only remaining unreviewed surface (but it does not run during makepkg)."
+  ],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Transient LLM API errors (empty content responses) should trigger a retry rather than producing an 'inconclusive' file verdict that contaminates the overall package verdict \u2014 distinguish 'tool error' from 'genuine uncertainty'.",
+    "Models should be primed that checksum-pinned downloads from recognized vendor CDNs (e.g., oaistatic.com = OpenAI) are not inherently 'untrusted'; provide a domain-reputation/known-vendor hint to reduce provenance false positives.",
+    "Reinforce the AUR threat model: a single-file PKGBUILD-only review concluding UNSAFE on 'supply chain provenance' grounds should weigh whether the asset actually executes during makepkg/install vs. being bundled inert data; speculative 'could contain malicious JS' is not sufficient for UNSAFE.",
+    "When one model reviews 1 file and another reviews 11, weight the breadth of coverage in adjudication \u2014 a confident verdict from minimal coverage warrants lower trust.",
+    "Clarify that platform-named archives (darwin/arm64 zip) containing platform-agnostic payloads (asar JS) are not automatically suspicious for being 'wrong platform'."
+  ],
+  "_judge_usage": {
+    "model": "anthropic/claude-opus-4.8",
+    "prompt_tokens": 18391,
+    "completion_tokens": 1661,
+    "cost": 0.13348000000000002
+  }
+}
