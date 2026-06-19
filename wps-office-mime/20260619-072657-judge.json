@@ -1,0 +1,37 @@
+{
+  "package": "wps-office-mime",
+  "correct_verdict": "inconclusive",
+  "confidence": "high",
+  "reasoning": "Both models skipped the only file (PKGBUILD) due to a tooling bug that misclassified PKGBUILD as a binary file. Zero files were actually reviewed, so no security assessment was performed. The verdict cannot be determined from these reports. Notably, PKGBUILD is a plain-text shell script and should never be treated as binary \u2014 this is a false 'binary file' detection in the audit tool itself, not a property of the package.",
+  "disagreement_analysis": "There is no real disagreement. Both models produced identical 'skipped' outcomes for the same reason: the tool's pre-audit step flagged PKGBUILD as a binary file and aborted before any model reasoning occurred. Both models consumed 0 tokens, confirming they never actually examined content.",
+  "coverage_issues": [
+    "PKGBUILD was never reviewed by any model \u2014 it was skipped during the initial pre-audit gate.",
+    "No .install hooks, source files, or supplementary scripts (if any) were enumerated or reviewed.",
+    "100% of files were skipped; effective coverage is zero."
+  ],
+  "false_positives": [
+    "The 'Skipping binary file: PKGBUILD' classification is a false positive \u2014 PKGBUILD files are plain-text shell scripts and must always be treated as text."
+  ],
+  "false_negatives": [
+    "Any actual risk in the PKGBUILD (download sources, install hooks, mime database update commands, permission changes) is entirely unassessed because the file was never read."
+  ],
+  "re_audit_recommended": true,
+  "re_audit_focus": [
+    "PKGBUILD \u2014 force text-mode review, inspect source/url, sha sums, prepare/build/package functions",
+    "Any .install scripts (post_install/post_upgrade) that may run update-mime-database or update-desktop-database",
+    "Confirm package only registers MIME types and does not fetch remote content"
+  ],
+  "learnings": [
+    "The binary-file detection heuristic incorrectly classified PKGBUILD as binary, aborting the entire audit. PKGBUILD (and other known plain-text AUR files like .install, .desktop, .SRCINFO) should be whitelisted as text regardless of byte-content heuristics.",
+    "The pre-audit gate should fail-safe: if the primary PKGBUILD cannot be read, the run should be escalated/retried rather than silently returning 'skipped' with no coverage.",
+    "Add a guard that flags zero-file/zero-token audits as non-results requiring re-audit, rather than passing them through as completed reports.",
+    "Investigate why the binary heuristic triggered \u2014 likely an encoding issue (e.g., non-UTF-8 bytes, BOM, or CRLF) or a content sniff false positive; consider relaxing thresholds for files under a small size or with known shell shebang/keywords.",
+    "Bulk-review orchestration should detect when multiple models all skip the same file for the same tooling reason and surface it as an infrastructure bug, not a package verdict."
+  ],
+  "_judge_usage": {
+    "model": "anthropic/claude-opus-4.8",
+    "prompt_tokens": 2789,
+    "completion_tokens": 1065,
+    "cost": 0.04057
+  }
+}
