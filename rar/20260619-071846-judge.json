@@ -1,0 +1,27 @@
+{
+  "package": "rar",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The disagreement centers entirely on src/rar/order.htm, an upstream-distributed HTML documentation file about purchasing WinRAR licenses. The 'obfuscation' is a well-known, benign anti-spam email obfuscation technique used by RAR Labs for decades: 'win-razyr.com' decodes to 'win-rar.com' after the px/mx functions strip the 'zy' character pair, and 'xwin-rar.com' decodes to 'win-rar.com' after removing 'x'. These are NOT typo-squatted phishing domains \u2014 they are the legitimate official domain with deliberate junk characters inserted to defeat email-harvesting spambots. The deepseek model correctly identified this as benign email obfuscation. More importantly, order.htm is a static documentation file that is never executed or referenced by any PKGBUILD function or .install script; it is installed as inert documentation and poses zero supply-chain risk to makepkg. Even if the email were genuinely malicious, a static HTML file that the user would have to manually open and act upon does not constitute package-level unsafety.",
+  "disagreement_analysis": "qwen3-235b misinterpreted RAR Labs' long-standing anti-spam email obfuscation (inserting 'zy'/'x' junk chars decoded by JS) as typo-squatting/phishing. It failed to actually apply the decode logic correctly \u2014 the decoded address is the legitimate sales@win-rar.com. It also failed to weigh that order.htm is inert documentation never executed during build/install. deepseek correctly decoded the obfuscation and recognized it as benign.",
+  "coverage_issues": [],
+  "false_positives": [
+    "qwen3-235b's order.htm 'phishing' finding: the px/mx JS decodes 'win-razyr.com' -> 'win-rar.com' and 'xwin-rar.com' -> 'win-rar.com', which is the legitimate vendor domain. This is standard anti-spam obfuscation, not typo-squatting. Additionally, the file is never executed by makepkg/install hooks, so it carries no package-level risk regardless."
+  ],
+  "false_negatives": [],
+  "coverage_notes": "Both models reviewed identical file sets (10 files, skipped the binary tarball as expected). No coverage gap exists.",
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models should fully apply/execute string-transformation logic before judging obfuscation as malicious. qwen flagged 'win-razyr.com' as a typo-squat without completing the decode that yields the legitimate 'win-rar.com'.",
+    "The threat model for AUR packages must be reinforced: static documentation files (HTML, txt, man pages) that are NOT referenced by PKGBUILD build/package/prepare/check functions or .install scripts cannot constitute package-level unsafety. Phishing content in inert docs should at most be a low-severity informational note, never an UNSAFE verdict.",
+    "Anti-spam email obfuscation (inserting junk characters decoded by JS, HTML entities like &#x40;) is an extremely common benign pattern and should be in a known-benign-pattern catalog to prevent false positives.",
+    "Severity calibration: the audit tool should distinguish 'executes during makepkg' (true supply-chain risk) from 'content a human might read' (out of scope), and gate UNSAFE verdicts on the former."
+  ],
+  "_judge_usage": {
+    "model": "anthropic/claude-opus-4.8",
+    "prompt_tokens": 15153,
+    "completion_tokens": 1207,
+    "cost": 0.10594
+  }
+}
