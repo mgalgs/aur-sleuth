@@ -72,6 +72,21 @@ def parse_frontmatter(raw):
     return fm, body
 
 
+def compute_majority(results):
+    """Compute majority verdict from a list of result/verdict strings."""
+    if not results:
+        return None
+    safe = sum(1 for r in results if r == 'safe')
+    unsafe = sum(1 for r in results if r == 'unsafe')
+    if unsafe > safe:
+        return 'unsafe'
+    if safe > unsafe:
+        return 'safe'
+    if safe > 0:
+        return 'contested'
+    return 'inconclusive'
+
+
 def safe_float(v, default=0.0):
     try:
         return float(v)
@@ -171,24 +186,21 @@ def build_index_data(audits, judges):
         latest = pkg_audits[0] if pkg_audits else {}
         total_cost = sum(a["cost"] for a in pkg_audits)
         total_cost += sum(j["cost"] for j in pkg_data["judges"])
-        models = sorted(set(a["model"] for a in pkg_audits))
-        latest_judge = pkg_data["judges"][-1] if pkg_data["judges"] else None
+
+        audit_results = [a["result"] for a in pkg_audits]
+        judge_verdicts = [j["correct_verdict"] for j in pkg_data["judges"]]
 
         pkg_summaries[pkg_name] = {
-            "latest_result": latest.get("result", "unknown"),
-            "latest_date": latest.get("date", ""),
             "pkgver": latest.get("pkgver", ""),
             "pkgrel": latest.get("pkgrel", ""),
+            "latest_date": latest.get("date", ""),
             "total_cost": round(total_cost, 6),
-            "models": models,
             "audit_count": len(pkg_audits),
             "files_reviewed": latest.get("files_reviewed", 0),
-            "audits": pkg_audits,
-            "judge": {
-                "verdict": latest_judge["correct_verdict"],
-                "confidence": latest_judge["confidence"],
-                "re_audit": latest_judge["re_audit_recommended"],
-            } if latest_judge else None,
+            "audits": [{"result": a["result"], "model": a["model"]} for a in pkg_audits],
+            "judges": [{"verdict": j["correct_verdict"], "model": j.get("model", "unknown")} for j in pkg_data["judges"]],
+            "audit_majority": compute_majority(audit_results),
+            "judge_majority": compute_majority(judge_verdicts),
         }
 
     # Aggregate stats
@@ -346,13 +358,21 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         .result-safe { color: #22c55e; }
         .result-unsafe { color: #ef4444; }
         .result-inconclusive { color: #f59e0b; }
+        .result-contested { color: #f59e0b; }
         .result-skipped { color: #6b7280; }
         .result-unknown { color: #6b7280; }
         .badge-safe { background: #16a34a; color: white; }
         .badge-unsafe { background: #dc2626; color: white; }
         .badge-inconclusive { background: #d97706; color: white; }
+        .badge-contested { background: #d97706; color: white; }
         .badge-skipped { background: #6b7280; color: white; }
         .badge-unknown { background: #6b7280; color: white; }
+        .block { display: inline-block; width: 14px; height: 14px; border-radius: 2px; margin-right: 2px; cursor: default; }
+        .block-safe { background: #22c55e; }
+        .block-unsafe { background: #ef4444; }
+        .block-inconclusive { background: #f59e0b; }
+        .block-skipped { background: #4b5563; }
+        .block-unknown { background: #4b5563; }
         .detail-row { display: none; }
         .detail-row.open { display: table-row; }
         .report-body { display: none; }
@@ -405,8 +425,8 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                 <div id="stat-cost" class="text-2xl font-bold text-white mt-1">—</div>
             </div>
             <div class="bg-slate-800 rounded-lg p-4 border border-slate-700">
-                <div class="text-slate-400 text-xs uppercase tracking-wide">Flagged for Re-audit</div>
-                <div id="stat-reaudit" class="text-2xl font-bold text-white mt-1">—</div>
+                <div class="text-slate-400 text-xs uppercase tracking-wide">Needs Attention</div>
+                <div id="stat-attention" class="text-2xl font-bold text-red-400 mt-1">—</div>
             </div>
         </div>
 
@@ -433,10 +453,13 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                     class="bg-slate-700 border border-slate-600 rounded px-3 py-1.5 text-sm text-slate-200 placeholder-slate-400 focus:outline-none focus:border-blue-500 w-64">
                 <div class="flex gap-1" id="filter-buttons">
                     <button class="filter-btn active px-3 py-1 rounded text-xs font-medium bg-slate-700 text-slate-300" data-filter="all">All</button>
-                    <button class="filter-btn px-3 py-1 rounded text-xs font-medium bg-slate-700 text-slate-300" data-filter="safe">Safe</button>
+                    <button class="filter-btn px-3 py-1 rounded text-xs font-medium bg-slate-700 text-slate-300 border border-red-800/50" data-filter="needs-attention">Needs Attention</button>
+                    <button class="filter-btn px-3 py-1 rounded text-xs font-medium bg-slate-700 text-slate-300" data-filter="confirmed-safe">Confirmed Safe</button>
+                    <button class="filter-btn px-3 py-1 rounded text-xs font-medium bg-slate-700 text-slate-300" data-filter="contested">Contested</button>
+                    <span class="border-l border-slate-600 mx-1"></span>
                     <button class="filter-btn px-3 py-1 rounded text-xs font-medium bg-slate-700 text-slate-300" data-filter="unsafe">Unsafe</button>
-                    <button class="filter-btn px-3 py-1 rounded text-xs font-medium bg-slate-700 text-slate-300" data-filter="inconclusive">Inconclusive</button>
-                    <button class="filter-btn px-3 py-1 rounded text-xs font-medium bg-slate-700 text-slate-300" data-filter="skipped">Skipped</button>
+                    <button class="filter-btn px-3 py-1 rounded text-xs font-medium bg-slate-700 text-slate-300" data-filter="safe">Safe</button>
+                    <button class="filter-btn px-3 py-1 rounded text-xs font-medium bg-slate-700 text-slate-300" data-filter="unjudged">Unjudged</button>
                 </div>
                 <span id="result-count" class="text-xs text-slate-500 ml-auto"></span>
             </div>
@@ -449,9 +472,8 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                     <tr class="bg-slate-750 border-b border-slate-700 text-left text-xs uppercase tracking-wide text-slate-400">
                         <th class="px-4 py-3" data-sort="name">Package</th>
                         <th class="px-4 py-3" data-sort="version">Version</th>
-                        <th class="px-4 py-3" data-sort="result">Result</th>
-                        <th class="px-4 py-3" data-sort="judge">Judge</th>
-                        <th class="px-4 py-3 text-right" data-sort="audits">Audits</th>
+                        <th class="px-4 py-3" data-sort="audits">Audits</th>
+                        <th class="px-4 py-3" data-sort="judges">Judgements</th>
                         <th class="px-4 py-3 text-right" data-sort="files">Files</th>
                         <th class="px-4 py-3 text-right" data-sort="cost">Cost</th>
                         <th class="px-4 py-3" data-sort="date">Date</th>
@@ -461,13 +483,6 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             </table>
         </div>
     </div>
-
-    <!-- Detail Modal (slides in below table row) -->
-    <template id="detail-template">
-        <div class="p-6 bg-slate-850 border-t border-slate-700">
-            <div class="detail-content">Loading...</div>
-        </div>
-    </template>
 
     <script>
     let DATA = null;
@@ -480,9 +495,19 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         safe: '#22c55e',
         unsafe: '#ef4444',
         inconclusive: '#f59e0b',
+        contested: '#f59e0b',
         skipped: '#6b7280',
         unknown: '#6b7280',
     };
+
+    const DANGER_SCORE = {unsafe: 3, contested: 2, inconclusive: 1, unknown: 0, safe: 0};
+
+    function dangerScore(pkg) {
+        const a = DANGER_SCORE[pkg.audit_majority] || 0;
+        const j = pkg.judge_majority ? (DANGER_SCORE[pkg.judge_majority] || 0) : 0;
+        const hasJudge = pkg.judges && pkg.judges.length > 0 ? 1 : 0;
+        return a * 10 + j * 5 + hasJudge;
+    }
 
     async function init() {
         try {
@@ -490,7 +515,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             DATA = await resp.json();
         } catch (e) {
             document.getElementById('package-table').innerHTML =
-                '<tr><td colspan="8" class="px-4 py-8 text-center text-slate-400">Failed to load data. Are you serving from the audit-reports branch root?</td></tr>';
+                '<tr><td colspan="7" class="px-4 py-8 text-center text-slate-400">Failed to load data. Are you serving from the audit-reports branch root?</td></tr>';
             return;
         }
         renderSummary();
@@ -504,8 +529,13 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         document.getElementById('stat-packages').textContent = s.packages_audited.toLocaleString();
         document.getElementById('stat-reports').textContent = s.total_reports.toLocaleString();
         document.getElementById('stat-cost').textContent = '$' + s.total_cost.toFixed(2);
-        document.getElementById('stat-reaudit').textContent = s.re_audit_count.toLocaleString();
         document.getElementById('generated-at').textContent = 'Generated: ' + (DATA.generated_at || 'unknown');
+
+        let attention = 0;
+        for (const pkg of Object.values(DATA.packages)) {
+            if (pkg.audit_majority === 'unsafe' && pkg.judge_majority === 'unsafe') attention++;
+        }
+        document.getElementById('stat-attention').textContent = attention.toLocaleString();
     }
 
     function renderCharts() {
@@ -579,11 +609,32 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         });
     }
 
+    function matchesPreset(pkg, preset) {
+        switch (preset) {
+            case 'all': return true;
+            case 'needs-attention':
+                return pkg.audit_majority === 'unsafe' && pkg.judge_majority === 'unsafe';
+            case 'confirmed-safe':
+                return pkg.audit_majority === 'safe' && (pkg.judge_majority === 'safe' || !pkg.judge_majority);
+            case 'contested':
+                return pkg.judge_majority && pkg.audit_majority !== pkg.judge_majority
+                    && (pkg.audit_majority === 'safe' || pkg.audit_majority === 'unsafe')
+                    && (pkg.judge_majority === 'safe' || pkg.judge_majority === 'unsafe');
+            case 'unsafe':
+                return pkg.audit_majority === 'unsafe';
+            case 'safe':
+                return pkg.audit_majority === 'safe';
+            case 'unjudged':
+                return !pkg.judges || pkg.judges.length === 0;
+            default: return true;
+        }
+    }
+
     function getFilteredPackages() {
         let entries = Object.entries(DATA.packages);
 
         if (currentFilter !== 'all') {
-            entries = entries.filter(([, p]) => p.latest_result === currentFilter);
+            entries = entries.filter(([, p]) => matchesPreset(p, currentFilter));
         }
         if (searchTerm) {
             const term = searchTerm.toLowerCase();
@@ -596,9 +647,8 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             switch (key) {
                 case 'name': va = a[0]; vb = b[0]; break;
                 case 'version': va = a[1].pkgver; vb = b[1].pkgver; break;
-                case 'result': va = a[1].latest_result; vb = b[1].latest_result; break;
-                case 'judge': va = a[1].judge?.verdict || ''; vb = b[1].judge?.verdict || ''; break;
-                case 'audits': va = a[1].audit_count; vb = b[1].audit_count; break;
+                case 'audits': va = dangerScore(a[1]); vb = dangerScore(b[1]); break;
+                case 'judges': va = (a[1].judges || []).length; vb = (b[1].judges || []).length; break;
                 case 'files': va = a[1].files_reviewed; vb = b[1].files_reviewed; break;
                 case 'cost': va = a[1].total_cost; vb = b[1].total_cost; break;
                 case 'date': va = a[1].latest_date; vb = b[1].latest_date; break;
@@ -614,6 +664,17 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         return entries;
     }
 
+    function renderBlocks(items, type) {
+        if (!items || items.length === 0) {
+            return '<span class="text-slate-600">—</span>';
+        }
+        return items.map(item => {
+            const value = type === 'audit' ? item.result : item.verdict;
+            const model = (item.model || 'unknown').split('/').pop();
+            return `<span class="block block-${escapeAttr(value || 'unknown')}" title="${escapeAttr(model)}: ${escapeAttr(value || 'unknown')}"></span>`;
+        }).join('');
+    }
+
     function renderTable() {
         const entries = getFilteredPackages();
         const tbody = document.getElementById('package-table');
@@ -621,25 +682,20 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         document.getElementById('result-count').textContent = `${entries.length} package${entries.length !== 1 ? 's' : ''}`;
 
         tbody.innerHTML = entries.map(([name, pkg]) => {
-            const result = pkg.latest_result;
-            const judgeInfo = pkg.judge
-                ? `<span class="badge-${escapeHtml(pkg.judge.verdict)} px-1.5 py-0.5 rounded text-xs">${escapeHtml(pkg.judge.verdict)}</span>`
-                + (pkg.judge.re_audit ? ' <span class="text-yellow-500 text-xs" title="Re-audit recommended">&#x26a0;</span>' : '')
-                : '<span class="text-slate-600">—</span>';
             const date = pkg.latest_date ? pkg.latest_date.split('T')[0] : '—';
+            const safeId = escapeAttr(name);
 
-            return `<tr class="border-b border-slate-700/50 hover:bg-slate-750 cursor-pointer pkg-row" data-pkg="${escapeHtml(name)}">
+            return `<tr class="border-b border-slate-700/50 hover:bg-slate-750 cursor-pointer pkg-row" data-pkg="${safeId}">
                 <td class="px-4 py-2.5 font-medium text-blue-400">${escapeHtml(name)}</td>
                 <td class="px-4 py-2.5 text-slate-400">${escapeHtml(pkg.pkgver || '—')}</td>
-                <td class="px-4 py-2.5"><span class="badge-${escapeHtml(result)} px-1.5 py-0.5 rounded text-xs">${escapeHtml(result)}</span></td>
-                <td class="px-4 py-2.5">${judgeInfo}</td>
-                <td class="px-4 py-2.5 text-right text-slate-400">${pkg.audit_count}</td>
+                <td class="px-4 py-2.5"><span class="inline-flex items-center gap-0.5">${renderBlocks(pkg.audits, 'audit')}</span></td>
+                <td class="px-4 py-2.5"><span class="inline-flex items-center gap-0.5">${renderBlocks(pkg.judges, 'judge')}</span></td>
                 <td class="px-4 py-2.5 text-right text-slate-400">${pkg.files_reviewed}</td>
                 <td class="px-4 py-2.5 text-right text-slate-400">$${pkg.total_cost.toFixed(4)}</td>
                 <td class="px-4 py-2.5 text-slate-400">${date}</td>
             </tr>
-            <tr class="detail-row" id="detail-${name}">
-                <td colspan="8" class="p-0">
+            <tr class="detail-row" id="detail-${safeId}">
+                <td colspan="7" class="p-0">
                     <div class="p-6 bg-slate-850 border-t border-slate-600">
                         <div class="detail-content text-slate-400">Loading...</div>
                     </div>
@@ -657,7 +713,6 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             return;
         }
 
-        // Close other open details
         document.querySelectorAll('.detail-row.open').forEach(r => r.classList.remove('open'));
         row.classList.add('open');
 
@@ -683,11 +738,10 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 
         // Judge section
         if (data.judges && data.judges.length > 0) {
-            const j = data.judges[data.judges.length - 1];
-            const d = j.data;
-            html += `<div class="mb-6">
-                <h3 class="text-sm font-semibold text-slate-300 uppercase tracking-wide mb-2">Judge Verdict</h3>
-                <div class="bg-slate-800 rounded p-4 border border-slate-700">
+            html += `<h3 class="text-sm font-semibold text-slate-300 uppercase tracking-wide mb-2">Judge Verdicts (${data.judges.length})</h3>`;
+            for (const j of data.judges) {
+                const d = j.data;
+                html += `<div class="bg-slate-800 rounded p-4 border border-slate-700 mb-3">
                     <div class="flex gap-4 mb-3 text-sm">
                         <span>Verdict: <span class="result-${escapeHtml(d.correct_verdict)} font-bold">${escapeHtml(d.correct_verdict)}</span></span>
                         <span>Confidence: <strong>${escapeHtml(d.confidence)}</strong></span>
@@ -697,8 +751,8 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                     <p class="text-sm text-slate-300 whitespace-pre-wrap">${escapeHtml(d.reasoning || '')}</p>
                     ${d.coverage_issues && d.coverage_issues.length ? '<div class="mt-2 text-xs text-yellow-400">Coverage issues: ' + d.coverage_issues.map(escapeHtml).join(', ') + '</div>' : ''}
                     ${d.re_audit_focus && d.re_audit_focus.length ? '<div class="mt-1 text-xs text-yellow-400">Re-audit focus: ' + d.re_audit_focus.map(escapeHtml).join(', ') + '</div>' : ''}
-                </div>
-            </div>`;
+                </div>`;
+            }
         }
 
         // Audit reports
@@ -755,14 +809,16 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         return div.innerHTML;
     }
 
+    function escapeAttr(text) {
+        return String(text).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
     function setupEventListeners() {
-        // Search
         document.getElementById('search').addEventListener('input', e => {
             searchTerm = e.target.value;
             renderTable();
         });
 
-        // Filter buttons
         document.getElementById('filter-buttons').addEventListener('click', e => {
             const btn = e.target.closest('.filter-btn');
             if (!btn) return;
@@ -772,7 +828,6 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             renderTable();
         });
 
-        // Sort headers
         document.querySelectorAll('th[data-sort]').forEach(th => {
             th.addEventListener('click', () => {
                 const key = th.dataset.sort;
@@ -781,7 +836,6 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                 } else {
                     currentSort = {key, asc: true};
                 }
-                // Update header indicators
                 document.querySelectorAll('th[data-sort]').forEach(h => {
                     h.textContent = h.textContent.replace(/ [▲▼]$/, '');
                 });
@@ -790,7 +844,6 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             });
         });
 
-        // Row click for detail
         document.getElementById('package-table').addEventListener('click', e => {
             const row = e.target.closest('.pkg-row');
             if (!row) return;
