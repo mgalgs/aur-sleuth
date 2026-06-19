@@ -1,0 +1,30 @@
+{
+  "package": "linux-mainline",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "This is a standard mainline Linux kernel package built from the official kernel.org git repository with PGP signature verification using trusted keys (Torvalds, Kroah-Hartman, Steffens). The PKGBUILD, config.x86_64, and linux.install were all confirmed safe by both models. The lone 'unsafe' verdict comes from qwen flagging Documentation/admin-guide/aoe/autoload.sh, an upstream kernel documentation example script that is NOT referenced by any PKGBUILD build/package/prepare/check function or .install script. It is pure documentation content shipped in the kernel source tree and never executed during makepkg. The symlink-attack concern is also a speculative theoretical weakness in upstream kernel docs, not a supply-chain risk introduced by the AUR packager.",
+  "disagreement_analysis": "The disagreement stems entirely from qwen reviewing deeper into the kernel source tree and flagging an upstream documentation example script (autoload.sh) for theoretical insecure file handling / symlink attack potential. This is a classic false positive: the file is part of upstream Linux kernel documentation, is not executed by the packaging process, and the concern is a generic code-quality/hardening critique rather than evidence of malicious intent or a packaging-introduced risk. deepseek reviewed fewer files but correctly focused on the files that actually execute during makepkg.",
+  "coverage_issues": [
+    "deepseek-v4-flash selected 9 nonexistent file paths for review (hallucinated paths not in the package), effectively only reviewing 3 files; its file selection was weak though the reviewed files were the correct critical ones.",
+    "Neither model needs to review the ~93k kernel source files; both correctly recognized the critical surface is PKGBUILD, config, and linux.install."
+  ],
+  "false_positives": [
+    "qwen flagging Documentation/admin-guide/aoe/autoload.sh as UNSAFE for symlink-attack potential \u2014 this is upstream kernel documentation, never executed by makepkg, and the concern is theoretical hardening, not a real or packaging-introduced threat."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models should weight findings by whether a file is actually executed during makepkg (referenced by PKGBUILD build/package/prepare/check or .install). Upstream source-tree documentation/example scripts that are not invoked should not produce an UNSAFE verdict.",
+    "Distinguish 'malicious/supply-chain risk' from 'theoretical code-quality/hardening weakness in upstream code'. The latter should not flip the package verdict to unsafe for an AUR audit.",
+    "deepseek's file selector hallucinated 9 nonexistent paths; the tool should validate selected paths against the actual package tree before offering them and possibly penalize/re-prompt models that select missing files.",
+    "For well-known reference packages (mainline kernel from kernel.org with PGP-verified sources), models could short-circuit deep source-tree spelunking once the executing surface is confirmed clean, reducing token cost and false-positive surface.",
+    "Add explicit guidance that files under Documentation/ in kernel trees are non-executing examples and should be treated as informational unless the PKGBUILD copies/runs them."
+  ],
+  "_judge_usage": {
+    "model": "anthropic/claude-opus-4.8",
+    "prompt_tokens": 15568,
+    "completion_tokens": 1183,
+    "cost": 0.10741500000000001
+  }
+}
