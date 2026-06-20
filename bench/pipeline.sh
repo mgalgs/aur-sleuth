@@ -4,7 +4,7 @@
 #
 # Usage: pipeline.sh [--min-votes N] [--daily-budget AMOUNT] [--lookback-hours N]
 #                     [--seed-top N] [--jobs N] [--dry-run] [--skip-judge]
-#                     [--skip-dashboard]
+#                     [--skip-dashboard] [--packages-file FILE]
 #
 # State is derived from the audit-reports branch (no local state files needed).
 # Daily spend is tracked in $DATA_DIR/pipeline/spend-YYYY-MM-DD.log.
@@ -24,6 +24,7 @@ SEED_TOP=0
 AUDIT_MODELS="qwen/qwen3-235b-a22b-2507,deepseek/deepseek-v4-flash"
 JUDGE_MODEL="deepseek/deepseek-r1"
 REAUDIT_MODEL="anthropic/claude-sonnet-4.6"
+PACKAGES_FILE=""
 
 DATA_DIR="${AUR_SLEUTH_DATA_DIR:-$HOME/aur-sleuth-data}"
 METADATA_CACHE="$DATA_DIR/packages-meta-ext-v1.json.gz"
@@ -45,6 +46,7 @@ while [[ $# -gt 0 ]]; do
         --seed-top) SEED_TOP="$2"; shift 2 ;;
         --audit-models) AUDIT_MODELS="$2"; shift 2 ;;
         --judge-model) JUDGE_MODEL="$2"; shift 2 ;;
+        --packages-file) PACKAGES_FILE="$2"; shift 2 ;;
         *) echo "Unknown arg: $1" >&2; exit 1 ;;
     esac
 done
@@ -295,21 +297,28 @@ main() {
         return 0
     fi
 
-    # Step 1: Refresh metadata
-    refresh_metadata
-
-    # Step 2: Build index of already-audited packages
-    log "Building audited package index..."
-    local audited_index="$PIPELINE_DIR/audited-versions.tsv"
-    build_audited_index > "$audited_index"
-    local audited_count
-    audited_count=$(wc -l < "$audited_index")
-    log "  $audited_count packages already audited"
-
-    # Step 3: Discover packages needing audit
-    log "Discovering candidates..."
     local candidates_file="$PIPELINE_DIR/candidates.txt"
-    METADATA_CACHE="$METADATA_CACHE" discover_packages "$audited_index" > "$candidates_file"
+
+    if [[ -n "$PACKAGES_FILE" ]]; then
+        log "Using package list from $PACKAGES_FILE"
+        cp "$PACKAGES_FILE" "$candidates_file"
+    else
+        # Step 1: Refresh metadata
+        refresh_metadata
+
+        # Step 2: Build index of already-audited packages
+        log "Building audited package index..."
+        local audited_index="$PIPELINE_DIR/audited-versions.tsv"
+        build_audited_index > "$audited_index"
+        local audited_count
+        audited_count=$(wc -l < "$audited_index")
+        log "  $audited_count packages already audited"
+
+        # Step 3: Discover packages needing audit
+        log "Discovering candidates..."
+        METADATA_CACHE="$METADATA_CACHE" discover_packages "$audited_index" > "$candidates_file"
+    fi
+
     local candidate_count
     candidate_count=$(wc -l < "$candidates_file")
     log "  $candidate_count packages need auditing"
