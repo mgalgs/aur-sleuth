@@ -1108,30 +1108,30 @@ def get_base_url():
 
 
 def file_is_plain_text(file_path: Path) -> bool:
-    """Detects if a file is text or binary by sampling its content."""
+    """Detects if a file is text or binary using the file(1) command."""
     try:
-        with open(file_path, "rb") as f:
-            # Read a chunk of data (first 1024 bytes is usually enough)
-            chunk = f.read(1024)
-            if not chunk:  # Empty file
-                return True
-
-            # If null byte is present, likely binary
-            if b"\x00" in chunk:
-                return False
-
-            # Optionally: count printable chars vs. non-printable
-            # Using heuristic: if >30% are non-printable, consider binary
-            nontext_ratio = sum(
-                1 for b in chunk if b < 32 and b not in (9, 10, 13)
-            ) / len(chunk)
-            if nontext_ratio > 0.3:
-                return False
-
-            return True
+        result = subprocess.run(
+            ["file", "--brief", "--mime-type", str(file_path)],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode == 0:
+            mime = result.stdout.strip()
+            return mime.startswith("text/") or mime in (
+                "application/json",
+                "application/xml",
+                "application/x-shellscript",
+                "application/javascript",
+                "application/x-perl",
+                "application/x-ruby",
+                "application/x-python",
+                "application/toml",
+                "application/yaml",
+                "application/x-desktop",
+                "inode/x-empty",
+            )
     except Exception as e:
         logger.error(f"Failed to detect file type for {file_path}: {e}")
-        return False
+    return False
 
 
 def audit_failure_is_fatal() -> bool:
