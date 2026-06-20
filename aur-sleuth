@@ -2150,6 +2150,9 @@ def _write_report_frontmatter(
             f = _yaml_escape(v["file"] or "(package-level)")
             verdicts_yaml += f"  - file: {f}\n    status: {v['status']}\n    summary: {_yaml_escape(v['summary'])}\n"
 
+        triggered_by = os.environ.get("AUR_SLEUTH_TRIGGERED_BY", "")
+        reaudit_line = f"triggered_by: {_yaml_escape(triggered_by)}\n" if triggered_by else ""
+
         frontmatter = (
             f"---\n"
             f"package: {_yaml_escape(package_name)}\n"
@@ -2160,6 +2163,7 @@ def _write_report_frontmatter(
             f"provider: {provider}\n"
             f"base_url: {base_url}\n"
             f"aur_sleuth_rev: {sleuth_rev}\n"
+            f"{reaudit_line}"
             f"prompt_tokens: {prompt_tokens}\n"
             f"completion_tokens: {completion_tokens}\n"
             f"total_tokens: {prompt_tokens + completion_tokens}\n"

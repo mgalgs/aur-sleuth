@@ -159,7 +159,16 @@ def build_index_data(audits, judges):
             "pkgver": fm.get("pkgver", ""),
             "pkgrel": fm.get("pkgrel", ""),
             "file_verdicts": fm.get("file_verdicts", []),
+            "triggered_by": fm.get("triggered_by", ""),
         })
+
+    # Build set of re-audit filenames from judge data for backward compat
+    reaudit_filenames = set()
+    for j in judges:
+        data = j["data"]
+        rr = data.get("reaudit_report", "")
+        if rr:
+            reaudit_filenames.add(rr.split("/", 1)[1] if "/" in rr else rr)
 
     for j in judges:
         pkg = j["package"]
@@ -179,6 +188,12 @@ def build_index_data(audits, judges):
             "cost": usage.get("cost") or 0,
         })
 
+    # Tag re-audits: either from frontmatter or by cross-referencing judge data
+    for pkg_data in packages.values():
+        for a in pkg_data["audits"]:
+            if not a["triggered_by"] and a["filename"] in reaudit_filenames:
+                a["triggered_by"] = "judge"
+
     # Build per-package summary
     pkg_summaries = {}
     for pkg_name, pkg_data in sorted(packages.items()):
@@ -187,7 +202,12 @@ def build_index_data(audits, judges):
         total_cost = sum(a["cost"] for a in pkg_audits)
         total_cost += sum(j["cost"] for j in pkg_data["judges"])
 
-        audit_results = [a["result"] for a in pkg_audits]
+        # Re-audits count double in majority calculation
+        audit_results = []
+        for a in pkg_audits:
+            audit_results.append(a["result"])
+            if a.get("triggered_by"):
+                audit_results.append(a["result"])
         judge_verdicts = [j["correct_verdict"] for j in pkg_data["judges"]]
 
         pkg_summaries[pkg_name] = {
@@ -197,7 +217,10 @@ def build_index_data(audits, judges):
             "total_cost": round(total_cost, 6),
             "audit_count": len(pkg_audits),
             "files_reviewed": latest.get("files_reviewed", 0),
-            "audits": [{"result": a["result"], "model": a["model"]} for a in pkg_audits],
+            "audits": [
+                {"result": a["result"], "model": a["model"], "reaudit": bool(a.get("triggered_by"))}
+                for a in pkg_audits
+            ],
             "judges": [{"verdict": j["correct_verdict"], "model": j.get("model", "unknown")} for j in pkg_data["judges"]],
             "audit_majority": compute_majority(audit_results),
             "judge_majority": compute_majority(judge_verdicts),
@@ -373,6 +396,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         .block-inconclusive { background: #f59e0b; }
         .block-skipped { background: #4b5563; }
         .block-unknown { background: #4b5563; }
+        .block-reaudit { width: 16px; height: 16px; border: 2px solid #eab308; margin-right: 3px; }
         .detail-row { display: none; }
         .detail-row.open { display: table-row; }
         .report-body { display: none; }
@@ -671,7 +695,9 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         return items.map(item => {
             const value = type === 'audit' ? item.result : item.verdict;
             const model = (item.model || 'unknown').split('/').pop();
-            return `<span class="block block-${escapeAttr(value || 'unknown')}" title="${escapeAttr(model)}: ${escapeAttr(value || 'unknown')}"></span>`;
+            const reaudit = item.reaudit ? ' block-reaudit' : '';
+            const label = item.reaudit ? 're-audit' : type;
+            return `<span class="block block-${escapeAttr(value || 'unknown')}${reaudit}" title="${escapeAttr(model)}: ${escapeAttr(value || 'unknown')} (${label})"></span>`;
         }).join('');
     }
 
@@ -743,7 +769,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                 const d = j.data;
                 html += `<div class="bg-slate-800 rounded p-4 border border-slate-700 mb-3">
                     <div class="flex gap-4 mb-3 text-sm">
-                        <span>Verdict: <span class="result-${escapeHtml(d.correct_verdict)} font-bold">${escapeHtml(d.correct_verdict)}</span></span>
+                        <span>Verdict: <span class="result-${escapeAttr(d.correct_verdict)} font-bold">${escapeHtml(d.correct_verdict)}</span></span>
                         <span>Confidence: <strong>${escapeHtml(d.confidence)}</strong></span>
                         <span>Model: <span class="text-slate-400">${escapeHtml((d._judge_usage || {}).model || '?')}</span></span>
                         ${d.re_audit_recommended ? '<span class="text-yellow-500">&#x26a0; Re-audit recommended</span>' : ''}
@@ -767,7 +793,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 
                 html += `<div class="bg-slate-800 rounded p-4 border border-slate-700 mb-3">
                     <div class="flex flex-wrap gap-4 text-sm mb-2">
-                        <span class="result-${escapeHtml(result)} font-bold">${escapeHtml(result)}</span>
+                        <span class="result-${escapeAttr(result)} font-bold">${escapeHtml(result)}</span>
                         <span class="text-slate-400">${escapeHtml(model)}</span>
                         <span class="text-slate-500">${date}</span>
                         <span class="text-slate-500">${fm.files_reviewed || 0} files</span>
@@ -785,7 +811,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                     for (const v of fv) {
                         html += `<tr class="border-t border-slate-700/50">
                             <td class="py-1 pr-3 text-blue-300">${escapeHtml(v.file || '')}</td>
-                            <td class="py-1 pr-3 result-${v.status || 'unknown'}">${v.status || '?'}</td>
+                            <td class="py-1 pr-3 result-${escapeAttr(v.status || 'unknown')}">${escapeHtml(v.status || '?')}</td>
                             <td class="py-1 text-slate-400">${escapeHtml(v.summary || '')}</td>
                         </tr>`;
                     }

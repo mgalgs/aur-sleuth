@@ -309,6 +309,22 @@ try:
         "cost": cost,
     }
 
+    # Record which audits were judged (reconstruct branch filenames from frontmatter)
+    audits_judged = []
+    for path in report_files:
+        try:
+            with open(path, encoding="utf-8") as fh:
+                content = fh.read()
+            date_m = re.search(r'^date:\s*(.+)$', content, re.MULTILINE)
+            model_m = re.search(r'^model:\s*(.+)$', content, re.MULTILINE)
+            if date_m and model_m:
+                d = date_m.group(1).strip().replace("-", "").replace(":", "").replace("T", "-")[:15]
+                m = model_m.group(1).strip().replace("/", "-")
+                audits_judged.append(f"{d}-{m}.md")
+        except Exception:
+            pass
+    result["audits_judged"] = audits_judged
+
     # Write judge report
     judge_file = os.path.join(judge_dir, f"{pkg}.json")
     with open(judge_file, "w") as f:
@@ -376,9 +392,13 @@ do_reaudit() {
     local report_dir="${REPORTS_DIR}/${audit_model_slug}"
     mkdir -p "$report_dir"
 
+    local latest_judge
+    latest_judge=$(git show "${REPORTS_BRANCH}:${pkg}/" 2>/dev/null | grep 'judge\.json$' | sort | tail -1)
+
     AUDIT_FAILURE_FATAL=true AUR_SLEUTH_ASCII_ICONS=1 \
         OPENAI_MODEL="$AUDIT_MODEL" \
         AUR_SLEUTH_REPORT_DIR="$report_dir" \
+        AUR_SLEUTH_TRIGGERED_BY="${pkg}/${latest_judge}" \
         ./aur-sleuth --output plain "$pkg" 2>&1 || true
 
     local re_report="${report_dir}/aur-sleuth-report-${pkg}.txt"
