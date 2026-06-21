@@ -128,13 +128,24 @@ check_triggers() {
 
     [[ ${#reports[@]} -ge 1 ]] || return 1
 
-    # Disagreement: different result values across models
+    # Collect all results upfront
     local results=()
     for r in "${reports[@]}"; do
         local res
         res=$(fm "$r" result)
         [[ -n "$res" ]] && results+=("$res")
     done
+
+    # All-skipped: no point judging, would waste an LLM call
+    local non_skipped=0
+    for res in "${results[@]}"; do
+        [[ "$res" != "skipped" ]] && (( non_skipped++ ))
+    done
+    if (( ${#results[@]} > 0 && non_skipped == 0 )); then
+        return 1
+    fi
+
+    # Disagreement: different result values across models
     if (( ${#results[@]} >= 2 )); then
         local unique
         unique=$(printf '%s\n' "${results[@]}" | sort -u | wc -l)
