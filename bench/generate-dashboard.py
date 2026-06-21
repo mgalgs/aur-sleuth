@@ -144,6 +144,11 @@ def build_index_data(audits, judges):
     for a in audits:
         pkg = a["package"]
         fm = a["frontmatter"]
+        cost = safe_float(fm.get("cost"))
+        files = safe_int(fm.get("files_reviewed"))
+        result = fm.get("result", "unknown")
+        if cost == 0 and files == 0 and result not in ("skipped",):
+            continue
         packages[pkg]["audits"].append({
             "filename": a["filename"],
             "result": fm.get("result", "unknown"),
@@ -401,8 +406,9 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         .detail-row.open { display: table-row; }
         .report-body { display: none; }
         .report-body.open { display: block; }
-        th { cursor: pointer; user-select: none; }
-        th:hover { background: #1e293b; }
+        thead { position: sticky; top: 0; z-index: 10; }
+        th { cursor: pointer; user-select: none; background: #1e293b; }
+        th:hover { background: #253248; }
         .filter-btn.active { background: #3b82f6; color: white; }
     </style>
     <script>
@@ -490,7 +496,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         </div>
 
         <!-- Package Table -->
-        <div class="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
+        <div class="bg-slate-800 rounded-lg border border-slate-700">
             <table class="w-full text-sm">
                 <thead>
                     <tr class="bg-slate-750 border-b border-slate-700 text-left text-xs uppercase tracking-wide text-slate-400">
@@ -593,7 +599,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 
         // Model cost bar chart
         const modelCtx = document.getElementById('model-chart').getContext('2d');
-        const modelEntries = Object.entries(s.by_model);
+        const modelEntries = Object.entries(s.by_model).filter(([, v]) => v.cost > 0);
         const modelColors = ['#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#22c55e', '#06b6d4'];
         new Chart(modelCtx, {
             type: 'bar',
@@ -716,7 +722,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                 <td class="px-4 py-2.5 text-slate-400">${escapeHtml(pkg.pkgver || '—')}</td>
                 <td class="px-4 py-2.5"><span class="inline-flex items-center gap-0.5">${renderBlocks(pkg.audits, 'audit')}</span></td>
                 <td class="px-4 py-2.5"><span class="inline-flex items-center gap-0.5">${renderBlocks(pkg.judges, 'judge')}</span></td>
-                <td class="px-4 py-2.5 text-right text-slate-400">${pkg.files_reviewed}</td>
+                <td class="px-4 py-2.5 text-right text-slate-400">${pkg.files_reviewed === 0 && pkg.audits && pkg.audits.every(a => a.result === 'skipped' || a.result === 'inconclusive') ? '—' : pkg.files_reviewed}</td>
                 <td class="px-4 py-2.5 text-right text-slate-400">$${pkg.total_cost.toFixed(4)}</td>
                 <td class="px-4 py-2.5 text-slate-400">${date}</td>
             </tr>
