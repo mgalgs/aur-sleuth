@@ -139,7 +139,7 @@ check_triggers() {
     # All-skipped: no point judging, would waste an LLM call
     local non_skipped=0
     for res in "${results[@]}"; do
-        [[ "$res" != "skipped" ]] && (( non_skipped++ ))
+        [[ "$res" != "skipped" ]] && non_skipped=$(( non_skipped + 1 ))
     done
     if (( ${#results[@]} > 0 && non_skipped == 0 )); then
         return 1
