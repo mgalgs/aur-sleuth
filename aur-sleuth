@@ -1654,8 +1654,14 @@ def find_unpinned_remote_sources(pkgdir: Path) -> List[str]:
             url = source.split("::", 1)[1] if "::" in source else source
             if re.match(r"^(git|hg|svn|bzr)\+", url) or not is_remote_url(url):
                 continue
-            # Unpinned when every checksum array covering this source says SKIP --
-            # or when no checksum array exists for this arch group at all.
+            # Unpinned when every checksum array covering this source says SKIP. One real
+            # checksum of any algorithm is enough to pin the bytes, so a package with
+            # sha256sums=SKIP alongside a genuine b2sums is NOT reported.
+            #
+            # An empty `sums` makes all() true, which reports the source. That is the
+            # intended reading -- no checksum at all pins nothing -- and it also covers a
+            # checksum array shorter than its source array, which makepkg rejects before
+            # we ever run.
             sums = [vals[i] for vals in checksum_lists if i < len(vals)]
             if all(s.upper() == "SKIP" for s in sums):
                 unpinned.append(source)
@@ -1919,14 +1925,15 @@ def decide_next_files_to_review(
     # to be binary (extensionless ELF executables, .asar bundles). Reusing the probe
     # results here keeps this free -- no extra file(1) calls.
     considered = set(files_to_consider)
-    UNAUDITABLE_PAYLOAD.clear()
+    unauditable = []
     for f in other_pkg_files:
         if f in already_reviewed_files:
             continue
         if {s.lower() for s in f.suffixes} & _OPAQUE_PAYLOAD_EXTS:
-            UNAUDITABLE_PAYLOAD.append(f)
+            unauditable.append(f)
         elif file_security_priority(f) >= 0 and f not in considered:
-            UNAUDITABLE_PAYLOAD.append(f)
+            unauditable.append(f)
+    UNAUDITABLE_PAYLOAD[:] = unauditable
     if UNAUDITABLE_PAYLOAD:
         examples = ", ".join(str(f) for f in UNAUDITABLE_PAYLOAD[:3])
         more = f" and {len(UNAUDITABLE_PAYLOAD) - 3} more" if len(UNAUDITABLE_PAYLOAD) > 3 else ""
