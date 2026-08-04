@@ -45,12 +45,25 @@ filename="$(date -u +%Y%m%d-%H%M%S)-${model//\//-}.md"
 # recent aur-sleuth version. Use it as-is (renaming to .md for the branch).
 md_content="$(cat "$report_file")"
 
+# Resolve what this commit builds on. When only the remote copy of the branch exists --
+# a fresh clone, or any checkout that never fetched it into a local ref -- seed from
+# origin. Skipping this step does not fail loudly: the plumbing below would build a
+# PARENTLESS commit over an empty index, then repoint the branch at a tree holding only
+# this one report, silently discarding every report already archived.
+base_ref=""
+if git rev-parse --verify --quiet "refs/heads/${REPORTS_BRANCH}" >/dev/null; then
+    base_ref="refs/heads/${REPORTS_BRANCH}"
+elif git rev-parse --verify --quiet "refs/remotes/origin/${REPORTS_BRANCH}" >/dev/null; then
+    base_ref="refs/remotes/origin/${REPORTS_BRANCH}"
+    echo "Note: local ${REPORTS_BRANCH} is absent; basing this commit on origin/${REPORTS_BRANCH}"
+fi
+
 # Git plumbing: add to audit-reports branch without checking it out
 tmpindex="$(mktemp)"
 rm -f "$tmpindex"
 
-if git rev-parse --verify "$REPORTS_BRANCH" &>/dev/null; then
-    GIT_INDEX_FILE="$tmpindex" git read-tree "$REPORTS_BRANCH"
+if [[ -n "$base_ref" ]]; then
+    GIT_INDEX_FILE="$tmpindex" git read-tree "$base_ref"
 fi
 
 blob_hash="$(echo "$md_content" | git hash-object -w --stdin)"
@@ -59,8 +72,8 @@ GIT_INDEX_FILE="$tmpindex" git update-index --add \
 tree_hash="$(GIT_INDEX_FILE="$tmpindex" git write-tree)"
 
 parent_args=()
-if git rev-parse --verify "$REPORTS_BRANCH" &>/dev/null; then
-    parent_args=(-p "$REPORTS_BRANCH")
+if [[ -n "$base_ref" ]]; then
+    parent_args=(-p "$base_ref")
 fi
 
 commit_hash="$(git commit-tree "$tree_hash" \
