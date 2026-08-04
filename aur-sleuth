@@ -2023,7 +2023,24 @@ function references over unrelated files in the repo.
 
 Respond with a list of file paths, one path per line, with NO other additional text or formatting.
 """
-    response = llm.chat(prompt)
+    # A truncated response is benign HERE, unlike an audit verdict: this reply is a
+    # newline-separated path list, so a cut-off one is still a valid prefix and carries no
+    # verdict that could be wrongly trusted. LLM.chat() rejects truncated responses to stop
+    # a partial reply from parsing as a clean SAFE, but letting that abort the whole audit
+    # over a lost path would be far worse than reviewing a few files chosen by ranking.
+    # Fall back to the priority order already computed above.
+    try:
+        response = llm.chat(prompt)
+    except LLMResponseError as e:
+        fallback = files_for_prompt[:num_additional_files_to_review]
+        logger.warning("File selection failed (%s); falling back to priority order", e)
+        report.write(f"File selection failed ({e}); using highest-priority files instead\n")
+        tui.finalize_step(
+            f"Note: file selection did not complete ({e}). Falling back to the "
+            f"{len(fallback)} highest-priority file(s) by ranking."
+        )
+        return fallback
+
     if not response:
         raise RuntimeError("Failed to get response from LLM for file selection.")
 
