@@ -24,6 +24,7 @@ import colorsys
 import concurrent.futures
 import configparser
 import datetime
+import functools
 import html
 import json
 import logging
@@ -1561,16 +1562,29 @@ def extract_noextract_archives(pkgdir: Path, tui: ConsoleUI):
             logger.debug(f"Could not extract {entry.name}, skipping")
 
 
-def get_source_info(pkgdir: Path):
-    output = subprocess.run(
+@functools.lru_cache(maxsize=8)
+def _srcinfo_output(pkgdir: Path) -> str:
+    """Run `makepkg --printsrcinfo` for a package directory, once.
+
+    Three call sites need this output: the source listing, the unpinned-source check, and
+    the report frontmatter. Each invocation spawns a subprocess that sources the PKGBUILD,
+    and the PKGBUILD does not change during an audit, so cache it. lru_cache does not cache
+    exceptions, so a failing call still retries.
+    """
+    return subprocess.run(
         ["makepkg", "--printsrcinfo"],
         check=True,
         capture_output=True,
         text=True,
         cwd=pkgdir,
-    )
+    ).stdout
+
+
+def get_source_info(pkgdir: Path):
+    """Parse --printsrcinfo into a flat dict. Duplicate keys collapse to the last value;
+    use _srcinfo_grouped() when a key's every value matters."""
     source_info = dict()
-    for line in output.stdout.splitlines():
+    for line in _srcinfo_output(pkgdir).splitlines():
         line = line.strip()
         if "=" not in line:
             continue
@@ -1580,6 +1594,21 @@ def get_source_info(pkgdir: Path):
         source_info[key] = value
 
     return source_info
+
+
+def _srcinfo_grouped(pkgdir: Path) -> Dict[str, List[str]]:
+    """Parse --printsrcinfo preserving every value per key, in order.
+
+    Sources and their checksums pair up POSITIONALLY within an arch group, so the flat
+    dict from get_source_info() cannot express them -- it keeps only the last value.
+    """
+    grouped: Dict[str, List[str]] = {}
+    for line in _srcinfo_output(pkgdir).splitlines():
+        if "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        grouped.setdefault(key.strip(), []).append(value.strip())
+    return grouped
 
 
 _CHECKSUM_KEY_RE = re.compile(
@@ -1607,23 +1636,10 @@ def find_unpinned_remote_sources(pkgdir: Path) -> List[str]:
     Returns the offending source values as they appear in the PKGBUILD.
     """
     try:
-        output = subprocess.run(
-            ["makepkg", "--printsrcinfo"],
-            check=True, capture_output=True, text=True, cwd=pkgdir,
-        )
+        grouped = _srcinfo_grouped(pkgdir)
     except (subprocess.CalledProcessError, OSError) as e:
         logger.warning("Could not check for unpinned sources: %s", e)
         return []
-
-    # Collect ordered value lists per key. get_source_info() collapses duplicate keys,
-    # but sources and their checksums pair up POSITIONALLY within an arch group, so we
-    # need every value in order.
-    grouped: Dict[str, List[str]] = {}
-    for line in output.stdout.splitlines():
-        if "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        grouped.setdefault(key.strip(), []).append(value.strip())
 
     unpinned = []
     for key, sources in grouped.items():
