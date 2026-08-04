@@ -2200,8 +2200,14 @@ PKGBUILD review that follows.)"""
         extra_instructions,
     )
 
+    # Branch on color support: the markup is literal text in a no-color report, and
+    # these reports get archived and read as plain files.
+    if tui.has_color:
+        summary_txt = f"[{GREY}]-- {result.summary}[/]"
+    else:
+        summary_txt = f"-- {result.summary}"
     tui.finalize_step(
-        f"Initial PKGBUILD audit complete [{GREY}]-- {result.summary}[/]",
+        f"Initial PKGBUILD audit complete {summary_txt}",
         status=result.status,
     )
     return result
