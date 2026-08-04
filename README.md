@@ -1,6 +1,13 @@
 # aur-sleuth
 
-An LLM-powered security auditing tool for Arch User Repository (AUR) packages.
+An LLM-powered tool that detects **supply-chain attacks in Arch User Repository (AUR)
+packages** — malicious code injected into the packaging by a maintainer, a hijacked
+maintainer account, or a swapped upstream artifact.
+
+It answers one question: *is it safe to run `makepkg` on this package and install the
+result?* It is not a general security auditor and not a vulnerability scanner. It does
+not judge whether the upstream application itself is well written or trustworthy with
+your data.
 
 `aur-sleuth` performs in-depth security analysis of an AUR package. It can be run
 standalone, and a separate shell wrapper (`makepkg-with-sleuthing`) integrates it

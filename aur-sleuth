@@ -222,6 +222,21 @@ class LLMClient:
         }
 
 
+# THREAT MODEL INVARIANT -- read CLAUDE.md before editing anything in here.
+#
+# aur-sleuth detects SUPPLY-CHAIN ATTACKS THAT TARGET THE AUR: code injected into the
+# packaging pipeline by a malicious maintainer, a hijacked maintainer account, or a
+# swapped upstream artifact. It is NOT a general security auditor and NOT a
+# vulnerability scanner.
+#
+# Items 5, 6, and 7 of "file_auditor" below carry the upstream-functionality-versus-
+# injected-code distinction. They suppress a large class of false positives, and they
+# are the reason this tool is usable as an install gate rather than a noise generator.
+#
+# When you edit these prompts, preserve that distinction. Never add an instruction to
+# flag risky-but-legitimate application behavior (a VPN needing setuid, a browser
+# reading files, upstream telemetry). Such an instruction fires on EVERY package of
+# that kind, so it buys one false positive per package and catches no attacker.
 SYSTEM_PROMPTS = {
     "general_security_auditor": lambda: (
         """You are an agentic security auditor. Your goal is to inspect the source code and AUR build files in this package to find any potential vulnerabilities, malicious code, or supply chain attack vectors.
