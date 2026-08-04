@@ -88,6 +88,19 @@ GREY = "grey50"
 USE_ASCII_ICONS = os.environ.get("AUR_SLEUTH_ASCII_ICONS", "").lower() in ("1", "true", "yes", "y")
 ALLOWED_LLM_RESPONSE_TAGS = {"security_assessment", "decision", "details", "summary"}
 
+# Package files that no LLM review can cover, because they are compiled or archived
+# payload rather than text: ELF executables, shared objects, .asar bundles, nested
+# archives. Populated by decide_next_files_to_review(). We report the count so a
+# clean result cannot be mistaken for full coverage -- for a `-bin` package this is
+# most of what gets installed. One audit runs per process, so a module-level list is
+# enough and avoids threading a count through do_agentic_audit's return type.
+UNAUDITABLE_PAYLOAD: List[Path] = []
+
+# http(s) sources whose checksum is SKIP, so nothing pins the bytes they fetch. Populated
+# by find_unpinned_remote_sources(). Reported as a fact, never as a verdict -- see that
+# function's docstring for why this is detected in code rather than by the model.
+UNPINNED_SOURCES: List[str] = []
+
 
 def sanitize_for_llm(text: str) -> str:
     """
@@ -275,8 +288,11 @@ Follow these instructions stricly:
 
 5. The following are STANDARD AUR/packaging practices. They are NOT, by themselves, evidence
    of malice -- do NOT mark a file UNSAFE solely because of them:
-  - Checksums (sha256sums/md5sums/b2sums/etc.) set to 'SKIP'. SKIP is REQUIRED for VCS
-    sources (git+/svn+/hg+/bzr+) and common otherwise; it is a trust/hygiene choice, not malware.
+  - Checksums (sha256sums/md5sums/b2sums/etc.) set to 'SKIP'. NEVER mark a file UNSAFE over
+    a SKIP checksum, on any source type -- VCS or prebuilt binary alike. SKIP is REQUIRED
+    for VCS sources and is ordinary practice elsewhere; it is a trust/hygiene choice, not
+    malware. aur-sleuth already detects and reports unpinned sources on its own, so you do
+    not need to hunt for them. Just do not call a SKIPped source "verified" or "trusted".
   - Fetching the package's own declared upstream source over git or http(s), including
     `git clone` and `git checkout`/`switch` of that repo or a branch/tag of it.
   - A `source` that tracks a mutable branch/tag instead of a pinned commit. Unpinned VCS
@@ -1558,6 +1574,71 @@ def get_source_info(pkgdir: Path):
     return source_info
 
 
+_CHECKSUM_KEY_RE = re.compile(
+    r"^(?:md5|sha1|sha224|sha256|sha384|sha512|b2)sums(_.*)?$"
+)
+
+
+def find_unpinned_remote_sources(pkgdir: Path) -> List[str]:
+    """Find http(s) sources whose checksum is SKIP (or absent).
+
+    A checksum is the only thing pinning the bytes behind an http(s) URL. Without one,
+    whoever controls that URL can swap the payload at any time, and every later rebuild
+    installs the new bytes with no checksum mismatch and no AUR update. For a `-bin`
+    package that artifact is the entire package.
+
+    This is a syntactic property of the PKGBUILD, so we detect it here instead of asking
+    the auditing model. Two earlier attempts to express it as a prompt rule both caused
+    false UNSAFE verdicts: given a vivid description of the risk, models escalate to
+    UNSAFE regardless of an instruction to stay SAFE. Detecting it in code reports the
+    fact reliably and keeps it out of the verdict path entirely.
+
+    VCS sources are excluded: SKIP is mandatory for them, and the commit/tag ref pins
+    the content.
+
+    Returns the offending source values as they appear in the PKGBUILD.
+    """
+    try:
+        output = subprocess.run(
+            ["makepkg", "--printsrcinfo"],
+            check=True, capture_output=True, text=True, cwd=pkgdir,
+        )
+    except (subprocess.CalledProcessError, OSError) as e:
+        logger.warning("Could not check for unpinned sources: %s", e)
+        return []
+
+    # Collect ordered value lists per key. get_source_info() collapses duplicate keys,
+    # but sources and their checksums pair up POSITIONALLY within an arch group, so we
+    # need every value in order.
+    grouped: Dict[str, List[str]] = {}
+    for line in output.stdout.splitlines():
+        if "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        grouped.setdefault(key.strip(), []).append(value.strip())
+
+    unpinned = []
+    for key, sources in grouped.items():
+        if key != "source" and not key.startswith("source_"):
+            continue
+        arch_suffix = key[len("source"):]  # "" or "_x86_64"
+        checksum_lists = [
+            values for ckey, values in grouped.items()
+            if (m := _CHECKSUM_KEY_RE.match(ckey)) and (m.group(1) or "") == arch_suffix
+        ]
+        for i, source in enumerate(sources):
+            url = source.split("::", 1)[1] if "::" in source else source
+            if re.match(r"^(git|hg|svn|bzr)\+", url) or not is_remote_url(url):
+                continue
+            # Unpinned when every checksum array covering this source says SKIP --
+            # or when no checksum array exists for this arch group at all.
+            sums = [vals[i] for vals in checksum_lists if i < len(vals)]
+            if all(s.upper() == "SKIP" for s in sums):
+                unpinned.append(source)
+
+    return unpinned
+
+
 def get_source_listing(
     pkgdir: Path, tui: ConsoleUI
 ) -> Tuple[Optional[List[Path]], Optional[List[Path]], bool]:
@@ -1652,6 +1733,19 @@ _BINARY_EXTS = frozenset(
         ".woff", ".woff2", ".ttf", ".otf", ".eot",
         ".pdf", ".doc", ".docx", ".xls", ".xlsx",
         ".pyc", ".pyo", ".class", ".wasm",
+    }
+)
+
+# The subset of _BINARY_EXTS that can carry an executable payload. Used only for
+# reporting what the audit could not cover, so images, fonts, and office documents are
+# deliberately left out: they are unreadable too, but counting them would bury the
+# signal (an Electron package ships hundreds of icons) and none of them execute.
+_OPAQUE_PAYLOAD_EXTS = frozenset(
+    {
+        ".deb", ".rpm", ".tar", ".gz", ".xz", ".bz2", ".zst", ".lz4", ".lzma",
+        ".zip", ".7z", ".rar", ".cab", ".cpio", ".ar",
+        ".so", ".a", ".o", ".dylib", ".dll", ".exe", ".bin", ".elf", ".sfx",
+        ".pyc", ".pyo", ".class", ".wasm", ".asar", ".jar", ".appimage",
     }
 )
 
@@ -1794,6 +1888,31 @@ def decide_next_files_to_review(
         if f not in already_reviewed_files and file_security_priority(f) >= 0
         and file_is_plain_text(f)
     ]
+
+    # Record the payload no review can reach, so a clean verdict can't be read as full
+    # coverage. Two groups: extensions the priority filter already classified as
+    # compiled or archived, and files that reached the text probe above and turned out
+    # to be binary (extensionless ELF executables, .asar bundles). Reusing the probe
+    # results here keeps this free -- no extra file(1) calls.
+    considered = set(files_to_consider)
+    UNAUDITABLE_PAYLOAD.clear()
+    for f in other_pkg_files:
+        if f in already_reviewed_files:
+            continue
+        if {s.lower() for s in f.suffixes} & _OPAQUE_PAYLOAD_EXTS:
+            UNAUDITABLE_PAYLOAD.append(f)
+        elif file_security_priority(f) >= 0 and f not in considered:
+            UNAUDITABLE_PAYLOAD.append(f)
+    if UNAUDITABLE_PAYLOAD:
+        examples = ", ".join(str(f) for f in UNAUDITABLE_PAYLOAD[:3])
+        more = f" and {len(UNAUDITABLE_PAYLOAD) - 3} more" if len(UNAUDITABLE_PAYLOAD) > 3 else ""
+        tui.finalize_step(
+            f"Note: {len(UNAUDITABLE_PAYLOAD)} compiled/archived file(s) cannot be "
+            f"audited as text and were not reviewed ({examples}{more}). For a package "
+            "that ships prebuilt binaries, the audit covers the packaging, not the "
+            "payload."
+        )
+
     if len(files_to_consider) <= num_additional_files_to_review:
         return files_to_consider
 
@@ -2056,9 +2175,20 @@ What these commands actually do:
 So focus ONLY on whether fetching the sources and sourcing/parsing the PKGBUILD is dangerous --
 for example a `source` entry, top-level command substitution, or `pkgver()` that downloads and
 runs an untrusted payload or exfiltrates data while the PKGBUILD is sourced. Standard source
-definitions are normal and must NOT fail this gate on their own: git+https sources, SKIP
-checksums for VCS sources, and unpinned branches/tags. Mark UNSAFE only if running the two
-commands above would itself execute genuinely malicious code. (Suspicious content in
+definitions are normal and must NOT fail this gate on their own: git+https sources, unpinned
+branches/tags, and SKIP checksums on ANY source type -- VCS or a prebuilt binary artifact
+alike.
+
+Be explicit about that last one, because it is the most common way this gate is failed by
+mistake: downloading and extracting an UNVERIFIED archive is precisely what these commands
+are designed to do. We fetch the sources in order to audit them. Extraction writes files to
+disk; it does not run them, and `--nobuild`/`--noprepare` stop before anything in the
+package could execute. So a missing or SKIPped checksum is NEVER grounds to fail THIS gate,
+no matter what the artifact is -- the full PKGBUILD review that follows will record it for
+the user.
+
+Mark UNSAFE only if running the two commands above would itself execute genuinely malicious
+code. (Suspicious content in
 `prepare()`/`build()`/`package()` is out of scope here -- it will be audited in the full
 PKGBUILD review that follows.)"""
     result = audit_file(
@@ -2108,6 +2238,18 @@ def do_agentic_audit(
         report.write(msg)
         tui.finalize_step(msg, SafeStatus.SKIPPED)
         return [AuditResult(None, pkgdir, SafeStatus.SKIPPED, msg)]
+
+    # Report unpinned remote sources as a fact about the package. This is deliberately
+    # NOT a verdict: SKIP checksums are ordinary AUR practice, so failing on them would
+    # block a large share of legitimate packages. The user still deserves to know that
+    # nothing pins the bytes being installed.
+    UNPINNED_SOURCES[:] = find_unpinned_remote_sources(pkgdir)
+    if UNPINNED_SOURCES:
+        tui.finalize_step(
+            f"Note: {len(UNPINNED_SOURCES)} remote source(s) have no checksum "
+            f"(sha256sums=SKIP), so the fetched bytes are not verifiable and can change "
+            f"without any AUR update: {', '.join(UNPINNED_SOURCES)}"
+        )
 
     # Review required files in parallel
     required_audit_results = audit_files(
@@ -2238,6 +2380,8 @@ def _write_report_frontmatter(
             f"execution_time: {round(execution_time, 2)}\n"
             f"files_reviewed: {files_reviewed}\n"
             f"files_skipped: {files_skipped}\n"
+            f"files_unauditable: {len(UNAUDITABLE_PAYLOAD)}\n"
+            f"unpinned_sources: {len(UNPINNED_SOURCES)}\n"
             f"date: {date_str}\n"
             f"file_verdicts:\n{verdicts_yaml}"
             f"---\n\n"
