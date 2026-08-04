@@ -1977,7 +1977,9 @@ def decide_next_files_to_review(
             listing_lines.append(f"- {f}")
     listing_str = "\n".join(listing_lines)
     prompt = f"""
-To continue the audit of the {sanitize_for_llm(package_name)} package, choose the {num_additional_files_to_review} files from the listing below that are MOST likely to contain malicious or dangerous code.
+To continue the audit of the {sanitize_for_llm(package_name)} package, choose UP TO {num_additional_files_to_review} files from the listing below that are MOST likely to contain malicious or dangerous code.
+
+{num_additional_files_to_review} is a ceiling, not a quota. Select only files whose review could actually change the verdict. If fewer qualify, return fewer -- returning 3 useful paths beats padding to {num_additional_files_to_review} with files you already expect to be clean. A review slot spent confirming an inert config file buys nothing.
 
 Prioritize files where code can execute at build or install time, or that can inject code into the build -- that is where supply-chain payloads hide:
   - install hooks (*.install) and post_install/post_upgrade scripts
@@ -1996,9 +1998,14 @@ DEPRIORITIZE auto-generated build scaffolding. These files are mostly boilerplat
 
 Do NOT spend reviews on pure documentation or license files (README, LICENSE/COPYING, NEWS, CHANGELOG, AUTHORS, THANKS, MAINTAINERS, CONTRIBUTING, INSTALL, HACKING, CODE_OF_CONDUCT, and similar). They cannot execute and are almost never an attack vector -- pick them only if there is genuinely nothing else worth reviewing. The listing is already ordered with the most security-relevant files first.
 
+DEPRIORITIZE vendored upstream bundle content. We hunt for code INJECTED into the AUR packaging, so files that ship verbatim inside an upstream release artifact are a poor use of a slot -- no AUR maintainer touched them, and they are identical for every user of that upstream release:
+  - bundled dependency trees (node_modules/, vendor/, third_party/, site-packages/)
+  - the application's own runtime config shipped in the bundle (driver/ICD manifests, packaged template configs, brand/metadata files)
+  When a package merely repackages a prebuilt archive, the AUR-controlled surface may be only the PKGBUILD and the install hook -- both already reviewed. In that case say so by returning FEW files or none, rather than filling slots with bundle contents. Files the maintainer wrote or modified always outrank files that came from the artifact.
+
 Two more rules for spending the budget well:
   - Prefer files that actually run during `makepkg` (the build system and install hooks) over test-suite, example, and developer-maintenance scripts. The latter run only under `check()`, CI, or manual developer use, so review them only after the build-time and install-time files are covered. Recognize developer-maintenance scripts by their ROLE, not just their directory: besides test/example/demo scaffolding (tests/, examples/, demo/), this includes code formatters/linters, code generators, source import/sync/refactor helpers, and release scripts -- which commonly live in scripts/ or tools/ or beside the source rather than in an obvious test directory. A script the build never invokes cannot run during install, so it is a low-value pick no matter how prominent its name.
-  - Spread your picks across DISTINCT files. When several files are near-identical copies (for example the same script duplicated across per-driver or per-test subdirectories), review just one representative and use the remaining slots on different files, so the limited budget covers as much unique code as possible.
+  - Spread your picks across DISTINCT files. When several files are near-identical copies (for example the same script duplicated across per-driver or per-test subdirectories), review just one representative and use the remaining slots on different files, so the limited budget covers as much unique code as possible. Judge sameness by CONTENT, not just by filename: sibling files that are variants of one template (for example several routing/profile configs in the same directory, differing only in which rules they enable) are one review, not several, even though every filename differs. Pick the representative, then move on.
 
 Do not select any files that have already been reviewed.
 {"" if not has_vcs_source else """
