@@ -4,7 +4,7 @@
 #
 # Usage: pipeline.sh [--min-votes N] [--daily-budget AMOUNT] [--lookback-hours N]
 #                     [--seed-top N] [--jobs N] [--dry-run] [--skip-judge]
-#                     [--skip-dashboard] [--packages-file FILE]
+#                     [--skip-dashboard] [--no-push] [--packages-file FILE]
 #
 # State is derived from the audit-reports branch (no local state files needed).
 # Daily spend is tracked in $DATA_DIR/pipeline/spend-YYYY-MM-DD.log.
@@ -20,6 +20,7 @@ JOBS=8
 DRY_RUN=false
 SKIP_JUDGE=false
 SKIP_DASHBOARD=false
+NO_PUSH=false
 SEED_TOP=0
 AUDIT_MODELS="qwen/qwen3-235b-a22b-2507,deepseek/deepseek-v4-flash"
 JUDGE_MODEL="deepseek/deepseek-r1"
@@ -43,6 +44,7 @@ while [[ $# -gt 0 ]]; do
         --dry-run) DRY_RUN=true; shift ;;
         --skip-judge) SKIP_JUDGE=true; shift ;;
         --skip-dashboard) SKIP_DASHBOARD=true; shift ;;
+        --no-push) NO_PUSH=true; shift ;;
         --seed-top) SEED_TOP="$2"; shift 2 ;;
         --audit-models) AUDIT_MODELS="$2"; shift 2 ;;
         --judge-model) JUDGE_MODEL="$2"; shift 2 ;;
@@ -257,8 +259,11 @@ audit_package() {
 }
 
 # --- Push audit-reports branch ---
+# --no-push leaves the branch on the local clone. A caller that runs this pipeline
+# next to untrusted code uses it to keep the git write credential out of this
+# process: the commits stay local, and a separate trusted step pushes them.
 push_reports() {
-    if $DRY_RUN; then return 0; fi
+    if $DRY_RUN || $NO_PUSH; then return 0; fi
     (
         flock -x 200
         if git push origin "$REPORTS_BRANCH" 2>/dev/null; then
@@ -426,6 +431,9 @@ main() {
     log "=== Pipeline Complete ==="
     log "Daily spend: \$$(get_daily_spent) / \$$DAILY_BUDGET"
     log "Budget remaining: \$$(budget_remaining)"
+    if $NO_PUSH && ! $DRY_RUN; then
+        log "--no-push: $REPORTS_BRANCH left unpushed for a separate publish step"
+    fi
 
     # Append to run log
     echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) spent=\$$(get_daily_spent) budget=\$$DAILY_BUDGET candidates=$candidate_count" \
