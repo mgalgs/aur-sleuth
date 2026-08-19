@@ -1,0 +1,121 @@
+# Running the audit pipeline in a container
+
+`bench/pipeline.sh` audits recently-updated AUR packages, judges the results, regenerates the dashboard, and pushes everything to the `audit-reports` branch. This directory packages that loop as a container image designed to run unattended as a scheduled job.
+
+It ships the **image**, not a deployment. Scheduling is almost entirely site-specific values — registry, storage, schedule, budget, timezone, commit identity — so the scheduler's configuration belongs in your own infrastructure repository. [What the image requires](#what-the-image-requires) states what it must provide.
+
+## What it does
+
+One run is one `pipeline.sh` invocation. The pipeline throttles itself: it accumulates spend in `$DATA_DIR/pipeline/spend-YYYY-MM-DD.log` and exits when the day's total reaches `--daily-budget`. Run it several times a day and each run re-reads the same day's ledger, so the cap holds across runs — provided the ledger survives, which is what a persistent volume is for.
+
+Runs must not overlap, or two of them race on the archive and the push.
+
+## The three stages, and why
+
+The pipeline runs untrusted code by design. `makepkg --nobuild` sources arbitrary AUR `PKGBUILD` files, which executes their top-level shell and `pkgver()`. That is the point of the tool, but it means a hostile package gets a shell in the container. A run is therefore split into stages that run in sequence, each in its own container:
+
+| Stage | Credential | Volume | Runs untrusted code |
+|---|---|---|---|
+| `prepare` | none | read-write | no |
+| `audit` | LLM API key | read-write | **yes** |
+| `publish` | git deploy key | **read-only** | no |
+
+`prepare` creates or refreshes the git object store on the volume and prunes old state. `audit` runs the whole pipeline with `--no-push`, so every commit stays local. `publish` pushes the `audit-reports` branch.
+
+Two properties make the split hold rather than merely look tidy:
+
+- **Each container has its own image layer.** The trusted code in `/opt/aur-sleuth` is per-container, so the audit stage cannot tamper with the scripts the publish stage runs. Only the volume is shared.
+- **`publish` never runs git inside the shared object store.** A git repository's own config and hooks are executable input: `core.sshCommand`, `core.fsmonitor`, `core.pager`, `url.*.insteadOf`, filter drivers, and `pre-push` are all commands, and all of them live in files the audit stage can write. Instead, `publish` creates a throwaway bare repository in its own filesystem, borrows the objects read-only through `objects/info/alternates`, and copies the refs across as the plain text they are. The push then runs entirely under configuration this image wrote.
+
+This is verified, not assumed. Poison the shared store with a `pre-push` hook, a `core.sshCommand`, a `core.fsmonitor` and a `url.*.insteadOf`, then run both a control push from inside that store and the real `publish` stage: the control fires the hook, `publish` ignores every one of them and pushes the correct ref.
+
+What the split does **not** prevent — two things, and both are worth stating plainly:
+
+- **The audit stage can write arbitrary commits** onto the local `audit-reports` branch, and `publish` will push them. Report *content* is untrusted either way — the reports are produced by a model reading hostile input. The git *credential* is what the split protects.
+- **The LLM API key is exposed to the audit container.** The same process that calls the LLM API also drives `makepkg`, so the key necessarily lives in the container that executes hostile code. aur-sleuth strips it from the environment it hands to `makepkg`, which stops a PKGBUILD from simply reading `$OPENAI_API_KEY` — but code running as the same UID can still dig it out of the parent process. Treat the key as reachable by a sufficiently determined package: use a key scoped to one provider with a hard spend cap, or a self-hosted model where the key is a worthless placeholder.
+
+## Building
+
+Build from the repository root, not from this directory:
+
+```bash
+docker build \
+  --build-arg AUR_SLEUTH_REV="$(git rev-parse HEAD)" \
+  -f deploy/container/Dockerfile \
+  -t aur-sleuth:dev .
+```
+
+Notes on the image:
+
+- **Arch Linux is required.** `aur-sleuth` shells out to `makepkg`, `bsdtar`, and `file(1)`. There is no Debian or Alpine equivalent.
+- **`makepkg` refuses to run as root**, so the image ships a `sleuth` user (UID 1000) and runs as it. `--nodeps`, which the pipeline already passes, avoids needing `pacman -S` and therefore root.
+- `aur-sleuth` is a [PEP 723](https://peps.python.org/pep-0723/) script whose shebang is `uv run --script`. The build resolves and caches its dependencies once, so the image is the pinning boundary — rebuild to pick up new releases.
+- `AUR_SLEUTH_REV` is baked in and pinned onto `HEAD` by the `prepare` stage, so every archived report records the source revision that produced it.
+- GitHub's SSH host keys are fetched from `https://api.github.com/meta` over TLS at build time, not trusted on first use by `ssh-keyscan`. Rebuild if GitHub rotates them, or point `AUR_SLEUTH_KNOWN_HOSTS` at a mounted file.
+
+## Testing locally
+
+Most failures — the root/`makepkg` conflict, a missing tool, the wrong clone shape — surface here for far less effort than under a scheduler.
+
+```bash
+# The volume must be writable by UID 1000.
+docker volume create aur-sleuth-test
+docker run --rm -u 0 -v aur-sleuth-test:/data alpine chown 1000:1000 /data
+
+# Stage 1: clone the object store. Safe to repeat.
+docker run --rm -v aur-sleuth-test:/data aur-sleuth:dev prepare
+
+# Stage 2: discover work without spending anything.
+docker run --rm -v aur-sleuth-test:/data -e OPENAI_API_KEY=unused \
+  aur-sleuth:dev audit --dry-run --skip-judge --daily-budget 0.10
+
+# A real audit of one package, for a few cents.
+printf 'some-package\n' > /tmp/pkgs.txt
+docker run --rm -v aur-sleuth-test:/data -v /tmp/pkgs.txt:/tmp/pkgs.txt:ro \
+  -e OPENAI_API_KEY="$YOUR_KEY" -e OPENAI_BASE_URL=https://openrouter.ai/api/v1 \
+  aur-sleuth:dev audit --packages-file /tmp/pkgs.txt \
+  --skip-judge --skip-dashboard --daily-budget 0.05
+
+# Stage 3: what would be pushed, with the volume mounted read-only as the
+# publish stage requires.
+docker run --rm -v aur-sleuth-test:/data:ro \
+  -e AUR_SLEUTH_PUBLISH_DRY_RUN=true aur-sleuth:dev publish
+```
+
+## What the image requires
+
+Whatever runs it must provide:
+
+- **UID 1000, non-root.** `makepkg` refuses to run as root.
+- **One persistent volume mounted at `/data` on every stage**, writable by UID 1000, and mounted **read-only** on `publish`. That read-only mount is load-bearing, not decoration; see [The three stages, and why](#the-three-stages-and-why). Keep the volume even when the job is removed: the spend ledger on it is the one piece of state that is not derivable from git, and losing it mid-day resets the budget to zero.
+- **The stages in sequence, never overlapping**, so two runs cannot race on the archive and the push.
+- **Secrets only where needed.** Only `audit` gets the LLM key; only `publish` gets the git key; `prepare` gets none. Create the git key as a deploy key with write access scoped to the one repository that holds the `audit-reports` branch, rather than a broad personal access token.
+- **Restricted egress for the audit stage.** Legitimate AUR sources use http, https and the git protocol, so allow DNS plus outbound TCP on 80, 443 and 9418 to the internet and deny every private range, including link-local. A hostile `PKGBUILD` should reach nothing on your network. If the audit stage talks to a self-hosted model on a private address, add one narrow rule for that host and port rather than widening the exclusions.
+- **Enough disk.** `aur-sleuth` extracts each package's sources under `$DATA_DIR/bulk-reports/`, so a run with `--jobs 4` and two models can hold eight package trees at once. `prepare` removes any tree left behind by a run that died.
+
+Pass extra pipeline flags as arguments after the verb, for example `audit --daily-budget 1.00 --jobs 4`. Set `GIT_AUTHOR_NAME` and `GIT_AUTHOR_EMAIL` to match the identity already on the `audit-reports` commits, or the archive history gains a second author.
+
+### Configuration
+
+Set as environment variables on the container.
+
+| Variable | Stage | Default | Purpose |
+|---|---|---|---|
+| `AUR_SLEUTH_DATA_DIR` | all | `/data` | Must point at the volume, not `$HOME` |
+| `AUR_SLEUTH_FETCH_URL` | prepare | the public GitHub repo | Where the object store is cloned from |
+| `AUR_SLEUTH_PUSH_URL` | publish | — | ssh URL the reports branch is pushed to |
+| `AUR_SLEUTH_SSH_KEY` | publish | `/secrets/git/ssh-privatekey` | Mounted deploy key |
+| `AUR_SLEUTH_KNOWN_HOSTS` | publish | `/etc/ssh/ssh_known_hosts` | Baked in at build time |
+| `AUR_SLEUTH_PUBLISH_DRY_RUN` | publish | `false` | Report the ref instead of pushing |
+| `AUR_SLEUTH_SPEND_LOG_RETENTION_DAYS` | prepare | `30` | Nothing else prunes the ledger |
+| `OPENAI_API_KEY` | audit | — | Required; the audit exits 1 without it |
+| `OPENAI_BASE_URL` | audit | OpenRouter | Set it explicitly |
+| `GIT_AUTHOR_NAME` / `GIT_AUTHOR_EMAIL` | all | `aur-sleuth` | Identity on archive commits |
+
+## Verifying a change
+
+```bash
+shellcheck deploy/container/scripts/entrypoint.sh bench/pipeline.sh
+```
+
+Changes to the audit logic or the prompts additionally need `bash bench/run-synthetic-tests.sh -q` and a re-run on a real package, per the repository's `CLAUDE.md`.
