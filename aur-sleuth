@@ -1511,6 +1511,21 @@ def is_remote_url(source):
     return parsed.scheme in remote_schemes
 
 
+def makepkg_env():
+    """Environment for makepkg subprocesses, with the LLM API key removed.
+
+    makepkg sources the PKGBUILD, executing its top-level shell and pkgver() -- that
+    is untrusted code, and a child process inherits our environment verbatim. Note
+    this only strips the copy handed to the child: code running as the same UID can
+    still read this process's own environment via /proc. Treat the key as exposed
+    to the audit container as a whole; this just stops the trivial $OPENAI_API_KEY
+    grab from inside a PKGBUILD.
+    """
+    env = os.environ.copy()
+    env.pop("OPENAI_API_KEY", None)
+    return env
+
+
 def download_sources(tui: ConsoleUI, max_retries: int = 3):
     cmd = ["makepkg", "--nobuild", "--nodeps", "--noprepare", "--skippgpcheck"]
     for attempt in range(1, max_retries + 1):
@@ -1518,7 +1533,9 @@ def download_sources(tui: ConsoleUI, max_retries: int = 3):
             f"Downloading sources (attempt {attempt}/{max_retries})..."
         )
         try:
-            subprocess.run(cmd, check=True, capture_output=True, text=True)
+            subprocess.run(
+                cmd, check=True, capture_output=True, text=True, env=makepkg_env()
+            )
             tui.finalize_step("makepkg --nobuild --nodeps --noprepare successful")
             return True
         except subprocess.CalledProcessError as e:
@@ -1577,6 +1594,7 @@ def _srcinfo_output(pkgdir: Path) -> str:
         capture_output=True,
         text=True,
         cwd=pkgdir,
+        env=makepkg_env(),
     ).stdout
 
 
