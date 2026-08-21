@@ -82,6 +82,15 @@ record_cost() {
     ) 201>"$SPEND_FILE.lock"
 }
 
+# The `cost:` field from a report's frontmatter; 0 when the report or the
+# field is missing.
+report_cost() {
+    local cost
+    cost=$(sed -n '/^---$/,/^---$/p' "$1" 2>/dev/null \
+        | grep "^cost:" | head -1 | sed 's/^cost: *//' || true)
+    echo "${cost:-0}"
+}
+
 budget_remaining() {
     python3 -c "print(max(0, $DAILY_BUDGET - $(get_daily_spent)))"
 }
@@ -229,11 +238,20 @@ run_audit() {
         timeout --kill-after=30s "$AUDIT_TIMEOUT" \
         ./aur-sleuth --output plain "$pkg" 2>&1 || rc=$?
 
+    local cost
+    cost=$(report_cost "$report_file")
+
     # 124 is timeout(1)'s own signal that the deadline expired; 137 is SIGKILL
     # after --kill-after. Anything else is aur-sleuth's own exit code, which the
     # report check below already handles.
     if [[ $rc -eq 124 || $rc -eq 137 ]]; then
-        log "  [$pkg] $model: TIMED OUT after ${AUDIT_TIMEOUT}s, abandoning"
+        # The LLM calls already made still cost money. aur-sleuth writes its
+        # frontmatter on SIGTERM, so the cost is usually there; only a SIGKILL
+        # loses it. The partial report itself must not survive: judge.sh globs
+        # this directory and would judge the stub.
+        record_cost "$cost"
+        rm -f "$report_file"
+        log "  [$pkg] $model: TIMED OUT after ${AUDIT_TIMEOUT}s, abandoning (\$$cost)"
         return 1
     fi
 
@@ -242,11 +260,6 @@ run_audit() {
         return 1
     fi
 
-    # Extract and record cost
-    local cost
-    cost=$(sed -n '/^---$/,/^---$/p' "$report_file" 2>/dev/null \
-        | grep "^cost:" | head -1 | sed 's/^cost: *//' || echo "0")
-    [[ -z "$cost" ]] && cost="0"
     record_cost "$cost"
 
     local result
