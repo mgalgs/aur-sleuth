@@ -240,7 +240,10 @@ do_bundle() {
     [[ -d "$GIT_STORE" ]] || die "$GIT_STORE missing; run the prepare stage first"
 
     local out="${AUR_SLEUTH_BUNDLE_PATH:-/out/audit-reports.bundle}"
-    mkdir -p "$(dirname "$out")"
+    # The image creates /out, but the file is useless unless something outside
+    # the container can read it afterwards, so /out is normally a mount.
+    mkdir -p "$(dirname "$out")" 2>/dev/null && [[ -w "$(dirname "$out")" ]] \
+        || die "cannot write to $(dirname "$out"); mount a writable volume there or set AUR_SLEUTH_BUNDLE_PATH"
 
     local repo
     repo="$(stage_reports_repo)"

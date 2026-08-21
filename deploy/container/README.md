@@ -58,7 +58,7 @@ docker build \
 Notes on the image:
 
 - **Arch Linux is required.** `aur-sleuth` shells out to `makepkg`, `bsdtar`, and `file(1)`. There is no Debian or Alpine equivalent.
-- **`makepkg` refuses to run as root**, so the image ships a `sleuth` user (UID 1000) and runs as it. `--nodeps`, which the pipeline already passes, avoids needing `pacman -S` and therefore root.
+- **`makepkg` refuses to run as root**, so the image ships a `sleuth` user (UID 1000, declared numerically) and runs as it. `--nodeps`, which the pipeline already passes, avoids needing `pacman -S` and therefore root.
 - `aur-sleuth` is a [PEP 723](https://peps.python.org/pep-0723/) script whose shebang is `uv run --script`. The build resolves and caches its dependencies once, so the image is the pinning boundary — rebuild to pick up new releases.
 - `AUR_SLEUTH_REV` is baked in and pinned onto `HEAD` by the `prepare` stage, so every archived report records the source revision that produced it.
 - GitHub's SSH host keys are fetched from `https://api.github.com/meta` over TLS at build time, not trusted on first use by `ssh-keyscan`. Rebuild if GitHub rotates them, or point `AUR_SLEUTH_KNOWN_HOSTS` at a mounted file.

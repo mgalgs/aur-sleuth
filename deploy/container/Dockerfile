@@ -16,12 +16,14 @@ ARG SLEUTH_GID=1000
 # base-devel already carries bash, coreutils, file, gawk, sed, util-linux
 # (flock), libarchive (bsdtar) and curl. These are the rest:
 #   uv              aur-sleuth is a PEP 723 script; its shebang is `uv run`
-#   python-requests bench/judge.sh calls the API from an inline python snippet
+#   python-openai   bench/judge.sh calls the API from inline python snippets
+#   python-requests that run on the system interpreter, not in uv's environment
 #   openssh         the publish stage pushes over ssh
 RUN pacman -Syu --noconfirm --needed \
         git \
         openssh \
         python \
+        python-openai \
         python-requests \
         uv \
     && pacman -Scc --noconfirm \
@@ -35,7 +37,8 @@ RUN curl -fsS https://api.github.com/meta \
     && test -s /etc/ssh/ssh_known_hosts
 
 RUN groupadd -g "${SLEUTH_GID}" sleuth \
-    && useradd -m -u "${SLEUTH_UID}" -g "${SLEUTH_GID}" -s /bin/bash sleuth
+    && useradd -m -u "${SLEUTH_UID}" -g "${SLEUTH_GID}" -s /bin/bash sleuth \
+    && install -d -o sleuth -g sleuth /out
 
 COPY . /opt/aur-sleuth
 COPY deploy/container/scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
@@ -52,7 +55,10 @@ RUN printf 'gitdir: /data/git\n' > /opt/aur-sleuth/.git \
     && chown -R sleuth:sleuth /opt/aur-sleuth \
     && chmod 0755 /usr/local/bin/entrypoint.sh
 
-USER sleuth
+# Numeric on purpose: a runtime that must verify the container is non-root
+# (Kubernetes `runAsNonRoot`, for one) cannot resolve a name in the image and
+# refuses to start it.
+USER ${SLEUTH_UID}:${SLEUTH_GID}
 ENV HOME=/home/sleuth
 # Use the interpreter the image already has instead of letting uv fetch one.
 ENV UV_PYTHON_DOWNLOADS=never
