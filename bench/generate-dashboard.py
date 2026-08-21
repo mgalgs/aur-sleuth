@@ -891,6 +891,14 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 
 
 def main():
+    # The publish stage rewrites index.html from this template instead of
+    # trusting the copy on the branch, which the audit stage can write. That
+    # rewrite happens before any repository is staged, so printing the template
+    # must not touch git.
+    if "--print-html" in sys.argv[1:]:
+        sys.stdout.write(generate_html())
+        return
+
     os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
     if subprocess.run(
