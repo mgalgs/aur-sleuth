@@ -5,7 +5,8 @@
 # Usage: pipeline.sh [--min-votes N] [--daily-budget AMOUNT] [--lookback-hours N]
 #                     [--seed-top N] [--jobs N] [--dry-run] [--skip-judge]
 #                     [--skip-dashboard] [--no-push] [--packages-file FILE]
-#                     [--audit-timeout SECONDS]
+#                     [--audit-timeout SECONDS] [--audit-models LIST]
+#                     [--judge-model MODEL] [--reaudit-model MODEL]
 #
 # State is derived from the audit-reports branch (no local state files needed).
 # Daily spend is tracked in $DATA_DIR/pipeline/spend-YYYY-MM-DD.log.
@@ -55,6 +56,7 @@ while [[ $# -gt 0 ]]; do
         --audit-timeout) AUDIT_TIMEOUT="$2"; shift 2 ;;
         --audit-models) AUDIT_MODELS="$2"; shift 2 ;;
         --judge-model) JUDGE_MODEL="$2"; shift 2 ;;
+        --reaudit-model) REAUDIT_MODEL="$2"; shift 2 ;;
         --packages-file) PACKAGES_FILE="$2"; shift 2 ;;
         *) echo "Unknown arg: $1" >&2; exit 1 ;;
     esac
@@ -336,7 +338,7 @@ main() {
     if [[ "$SEED_TOP" -gt 0 ]]; then
         log "Seed: top $SEED_TOP most popular unaudited packages"
     fi
-    log "Models: ${MODEL_LIST[*]} | Judge: $JUDGE_MODEL"
+    log "Models: ${MODEL_LIST[*]} | Judge: $JUDGE_MODEL | Re-audit: $REAUDIT_MODEL"
     log "Daily spend so far: \$$(get_daily_spent)"
 
     if is_over_budget; then
