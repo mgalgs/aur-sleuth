@@ -8,6 +8,9 @@
 #             `makepkg` sources arbitrary AUR PKGBUILDs.
 #   publish   Push the audit-reports branch. Needs the git write credential, and
 #             deliberately runs after the untrusted stage has finished.
+#   bundle    Write the audit-reports branch to a git bundle instead of pushing
+#             it. Needs no credential. Lets reports accumulate on the volume and
+#             be reviewed elsewhere, so no write credential need exist here.
 #
 # The split exists so the git write credential never shares a process, an
 # environment, or a filesystem with a hostile PKGBUILD. See deploy/container/README.md.
@@ -153,24 +156,41 @@ do_audit() {
     exec bash bench/pipeline.sh --no-push "$@"
 }
 
+# --- reading the shared store safely ------------------------------------------
+
+# Build a throwaway bare repository that can see the shared store's objects, and
+# echo its path.
+#
+# Never run git inside the shared store itself: the untrusted stage can write to
+# it, and a repository's own config and hooks are executable input
+# (core.sshCommand, core.fsmonitor, pre-push, filter drivers). This borrows the
+# objects read-only through alternates and copies the refs across as the plain
+# text they are, so every git command afterwards runs under configuration this
+# image wrote.
+stage_reports_repo() {
+    local repo
+    repo="$(mktemp -d)/reports.git"
+    git init --bare --quiet "$repo"
+    printf '%s\n' "$GIT_STORE/objects" > "$repo/objects/info/alternates"
+    cp -f "$GIT_STORE/packed-refs" "$repo/packed-refs" 2>/dev/null || true
+    mkdir -p "$repo/refs/heads"
+    cp -f "$GIT_STORE/refs/heads/$REPORTS_BRANCH" \
+          "$repo/refs/heads/$REPORTS_BRANCH" 2>/dev/null || true
+    # The remote-tracking ref too: it records what origin already has, which is
+    # what lets the bundle stage ship only the unpublished commits.
+    mkdir -p "$repo/refs/remotes/origin"
+    cp -f "$GIT_STORE/refs/remotes/origin/$REPORTS_BRANCH" \
+          "$repo/refs/remotes/origin/$REPORTS_BRANCH" 2>/dev/null || true
+    printf '%s\n' "$repo"
+}
+
 # --- publish ------------------------------------------------------------------
 
 do_publish() {
     [[ -d "$GIT_STORE" ]] || die "$GIT_STORE missing; run the prepare stage first"
 
-    # Never run git inside the shared store: the untrusted stage can write to it,
-    # and a repository's own config and hooks are executable input (core.sshCommand,
-    # core.fsmonitor, pre-push, filter drivers). Build a throwaway repository in
-    # this container's own filesystem instead, borrow the objects read-only
-    # through alternates, and copy the refs across as the plain text they are.
     local pub
-    pub="$(mktemp -d)/publish.git"
-    git init --bare --quiet "$pub"
-    printf '%s\n' "$GIT_STORE/objects" > "$pub/objects/info/alternates"
-    cp -f "$GIT_STORE/packed-refs" "$pub/packed-refs" 2>/dev/null || true
-    mkdir -p "$pub/refs/heads"
-    cp -f "$GIT_STORE/refs/heads/$REPORTS_BRANCH" \
-          "$pub/refs/heads/$REPORTS_BRANCH" 2>/dev/null || true
+    pub="$(stage_reports_repo)"
 
     local sha
     sha="$(git --git-dir="$pub" rev-parse --verify --quiet "refs/heads/$REPORTS_BRANCH" || true)"
@@ -207,6 +227,57 @@ do_publish() {
     log "Pushed $sha"
 }
 
+# --- bundle -------------------------------------------------------------------
+
+# Write unpublished report commits to a git bundle: one file that can be copied
+# off the volume and fetched from like any remote.
+#
+# This is the alternative to a standing write credential. Reports accumulate on
+# the volume, a human copies the bundle out, reviews the commits, and pushes
+# from a machine that already has push rights -- so nothing here needs write
+# access to the reports repository at all.
+do_bundle() {
+    [[ -d "$GIT_STORE" ]] || die "$GIT_STORE missing; run the prepare stage first"
+
+    local out="${AUR_SLEUTH_BUNDLE_PATH:-/out/audit-reports.bundle}"
+    mkdir -p "$(dirname "$out")"
+
+    local repo
+    repo="$(stage_reports_repo)"
+
+    local sha
+    sha="$(git --git-dir="$repo" rev-parse --verify --quiet "refs/heads/$REPORTS_BRANCH" || true)"
+    [[ -n "$sha" ]] || die "no $REPORTS_BRANCH ref to bundle"
+
+    # Ship only what origin does not already have. Bundling the whole branch
+    # would mean re-exporting thousands of already-published commits on every
+    # sweep; the reviewable unit is the delta. The result is an incremental
+    # bundle, so fetch it into a clone that already has the published history.
+    local base range count
+    base="$(git --git-dir="$repo" rev-parse --verify --quiet \
+        "refs/remotes/origin/$REPORTS_BRANCH" || true)"
+
+    if [[ -n "$base" && "$base" != "$sha" ]]; then
+        range="refs/remotes/origin/$REPORTS_BRANCH..refs/heads/$REPORTS_BRANCH"
+        count="$(git --git-dir="$repo" rev-list --count "$range")"
+        log "origin is at ${base:0:12}, local is at ${sha:0:12}"
+        git --git-dir="$repo" bundle create "$out" \
+            "$range" "refs/heads/$REPORTS_BRANCH"
+    elif [[ -n "$base" ]]; then
+        log "Nothing unpublished: local matches origin at ${sha:0:12}"
+        return 0
+    else
+        # No remote-tracking ref, so there is no published baseline to diff
+        # against and the whole branch is the delta.
+        count="$(git --git-dir="$repo" rev-list --count "refs/heads/$REPORTS_BRANCH")"
+        log "origin has no $REPORTS_BRANCH; bundling the full history"
+        git --git-dir="$repo" bundle create "$out" "refs/heads/$REPORTS_BRANCH"
+    fi
+
+    log "Wrote $(du -h "$out" | cut -f1) to $out"
+    log "Unpublished commits in bundle: $count"
+}
+
 # --- dispatch -----------------------------------------------------------------
 
 MODE="${1:-audit}"
@@ -216,5 +287,6 @@ case "$MODE" in
     prepare) do_prepare ;;
     audit)   do_audit "$@" ;;
     publish) do_publish ;;
-    *)       die "unknown stage '$MODE' (want prepare, audit or publish)" ;;
+    bundle)  do_bundle ;;
+    *)       die "unknown stage '$MODE' (want prepare, audit, publish or bundle)" ;;
 esac

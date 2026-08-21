@@ -10,7 +10,7 @@ One run is one `pipeline.sh` invocation. The pipeline throttles itself: it accum
 
 Runs must not overlap, or two of them race on the archive and the push.
 
-## The three stages, and why
+## The four stages, and why
 
 The pipeline runs untrusted code by design. `makepkg --nobuild` sources arbitrary AUR `PKGBUILD` files, which executes their top-level shell and `pkgver()`. That is the point of the tool, but it means a hostile package gets a shell in the container. A run is therefore split into stages that run in sequence, each in its own container:
 
@@ -19,8 +19,18 @@ The pipeline runs untrusted code by design. `makepkg --nobuild` sources arbitrar
 | `prepare` | none | read-write | no |
 | `audit` | LLM API key | read-write | **yes** |
 | `publish` | git deploy key | **read-only** | no |
+| `bundle` | none | **read-only** | no |
 
 `prepare` creates or refreshes the git object store on the volume and prunes old state. `audit` runs the whole pipeline with `--no-push`, so every commit stays local. `publish` pushes the `audit-reports` branch.
+
+`bundle` is the alternative to `publish`, for anyone unwilling to keep a write credential next to a stage that runs untrusted code. It writes the commits `origin` does not have to a git bundle (`AUR_SLEUTH_BUNDLE_PATH`, default `/out/audit-reports.bundle`) and needs no credential at all. Mount something at `/out` that outlives the container, copy the file out, `git fetch` it into a clone that has the published history, review the commits, and push from somewhere that already has push rights:
+
+```bash
+git fetch ./audit-reports.bundle refs/heads/audit-reports:refs/heads/incoming
+git log --oneline audit-reports..incoming     # what accumulated
+```
+
+The bundle is incremental, so it carries only unpublished commits — a few KB per sweep rather than the whole archive — and `git bundle verify` will name the commit it needs as a prerequisite. If `origin` has no reports branch yet, it falls back to bundling the full history.
 
 Two properties make the split hold rather than merely look tidy:
 
@@ -76,10 +86,15 @@ docker run --rm -v aur-sleuth-test:/data -v /tmp/pkgs.txt:/tmp/pkgs.txt:ro \
   aur-sleuth:dev audit --packages-file /tmp/pkgs.txt \
   --skip-judge --skip-dashboard --daily-budget 0.05
 
-# Stage 3: what would be pushed, with the volume mounted read-only as the
+# Stage 3a: what would be pushed, with the volume mounted read-only as the
 # publish stage requires.
 docker run --rm -v aur-sleuth-test:/data:ro \
   -e AUR_SLEUTH_PUBLISH_DRY_RUN=true aur-sleuth:dev publish
+
+# Stage 3b: or write the unpublished commits to a bundle instead.
+mkdir -p ./out
+docker run --rm -v aur-sleuth-test:/data:ro -v "$PWD/out:/out" aur-sleuth:dev bundle
+git bundle verify ./out/audit-reports.bundle
 ```
 
 ## What the image requires
@@ -87,9 +102,9 @@ docker run --rm -v aur-sleuth-test:/data:ro \
 Whatever runs it must provide:
 
 - **UID 1000, non-root.** `makepkg` refuses to run as root.
-- **One persistent volume mounted at `/data` on every stage**, writable by UID 1000, and mounted **read-only** on `publish`. That read-only mount is load-bearing, not decoration; see [The three stages, and why](#the-three-stages-and-why). Keep the volume even when the job is removed: the spend ledger on it is the one piece of state that is not derivable from git, and losing it mid-day resets the budget to zero.
+- **One persistent volume mounted at `/data` on every stage**, writable by UID 1000, and mounted **read-only** on `publish` and `bundle`. That read-only mount is load-bearing, not decoration; see [The four stages, and why](#the-four-stages-and-why). Keep the volume even when the job is removed: the spend ledger on it is the one piece of state that is not derivable from git, and losing it mid-day resets the budget to zero.
 - **The stages in sequence, never overlapping**, so two runs cannot race on the archive and the push.
-- **Secrets only where needed.** Only `audit` gets the LLM key; only `publish` gets the git key; `prepare` gets none. Create the git key as a deploy key with write access scoped to the one repository that holds the `audit-reports` branch, rather than a broad personal access token.
+- **Secrets only where needed.** Only `audit` gets the LLM key; only `publish` gets the git key; `prepare` and `bundle` get none. Create the git key as a deploy key with write access scoped to the one repository that holds the `audit-reports` branch, rather than a broad personal access token.
 - **Restricted egress for the audit stage.** Legitimate AUR sources use http, https and the git protocol, so allow DNS plus outbound TCP on 80, 443 and 9418 to the internet and deny every private range, including link-local. A hostile `PKGBUILD` should reach nothing on your network. If the audit stage talks to a self-hosted model on a private address, add one narrow rule for that host and port rather than widening the exclusions.
 - **Enough disk.** `aur-sleuth` extracts each package's sources under `$DATA_DIR/bulk-reports/`, so a run with `--jobs 4` and two models can hold eight package trees at once. `prepare` removes any tree left behind by a run that died.
 
@@ -107,6 +122,7 @@ Set as environment variables on the container.
 | `AUR_SLEUTH_SSH_KEY` | publish | `/secrets/git/ssh-privatekey` | Mounted deploy key |
 | `AUR_SLEUTH_KNOWN_HOSTS` | publish | `/etc/ssh/ssh_known_hosts` | Baked in at build time |
 | `AUR_SLEUTH_PUBLISH_DRY_RUN` | publish | `false` | Report the ref instead of pushing |
+| `AUR_SLEUTH_BUNDLE_PATH` | bundle | `/out/audit-reports.bundle` | Where the bundle is written; its directory must be writable |
 | `AUR_SLEUTH_SPEND_LOG_RETENTION_DAYS` | prepare | `30` | Nothing else prunes the ledger |
 | `AUR_SLEUTH_MAKEPKG_TIMEOUT` | audit | `600` | Seconds for one `makepkg` invocation; its download agents have no timeout of their own |
 | `AUR_SLEUTH_LLM_TIMEOUT` | audit | `180` | Seconds for one LLM request |
