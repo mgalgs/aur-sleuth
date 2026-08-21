@@ -127,6 +127,7 @@ Set as environment variables on the container.
 | `AUR_SLEUTH_MAKEPKG_TIMEOUT` | audit | `600` | Seconds for one `makepkg` invocation; its download agents have no timeout of their own |
 | `AUR_SLEUTH_LLM_TIMEOUT` | audit | `180` | Seconds for one LLM request |
 | `AUR_SLEUTH_LLM_RETRIES` | audit | `2` | Retries per LLM request |
+| `AUR_SLEUTH_PRICING` | audit | inferred from `OPENAI_BASE_URL` | `openrouter` or `none`. Set `openrouter` when a proxy sits in front of OpenRouter, or every audit costs "0" and `--daily-budget` never binds |
 | `OPENAI_API_KEY` | audit | — | Required; the audit exits 1 without it |
 | `OPENAI_BASE_URL` | audit | OpenRouter | Set it explicitly |
 | `GIT_AUTHOR_NAME` / `GIT_AUTHOR_EMAIL` | all | `aur-sleuth` | Identity on archive commits |

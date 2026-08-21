@@ -139,11 +139,29 @@ class LLMClient:
         self._fetch_pricing_info()
 
     def _fetch_pricing_info(self):
-        """Fetch up-to-date pricing information."""
-        base_url = getattr(self.openai_client, "base_url", "")
-        if "openrouter.ai" in str(base_url):
-            self._fetch_openrouter_pricing()
-            return
+        """Fetch up-to-date pricing information.
+
+        Pricing decides what every cost figure reports, and bench/pipeline.sh's
+        --daily-budget is a sum of those figures. With no pricing every audit costs
+        "0" and the budget can never bind, so the source is chosen explicitly:
+        AUR_SLEUTH_PRICING=openrouter forces OpenRouter's price list, which is what
+        a proxy in front of OpenRouter needs, since its base URL gives nothing away;
+        "none" skips the lookup; unset means infer it from the base URL.
+        """
+        source = os.environ.get("AUR_SLEUTH_PRICING", "").strip().lower()
+        if not source:
+            base_url = str(getattr(self.openai_client, "base_url", ""))
+            source = "openrouter" if "openrouter.ai" in base_url else "none"
+        if source == "openrouter":
+            try:
+                self._fetch_openrouter_pricing()
+            except requests.RequestException as e:
+                logger.warning(
+                    "Could not fetch OpenRouter pricing (%s); every cost will "
+                    "report as 0 and a daily budget cannot bind", e,
+                )
+        elif source != "none":
+            logger.warning("Unknown AUR_SLEUTH_PRICING=%r; costs will report as 0", source)
 
     def _fetch_openrouter_pricing(self):
         logger.debug("Fetching model pricing from OpenRouter API")
