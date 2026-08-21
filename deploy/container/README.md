@@ -131,7 +131,7 @@ Set as environment variables on the container.
 | `OPENAI_BASE_URL` | audit | OpenRouter | Set it explicitly |
 | `GIT_AUTHOR_NAME` / `GIT_AUTHOR_EMAIL` | all | `aur-sleuth` | Identity on archive commits |
 
-The pipeline's own `--audit-timeout` (default 900 seconds) caps a whole package/model audit from outside; pass it after the `audit` verb like any other pipeline flag.
+The pipeline's own `--audit-timeout` (default 900 seconds) caps a whole package/model audit from outside and applies to re-audits too; pass it after the `audit` verb like any other pipeline flag.
 
 ## Verifying a change
 

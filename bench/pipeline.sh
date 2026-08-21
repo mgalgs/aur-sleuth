@@ -435,7 +435,8 @@ main() {
             local reaudit_marker="$PIPELINE_DIR/.reaudit-start-marker"
             touch "$reaudit_marker"
 
-            bash bench/judge.sh --re-audit-pending --audit-model "$REAUDIT_MODEL" 2>&1
+            bash bench/judge.sh --re-audit-pending --audit-model "$REAUDIT_MODEL" \
+                --audit-timeout "$AUDIT_TIMEOUT" 2>&1
 
             # Re-audit costs are in audit reports, not judge reports —
             # track via judge report updates (re-audit metadata gets added)

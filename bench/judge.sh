@@ -2,7 +2,7 @@
 # Judge audit reports: detect disagreements, shallow coverage, and quality issues.
 # A high-intelligence "judge" model reviews reports and optionally triggers re-audits.
 #
-# Usage: judge.sh [--package PKG | --all] [--re-audit] [--re-audit-pending] [--judge-model MODEL] [--audit-model MODEL] [--judge-dir DIR] [--no-archive]
+# Usage: judge.sh [--package PKG | --all] [--re-audit] [--re-audit-pending] [--judge-model MODEL] [--audit-model MODEL] [--judge-dir DIR] [--no-archive] [--audit-timeout SECONDS]
 #
 # Triggers (automatic):
 #   - Result disagreement between models (safe vs unsafe)
@@ -39,11 +39,15 @@ while [[ $# -gt 0 ]]; do
         --reports-dir) REPORTS_DIR="$2"; shift 2 ;;
         --judge-dir) JUDGE_DIR="$2"; shift 2 ;;
         --no-archive) NO_ARCHIVE=true; shift ;;
+        --audit-timeout) AUDIT_TIMEOUT="$2"; shift 2 ;;
         *) echo "Unknown arg: $1" >&2; exit 1 ;;
     esac
 done
 
 RE_AUDIT_PENDING="${RE_AUDIT_PENDING:-false}"
+# Same ceiling as pipeline.sh's --audit-timeout, for the same reason: a hung
+# mirror must cost one re-audit, not the run.
+AUDIT_TIMEOUT="${AUDIT_TIMEOUT:-900}"
 
 AUDIT_MODEL="${AUDIT_MODEL:-$JUDGE_MODEL}"
 
@@ -406,13 +410,23 @@ do_reaudit() {
     local latest_judge
     latest_judge=$(git show "${REPORTS_BRANCH}:${pkg}/" 2>/dev/null | grep 'judge\.json$' | sort | tail -1)
 
+    local re_report="${report_dir}/aur-sleuth-report-${pkg}.txt"
+    local rc=0
     AUDIT_FAILURE_FATAL=true AUR_SLEUTH_ASCII_ICONS=1 \
         OPENAI_MODEL="$AUDIT_MODEL" \
         AUR_SLEUTH_REPORT_DIR="$report_dir" \
         AUR_SLEUTH_TRIGGERED_BY="${pkg}/${latest_judge}" \
-        ./aur-sleuth --output plain "$pkg" 2>&1 || true
+        timeout --kill-after=30s "$AUDIT_TIMEOUT" \
+        ./aur-sleuth --output plain "$pkg" 2>&1 || rc=$?
 
-    local re_report="${report_dir}/aur-sleuth-report-${pkg}.txt"
+    # 124 and 137 are timeout(1)'s exit codes; see pipeline.sh. The partial
+    # report must not be archived or judged.
+    if [[ $rc -eq 124 || $rc -eq 137 ]]; then
+        rm -f "$re_report"
+        log "  Re-audit of $pkg TIMED OUT after ${AUDIT_TIMEOUT}s, abandoning"
+        return 0
+    fi
+
     if [[ -f "$re_report" ]]; then
         local re_result
         re_result=$(fm "$re_report" result)
