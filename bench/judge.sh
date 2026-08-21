@@ -122,6 +122,27 @@ collect_reports() {
     find "$REPORTS_DIR" -name "aur-sleuth-report-${1}.txt" -type f
 }
 
+# --- Has every one of these reports already been judged? ---
+# The judge report records each audit it read as the archive filename
+# <date>-<model>.md, derived from the report's frontmatter; rebuild the same
+# name here and compare.
+already_judged() {
+    local pkg="$1"; shift
+    local judge_file="$JUDGE_DIR/${pkg}.json"
+    [[ -f "$judge_file" ]] || return 1
+    local judged
+    judged=$(python3 -c "import json; print('\n'.join(json.load(open('$judge_file')).get('audits_judged', [])))" 2>/dev/null) || return 1
+    [[ -n "$judged" ]] || return 1
+    local r d m
+    for r in "$@"; do
+        d=$(fm "$r" date); m=$(fm "$r" model)
+        [[ -n "$d" && -n "$m" ]] || return 1
+        d=$(printf '%s' "$d" | tr -d ':-' | tr 'T' '-'); d="${d:0:15}"
+        grep -qxF "${d}-${m//\//-}.md" <<< "$judged" || return 1
+    done
+    return 0
+}
+
 # --- Check if a package needs judging, echo trigger reason ---
 check_triggers() {
     local pkg="$1"
@@ -131,6 +152,13 @@ check_triggers() {
     done < <(collect_reports "$pkg")
 
     [[ ${#reports[@]} -ge 1 ]] || return 1
+
+    # Already judged: the working copies outlive the judgment, so without this
+    # a package with a standing disagreement is re-judged on every run that
+    # has budget. A new audit gets a new date, so it is judged again.
+    if already_judged "$pkg" "${reports[@]}"; then
+        return 1
+    fi
 
     # Collect all results upfront
     local results=()
