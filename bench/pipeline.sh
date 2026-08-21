@@ -5,6 +5,7 @@
 # Usage: pipeline.sh [--min-votes N] [--daily-budget AMOUNT] [--lookback-hours N]
 #                     [--seed-top N] [--jobs N] [--dry-run] [--skip-judge]
 #                     [--skip-dashboard] [--no-push] [--packages-file FILE]
+#                     [--audit-timeout SECONDS]
 #
 # State is derived from the audit-reports branch (no local state files needed).
 # Daily spend is tracked in $DATA_DIR/pipeline/spend-YYYY-MM-DD.log.
@@ -17,6 +18,11 @@ MIN_VOTES=5
 DAILY_BUDGET=2.00
 LOOKBACK_HOURS=24
 JOBS=8
+# Hard ceiling on one package/model audit. Typical is a few minutes; this is
+# loose enough not to cut off a big package on a slow link, tight enough that a
+# hung mirror or a wedged API call costs one audit instead of the whole run.
+# Without it a single stalled download can consume the entire job deadline.
+AUDIT_TIMEOUT=900
 DRY_RUN=false
 SKIP_JUDGE=false
 SKIP_DASHBOARD=false
@@ -46,6 +52,7 @@ while [[ $# -gt 0 ]]; do
         --skip-dashboard) SKIP_DASHBOARD=true; shift ;;
         --no-push) NO_PUSH=true; shift ;;
         --seed-top) SEED_TOP="$2"; shift 2 ;;
+        --audit-timeout) AUDIT_TIMEOUT="$2"; shift 2 ;;
         --audit-models) AUDIT_MODELS="$2"; shift 2 ;;
         --judge-model) JUDGE_MODEL="$2"; shift 2 ;;
         --packages-file) PACKAGES_FILE="$2"; shift 2 ;;
@@ -213,10 +220,22 @@ run_audit() {
 
     mkdir -p "$report_dir"
 
+    local rc=0
+    # --kill-after gives aur-sleuth a moment to die on TERM before SIGKILL, so a
+    # wedged makepkg child cannot keep the process alive past the deadline.
     AUDIT_FAILURE_FATAL=true AUR_SLEUTH_ASCII_ICONS=1 \
         OPENAI_MODEL="$model" \
         AUR_SLEUTH_REPORT_DIR="$report_dir" \
-        ./aur-sleuth --output plain "$pkg" 2>&1 || true
+        timeout --kill-after=30s "$AUDIT_TIMEOUT" \
+        ./aur-sleuth --output plain "$pkg" 2>&1 || rc=$?
+
+    # 124 is timeout(1)'s own signal that the deadline expired; 137 is SIGKILL
+    # after --kill-after. Anything else is aur-sleuth's own exit code, which the
+    # report check below already handles.
+    if [[ $rc -eq 124 || $rc -eq 137 ]]; then
+        log "  [$pkg] $model: TIMED OUT after ${AUDIT_TIMEOUT}s, abandoning"
+        return 1
+    fi
 
     if [[ ! -f "$report_file" ]]; then
         log "  [$pkg] No report produced by $model"

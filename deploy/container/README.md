@@ -108,9 +108,14 @@ Set as environment variables on the container.
 | `AUR_SLEUTH_KNOWN_HOSTS` | publish | `/etc/ssh/ssh_known_hosts` | Baked in at build time |
 | `AUR_SLEUTH_PUBLISH_DRY_RUN` | publish | `false` | Report the ref instead of pushing |
 | `AUR_SLEUTH_SPEND_LOG_RETENTION_DAYS` | prepare | `30` | Nothing else prunes the ledger |
+| `AUR_SLEUTH_MAKEPKG_TIMEOUT` | audit | `600` | Seconds for one `makepkg` invocation; its download agents have no timeout of their own |
+| `AUR_SLEUTH_LLM_TIMEOUT` | audit | `180` | Seconds for one LLM request |
+| `AUR_SLEUTH_LLM_RETRIES` | audit | `2` | Retries per LLM request |
 | `OPENAI_API_KEY` | audit | — | Required; the audit exits 1 without it |
 | `OPENAI_BASE_URL` | audit | OpenRouter | Set it explicitly |
 | `GIT_AUTHOR_NAME` / `GIT_AUTHOR_EMAIL` | all | `aur-sleuth` | Identity on archive commits |
+
+The pipeline's own `--audit-timeout` (default 900 seconds) caps a whole package/model audit from outside; pass it after the `audit` verb like any other pipeline flag.
 
 ## Verifying a change
 

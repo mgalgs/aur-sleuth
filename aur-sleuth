@@ -1526,6 +1526,13 @@ def makepkg_env():
     return env
 
 
+# Ceiling for one makepkg invocation. makepkg's download agents carry no timeout
+# of their own, so an unresponsive mirror otherwise blocks forever -- observed
+# once at 55 minutes of zero progress. bench/pipeline.sh caps a whole audit as
+# well; this one matters for direct use of aur-sleuth, where nothing else would.
+MAKEPKG_TIMEOUT_SECONDS = int(os.environ.get("AUR_SLEUTH_MAKEPKG_TIMEOUT", "600"))
+
+
 def download_sources(tui: ConsoleUI, max_retries: int = 3):
     cmd = ["makepkg", "--nobuild", "--nodeps", "--noprepare", "--skippgpcheck"]
     for attempt in range(1, max_retries + 1):
@@ -1534,10 +1541,20 @@ def download_sources(tui: ConsoleUI, max_retries: int = 3):
         )
         try:
             subprocess.run(
-                cmd, check=True, capture_output=True, text=True, env=makepkg_env()
+                cmd,
+                check=True,
+                capture_output=True,
+                text=True,
+                env=makepkg_env(),
+                timeout=MAKEPKG_TIMEOUT_SECONDS,
             )
             tui.finalize_step("makepkg --nobuild --nodeps --noprepare successful")
             return True
+        except subprocess.TimeoutExpired:
+            logger.error(
+                f"makepkg --nobuild attempt {attempt} exceeded "
+                f"{MAKEPKG_TIMEOUT_SECONDS}s and was killed"
+            )
         except subprocess.CalledProcessError as e:
             logger.error(f"makepkg --nobuild attempt {attempt} failed: {e.stderr}")
             if attempt < max_retries:
@@ -1595,6 +1612,7 @@ def _srcinfo_output(pkgdir: Path) -> str:
         text=True,
         cwd=pkgdir,
         env=makepkg_env(),
+        timeout=MAKEPKG_TIMEOUT_SECONDS,
     ).stdout
 
 
@@ -2712,8 +2730,15 @@ def get_openai_client() -> LLMClient:
             "X-Title": "aur-sleuth",
         }
 
+    # The SDK defaults to a 600s timeout and 2 retries, so one wedged request can
+    # block for half an hour. A file review is normally seconds; a slow local
+    # model is the case that needs room, hence still-generous defaults.
     client = OpenAI(
-        api_key=get_api_key(), base_url=base_url, default_headers=default_headers
+        api_key=get_api_key(),
+        base_url=base_url,
+        default_headers=default_headers,
+        timeout=float(os.environ.get("AUR_SLEUTH_LLM_TIMEOUT", "180")),
+        max_retries=int(os.environ.get("AUR_SLEUTH_LLM_RETRIES", "2")),
     )
 
     return LLMClient(client)
