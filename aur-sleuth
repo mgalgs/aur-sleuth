@@ -23,6 +23,7 @@ import argparse
 import colorsys
 import concurrent.futures
 import configparser
+import contextlib
 import datetime
 import functools
 import html
@@ -32,6 +33,7 @@ import os
 import pprint
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -1533,6 +1535,35 @@ def makepkg_env():
 MAKEPKG_TIMEOUT_SECONDS = int(os.environ.get("AUR_SLEUTH_MAKEPKG_TIMEOUT", "600"))
 
 
+def run_makepkg(cmd: List[str], **kwargs) -> subprocess.CompletedProcess:
+    """Run a makepkg command with the scrubbed environment and the timeout.
+
+    makepkg runs in its own process group. Killing makepkg alone on a timeout would
+    leave its download agent (curl, git) running, still writing into $SRCDEST; the
+    whole group goes. The same applies when we ourselves are interrupted -- Ctrl-C,
+    or SIGTERM from the pipeline's `timeout` -- since a separate group no longer
+    shares our fate automatically.
+    """
+    with subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=makepkg_env(),
+        start_new_session=True,
+        **kwargs,
+    ) as proc:
+        try:
+            stdout, stderr = proc.communicate(timeout=MAKEPKG_TIMEOUT_SECONDS)
+        except BaseException:
+            with contextlib.suppress(ProcessLookupError):
+                os.killpg(proc.pid, signal.SIGKILL)
+            raise
+    if proc.returncode != 0:
+        raise subprocess.CalledProcessError(proc.returncode, cmd, stdout, stderr)
+    return subprocess.CompletedProcess(cmd, proc.returncode, stdout, stderr)
+
+
 def download_sources(tui: ConsoleUI, max_retries: int = 3):
     cmd = ["makepkg", "--nobuild", "--nodeps", "--noprepare", "--skippgpcheck"]
     for attempt in range(1, max_retries + 1):
@@ -1540,21 +1571,16 @@ def download_sources(tui: ConsoleUI, max_retries: int = 3):
             f"Downloading sources (attempt {attempt}/{max_retries})..."
         )
         try:
-            subprocess.run(
-                cmd,
-                check=True,
-                capture_output=True,
-                text=True,
-                env=makepkg_env(),
-                timeout=MAKEPKG_TIMEOUT_SECONDS,
-            )
+            run_makepkg(cmd)
             tui.finalize_step("makepkg --nobuild --nodeps --noprepare successful")
             return True
         except subprocess.TimeoutExpired:
+            # No retry: a mirror that stalled for the whole ceiling is not going
+            # to recover in a few seconds, and retrying would triple the ceiling.
             logger.error(
-                f"makepkg --nobuild attempt {attempt} exceeded "
-                f"{MAKEPKG_TIMEOUT_SECONDS}s and was killed"
+                f"makepkg --nobuild exceeded {MAKEPKG_TIMEOUT_SECONDS}s and was killed"
             )
+            return False
         except subprocess.CalledProcessError as e:
             logger.error(f"makepkg --nobuild attempt {attempt} failed: {e.stderr}")
             if attempt < max_retries:
@@ -1605,15 +1631,7 @@ def _srcinfo_output(pkgdir: Path) -> str:
     and the PKGBUILD does not change during an audit, so cache it. lru_cache does not cache
     exceptions, so a failing call still retries.
     """
-    return subprocess.run(
-        ["makepkg", "--printsrcinfo"],
-        check=True,
-        capture_output=True,
-        text=True,
-        cwd=pkgdir,
-        env=makepkg_env(),
-        timeout=MAKEPKG_TIMEOUT_SECONDS,
-    ).stdout
+    return run_makepkg(["makepkg", "--printsrcinfo"], cwd=pkgdir).stdout
 
 
 def get_source_info(pkgdir: Path):
@@ -2779,10 +2797,18 @@ def load_config():
                     os.environ[key] = config_section[key]
 
 
+def _exit_on_sigterm(signum, frame):
+    # Raise instead of dying on the spot, so `finally` blocks run: run_makepkg()
+    # takes its process group down, and the report still gets its frontmatter,
+    # cost included. bench/pipeline.sh sends this signal when an audit overruns.
+    raise SystemExit(128 + signum)
+
+
 def main():
     setup_logging()
     # Load configuration files if they exist
     load_config()
+    signal.signal(signal.SIGTERM, _exit_on_sigterm)
     sys.exit(sleuth_main())
 
 
