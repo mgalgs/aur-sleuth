@@ -148,12 +148,71 @@ spent_today() {
 
 # --- audit --------------------------------------------------------------------
 
+# Settings may also arrive in the environment, which is how a deployment changes
+# a budget or a model without a redeploy: the baseline stays in the job's
+# arguments, where git can hold it, and a projected ConfigMap overrides
+# individual values at runtime.
+#
+# These flags are appended after the caller's own arguments. bench/pipeline.sh
+# takes the last occurrence of a flag, so the environment wins over the baseline.
+#
+# Every variable maps to exactly one flag and is checked against a type. Being
+# strict matters more than it looks: bench/pipeline.sh interpolates the budget
+# straight into a `python3 -c` string, so a value that is not a number is code.
+# An explicit table also means a new variable cannot quietly become a new
+# pipeline argument.
+AUDIT_ENV_FLAGS=()
+
+collect_audit_env_flags() {
+    local specs=(
+        "AUR_SLEUTH_MIN_VOTES:--min-votes:int"
+        "AUR_SLEUTH_DAILY_BUDGET:--daily-budget:num"
+        "AUR_SLEUTH_LOOKBACK_HOURS:--lookback-hours:int"
+        "AUR_SLEUTH_SEED_TOP:--seed-top:int"
+        "AUR_SLEUTH_JOBS:--jobs:int"
+        "AUR_SLEUTH_AUDIT_TIMEOUT:--audit-timeout:int"
+        "AUR_SLEUTH_AUDIT_MODELS:--audit-models:models"
+        "AUR_SLEUTH_JUDGE_MODEL:--judge-model:model"
+        "AUR_SLEUTH_REAUDIT_MODEL:--reaudit-model:model"
+    )
+    local spec var flag kind value rest
+
+    for spec in "${specs[@]}"; do
+        var="${spec%%:*}"
+        rest="${spec#*:}"
+        flag="${rest%%:*}"
+        kind="${rest#*:}"
+        value="${!var:-}"
+        [[ -n "$value" ]] || continue
+
+        case "$kind" in
+            int)
+                [[ "$value" =~ ^[0-9]+$ ]] \
+                    || die "$var must be a whole number, got '$value'" ;;
+            num)
+                [[ "$value" =~ ^[0-9]+(\.[0-9]+)?$ ]] \
+                    || die "$var must be a number, got '$value'" ;;
+            model)
+                [[ "$value" =~ ^[A-Za-z0-9._/-]+$ ]] \
+                    || die "$var is not a model name, got '$value'" ;;
+            models)
+                [[ "$value" =~ ^[A-Za-z0-9._/-]+(,[A-Za-z0-9._/-]+)*$ ]] \
+                    || die "$var is not a comma-separated model list, got '$value'" ;;
+        esac
+
+        AUDIT_ENV_FLAGS+=("$flag" "$value")
+        log "from the environment: $flag $value"
+    done
+}
+
 do_audit() {
     [[ -n "${OPENAI_API_KEY:-}" ]] || die "OPENAI_API_KEY is not set"
     [[ -d "$GIT_STORE" ]] || die "$GIT_STORE missing; run the prepare stage first"
     cd "$SRC_DIR"
+    collect_audit_env_flags
     log "Starting pipeline: $*"
-    exec bash bench/pipeline.sh --no-push "$@"
+    exec bash bench/pipeline.sh --no-push "$@" \
+        ${AUDIT_ENV_FLAGS[@]+"${AUDIT_ENV_FLAGS[@]}"}
 }
 
 # --- reading the shared store safely ------------------------------------------

@@ -1,0 +1,109 @@
+#!/usr/bin/env bash
+# Test the environment-to-flag mapping in deploy/container/scripts/entrypoint.sh.
+#
+# A deployment overrides the budget or the models by projecting a ConfigMap into
+# the container, so these values arrive from outside the image. Two things need
+# to hold: the value has to reach bench/pipeline.sh, and a value that is not the
+# shape it claims to be has to be refused -- pipeline.sh interpolates the budget
+# into a `python3 -c` string, where a non-number is code.
+#
+# Usage: bash bench/test-settings-env.sh [-q]
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+ENTRYPOINT="deploy/container/scripts/entrypoint.sh"
+
+QUIET=false
+[[ "${1:-}" == "-q" ]] && QUIET=true
+
+fails=0
+ok()  { $QUIET || printf '  ok    %s\n' "$1"; }
+bad() { printf '  FAIL  %s\n' "$1"; fails=$(( fails + 1 )); }
+
+# Run the mapping in a subshell with a given environment, and echo the flags it
+# produces. Exits non-zero when the entrypoint refuses a value.
+flags_for() {
+    (
+        set -euo pipefail
+        # Both are called by the code that arrives through the eval below.
+        # shellcheck disable=SC2329
+        log() { :; }
+        # shellcheck disable=SC2329
+        die() { echo "die: $*" >&2; exit 1; }
+        eval "$(sed -n '/^collect_audit_env_flags()/,/^}/p' "$ENTRYPOINT")"
+        AUDIT_ENV_FLAGS=()
+        for kv in "$@"; do export "${kv?}"; done
+        collect_audit_env_flags
+        printf '%s\n' "${AUDIT_ENV_FLAGS[*]:-}"
+    )
+}
+
+expect_flags() {
+    local want="$1"; shift
+    local got
+    if ! got="$(flags_for "$@" 2>/dev/null)"; then
+        bad "refused, but should have accepted: $*"
+        return
+    fi
+    if [[ "$got" == "$want" ]]; then
+        ok "$* -> ${want:-<none>}"
+    else
+        bad "$* -> got '$got', want '$want'"
+    fi
+}
+
+expect_refused() {
+    if flags_for "$@" >/dev/null 2>&1; then
+        bad "should have been REFUSED: $*"
+    else
+        ok "refused $*"
+    fi
+}
+
+echo "== nothing set means nothing added =="
+expect_flags ""
+
+echo "== values reach the pipeline as flags =="
+expect_flags "--daily-budget 0.50" AUR_SLEUTH_DAILY_BUDGET=0.50
+expect_flags "--jobs 4" AUR_SLEUTH_JOBS=4
+expect_flags "--reaudit-model anthropic/claude-sonnet-4.6" \
+    AUR_SLEUTH_REAUDIT_MODEL=anthropic/claude-sonnet-4.6
+expect_flags "--audit-models qwen/qwen3-235b-a22b-2507,deepseek/deepseek-v4-flash" \
+    AUR_SLEUTH_AUDIT_MODELS=qwen/qwen3-235b-a22b-2507,deepseek/deepseek-v4-flash
+expect_flags "--daily-budget 1.00 --jobs 2" \
+    AUR_SLEUTH_DAILY_BUDGET=1.00 AUR_SLEUTH_JOBS=2
+
+echo "== a budget that is not a number is code, so refuse it =="
+expect_refused 'AUR_SLEUTH_DAILY_BUDGET=1) or __import__("os").system("id") or (0'
+expect_refused "AUR_SLEUTH_DAILY_BUDGET=abc"
+expect_refused "AUR_SLEUTH_DAILY_BUDGET=1.0.0"
+expect_refused "AUR_SLEUTH_DAILY_BUDGET=-1"
+expect_refused "AUR_SLEUTH_DAILY_BUDGET=1e9"
+
+echo "== other malformed values =="
+expect_refused "AUR_SLEUTH_JOBS=4.5"
+expect_refused "AUR_SLEUTH_JOBS=; rm -rf /"
+expect_refused "AUR_SLEUTH_MIN_VOTES=lots"
+expect_refused 'AUR_SLEUTH_JUDGE_MODEL=a b'
+# shellcheck disable=SC2016  # the literal text is the point
+expect_refused 'AUR_SLEUTH_JUDGE_MODEL=$(id)'
+expect_refused "AUR_SLEUTH_AUDIT_MODELS=a,,b"
+expect_refused "AUR_SLEUTH_AUDIT_MODELS=a,"
+
+echo "== the pipeline takes the last flag, so the environment wins =="
+out="$(bash bench/pipeline.sh --daily-budget 2.00 --jobs 8 \
+        --daily-budget 0.25 --jobs 3 \
+        --dry-run --packages-file /dev/null --skip-judge --skip-dashboard 2>&1 || true)"
+# shellcheck disable=SC2016  # matching a literal dollar sign in the log line
+if grep -q 'budget=\$0.25' <<< "$out" && grep -q 'jobs=3' <<< "$out"; then
+    ok "a later --daily-budget/--jobs overrides an earlier one"
+else
+    bad "override did not take effect; config line was: $(grep -m1 Config: <<< "$out")"
+fi
+
+echo
+if (( fails > 0 )); then
+    echo "FAILED: $fails check(s)"
+    exit 1
+fi
+echo "settings from the environment: all checks passed"
