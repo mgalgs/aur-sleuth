@@ -6,8 +6,14 @@
 #   audit     Run the full pipeline (audit, judge, re-audit, dashboard) without
 #             pushing. Needs the LLM API key. THIS STAGE EXECUTES UNTRUSTED CODE:
 #             `makepkg` sources arbitrary AUR PKGBUILDs.
+#   review    Report whether the branch is publishable and what a sweep would
+#             publish. Needs no credential and writes nothing; the exit status
+#             is the answer. Optionally asks a model to read the reports that
+#             reached an unclear verdict, which is advice for a person and
+#             never a gate.
 #   publish   Push the audit-reports branch. Needs the git write credential, and
-#             deliberately runs after the untrusted stage has finished.
+#             deliberately runs after the untrusted stage has finished. Refuses
+#             to push a branch carrying anything but inert report data.
 #   bundle    Write the audit-reports branch to a git bundle instead of pushing
 #             it. Needs no credential. Lets reports accumulate on the volume and
 #             be reviewed elsewhere, so no write credential need exist here.
@@ -424,6 +430,50 @@ do_publish() {
     log "Pushed $sha"
 }
 
+# --- review -------------------------------------------------------------------
+
+# Answer "is this branch publishable, and what is in it?" without publishing.
+#
+# Needs no credential and writes nothing, so it is safe to run at any time and
+# from anywhere. The exit status is the answer to the first question: zero when
+# the gate passes. Everything printed is context for the second, and the model's
+# read at the end is advisory -- it is reading text a hostile package can
+# influence, which makes it useful to a person and unfit to gate anything.
+do_review() {
+    [[ -d "$GIT_STORE" ]] || die "$GIT_STORE missing; run the prepare stage first"
+
+    local repo
+    repo="$(stage_reports_repo)"
+
+    local sha base
+    sha="$(git --git-dir="$repo" rev-parse --verify --quiet \
+        "refs/heads/$REPORTS_BRANCH" || true)"
+    if [[ -z "$sha" ]]; then
+        log "No $REPORTS_BRANCH ref exists yet; nothing to review"
+        return 0
+    fi
+    base="$(git --git-dir="$repo" rev-parse --verify --quiet \
+        "refs/remotes/origin/$REPORTS_BRANCH" || true)"
+
+    if [[ -n "$base" && "$base" == "$sha" ]]; then
+        log "Nothing unpublished: local matches origin at ${sha:0:12}"
+        return 0
+    fi
+
+    local gate=0
+    validate_reports_tree "$repo" "$sha" || gate=1
+
+    python3 "$SRC_DIR/bench/review-pending.py" \
+        --git-dir "$repo" --head "$sha" --base "$base" "$@" || true
+
+    if (( gate != 0 )); then
+        log "GATE FAILED: this branch is not publishable as it stands"
+        return 1
+    fi
+    log "Gate passed: this branch is publishable"
+    return 0
+}
+
 # --- bundle -------------------------------------------------------------------
 
 # Write unpublished report commits to a git bundle: one file that can be copied
@@ -486,7 +536,9 @@ shift || true
 case "$MODE" in
     prepare) do_prepare ;;
     audit)   do_audit "$@" ;;
+    review)  do_review "$@" ;;
     publish) do_publish ;;
     bundle)  do_bundle ;;
-    *)       die "unknown stage '$MODE' (want prepare, audit, publish or bundle)" ;;
+    *)       die "unknown stage '$MODE'" \
+                 "(want prepare, audit, review, publish or bundle)" ;;
 esac

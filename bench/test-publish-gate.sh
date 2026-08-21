@@ -155,6 +155,41 @@ else
     bad "rewriting twice should be a no-op (got $again, want $fixed)"
 fi
 
+echo "== the review stage's exit status, which a caller gates on =="
+eval "$(sed -n '/^stage_reports_repo()/,/^}/p' "$ENTRYPOINT")"
+eval "$(sed -n '/^do_review()/,/^}/p' "$ENTRYPOINT")"
+
+# stage_reports_repo reads refs out of a real store, so build one.
+store="$tmp/store.git"
+git init --bare --quiet "$store"
+mkdir -p "$store/refs/heads" "$store/refs/remotes/origin"
+git --git-dir="$repo" rev-parse "$clean" > "$store/refs/heads/audit-reports"
+# Point the store's objects at the repo we already populated.
+printf '%s\n' "$repo/objects" > "$store/objects/info/alternates"
+
+# Read by stage_reports_repo, which arrives through the eval above.
+# shellcheck disable=SC2034
+GIT_STORE="$store"
+review_status() (
+    # A subshell: do_review resolves log/die at call time, and die exits.
+    set +e
+    do_review --no-llm >/dev/null 2>&1
+    echo $?
+)
+
+if [[ "$(review_status)" == "0" ]]; then
+    ok "clean branch: review exits 0"
+else
+    bad "clean branch: review should exit 0"
+fi
+
+git --git-dir="$repo" rev-parse "$dirty" > "$store/refs/heads/audit-reports"
+if [[ "$(review_status)" == "1" ]]; then
+    ok "branch with a planted .html: review exits 1"
+else
+    bad "branch with a planted .html: review should exit 1"
+fi
+
 echo
 if (( fails > 0 )); then
     echo "FAILED: $fails check(s)"
