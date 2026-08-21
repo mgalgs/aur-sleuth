@@ -107,8 +107,18 @@ refresh_metadata() {
     fi
     if (( age > 3600 )); then
         log "Refreshing AUR package metadata..."
-        curl -sL "$METADATA_URL" -o "$METADATA_CACHE"
-        log "Downloaded $(stat -c%s "$METADATA_CACHE") bytes"
+        # Bounded, and written beside the cache first: a stalled or failed
+        # download must neither hang the run nor replace a good cache with a
+        # partial file that then looks fresh for an hour.
+        if curl -sSfL --connect-timeout 15 --max-time 300 \
+                "$METADATA_URL" -o "$METADATA_CACHE.tmp"; then
+            mv -f "$METADATA_CACHE.tmp" "$METADATA_CACHE"
+            log "Downloaded $(stat -c%s "$METADATA_CACHE") bytes"
+        else
+            rm -f "$METADATA_CACHE.tmp"
+            [[ -f "$METADATA_CACHE" ]] || { log "ERROR: metadata download failed and no cache exists"; return 1; }
+            log "WARNING: metadata download failed; using the cache from $(( age / 60 )) minutes ago"
+        fi
     fi
 }
 
