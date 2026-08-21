@@ -20,7 +20,6 @@ _fm() { sed -n '/^---$/,/^---$/p' "$report_file" | grep "^${1}:" | head -1 | sed
 
 model="$(_fm model)"
 result="$(_fm result)"
-provider="$(_fm provider)"
 
 # Fall back to body parsing for reports without frontmatter
 if [[ -z "$model" ]]; then
@@ -29,14 +28,6 @@ fi
 if [[ -z "$result" ]]; then
     result="$(grep -oP 'Final Status:\s*\K\S+' "$report_file" | head -1 || echo "unknown")"
     result="$(echo "$result" | tr '[:upper:]' '[:lower:]')"
-fi
-if [[ -z "$provider" ]]; then
-    base_url="$(grep -oP 'with \S+ from \K\S+' "$report_file" | head -1 || echo "unknown")"
-    if [[ "$base_url" != "unknown" ]]; then
-        provider="$(echo "$base_url" | sed -E 's|https?://([^/]+).*|\1|')"
-    else
-        provider="unknown"
-    fi
 fi
 
 filename="$(date -u +%Y%m%d-%H%M%S)-${model//\//-}.md"

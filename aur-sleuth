@@ -638,7 +638,11 @@ def generate_report_text(
         usage_details += f"  Execution Time: {execution_time:.2f} seconds\n"
 
     content += usage_details
-    content += f"Full audit report can be found in {report_path}"
+    # Deliberately not part of the report. This text is written into the report
+    # itself, where naming its own path tells the reader nothing they do not
+    # have and describes the machine that ran the audit to everyone the report
+    # is published to.
+    logger.info("Full audit report: %s", report_path)
     return content
 
 
@@ -2452,8 +2456,13 @@ def _write_report_frontmatter(
 ):
     """Prepend YAML frontmatter with audit metadata to the report file."""
     try:
+        # These reports get published. The endpoint is a deployment detail and
+        # frequently a private one -- a proxy inside a cluster, or a model on a
+        # LAN -- whose hostname describes the operator's network rather than the
+        # audit. Record which service answered, never where it lives. The model
+        # field already carries the provenance a reader wants.
         base_url = get_base_url()
-        provider = re.sub(r"https?://([^/]+).*", r"\1", base_url)
+        provider = "openrouter" if "openrouter.ai" in base_url else "custom"
 
         source_info = {}
         try:
@@ -2503,7 +2512,6 @@ def _write_report_frontmatter(
             f"result: {overall_status.name.lower()}\n"
             f"model: {model}\n"
             f"provider: {provider}\n"
-            f"base_url: {base_url}\n"
             f"aur_sleuth_rev: {sleuth_rev}\n"
             f"{reaudit_line}"
             f"prompt_tokens: {prompt_tokens}\n"
@@ -2552,8 +2560,12 @@ def run_aur_sleuth_audit(
     execution_time = None
 
     try:
+        # The working directory and the endpoint belong in the operator's log,
+        # not in the report: the report is published, and both describe the
+        # machine that ran the audit rather than the package it audited.
+        logger.info("Working in %s, calling %s", pkgdir, get_base_url())
         tui.finalize_step(
-            f"Analyzing {package_name} AUR package (working in {pkgdir}) with {model} from {get_base_url()}"
+            f"Analyzing {package_name} AUR package with {model}"
         )
 
         os.chdir(pkgdir)
@@ -2620,8 +2632,11 @@ def download_package_to_tmpdir(
     # Create a temp directory inside it
     tmpdir = tempfile.mkdtemp(prefix="aur-sleuth-", dir=tmpdir_parent)
 
+    # The destination is a temporary path on the machine running the audit, and
+    # this line ends up in the published report. Keep it out of there.
+    logger.info("Cloning %s into %s", package_name, tmpdir)
     tui.update_status(
-        f"Cloning https://aur.archlinux.org/{package_name}.git to {tmpdir}..."
+        f"Cloning https://aur.archlinux.org/{package_name}.git..."
     )
     clone_url = clone_url or f"https://aur.archlinux.org/{package_name}.git"
     subprocess.run(
