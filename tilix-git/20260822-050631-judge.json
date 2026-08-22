@@ -1,0 +1,33 @@
+{
+  "package": "tilix-git",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The flagged unsafe script (src/tilix/data/pkg/flatpak/build.sh) is not executed during AUR package operations. It's unused development tooling for Flatpak builds, not referenced in PKGBUILD functions or install hooks.",
+  "disagreement_analysis": "Qwen incorrectly flagged an unused Flatpak script as unsafe, while Deepseek missed reviewing it entirely. The script's presence doesn't impact AUR safety.",
+  "coverage_issues": [
+    "Deepseek failed to review src/tilix/data/pkg/flatpak/build.sh (critical file)",
+    "Both models missed verifying if scripts are referenced in PKGBUILD/install hooks"
+  ],
+  "false_positives": [
+    "qwen: src/tilix/data/pkg/flatpak/build.sh (not executed during makepkg, unused Flatpak tooling)"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Prioritize files referenced in PKGBUILD functions (build/package/prepare) and .install scripts",
+    "Improve false-positive filtering: Ignore non-build scripts unless explicitly executed",
+    "Add build-context analysis: Verify if scripts are invoked during makepkg stages",
+    "Enhance file selection: Cross-reference with PKGBUILD source arrays and function calls"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 9853,
+    "completion_tokens": 1806,
+    "cost": 0.011412100000000001
+  },
+  "audits_judged": [
+    "20260822-040700-qwen-qwen3-235b-a22b-2507.md",
+    "20260822-041232-deepseek-deepseek-v4-flash.md"
+  ]
+}
