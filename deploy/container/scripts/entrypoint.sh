@@ -267,9 +267,18 @@ publish_path_allowed() {
     local p="$1" pkg rest
 
     case "$p" in
-        # Rewritten from this image's own copy below, so whatever the branch
-        # currently holds for these two does not matter.
-        index.html|.nojekyll|_dashboard/data.json)
+        # These two are rewritten from this image's own copy below, so whatever
+        # the branch currently holds for them does not matter.
+        index.html|.nojekyll)
+            return 0 ;;
+        # The dashboard's own JSON. It is inert data, never executed by the
+        # browser: the rebuilt, trusted index.html fetches it and renders every
+        # value through escapeHtml/escapeAttr. A hostile audit stage that
+        # rewrote it can plant misleading numbers but not executable content --
+        # the same trust boundary the report bodies already sit behind. That
+        # escaping in bench/generate-dashboard.py is what makes allowing these
+        # verbatim safe; do not allow them here without it.
+        _dashboard/data.json)
             return 0 ;;
         _dashboard/pkg/*)
             rest="${p#_dashboard/pkg/}"
