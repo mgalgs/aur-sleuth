@@ -1,0 +1,33 @@
+{
+  "package": "firefox-nightly-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The flagged script (get_latest_version.sh) is a maintainer tool not executed during package build/install. It poses no runtime risk to users.",
+  "disagreement_analysis": "qwen incorrectly classified get_latest_version.sh as unsafe due to misunderstanding its role as a maintainer tool outside build/install scope.",
+  "coverage_issues": [
+    "deepseek skipped channel-prefs.js (low-risk config file)",
+    "Both models skipped compiled binaries (expected for prebuilt packages)"
+  ],
+  "false_positives": [
+    "qwen: get_latest_version.sh (maintainer script, not executed during makepkg)"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "File selection: Prioritize PKGBUILD functions and install hooks over maintainer scripts like version helpers",
+    "Prompt improvement: Explicitly state that non-build scripts (e.g., update helpers) are out of audit scope",
+    "Failure mode: Models confuse developer/maintainer tools with build-executed code",
+    "Assessment quality: Improve distinction between build-time risks and maintainer workflows"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 6322,
+    "completion_tokens": 1848,
+    "cost": 0.009045399999999999
+  },
+  "audits_judged": [
+    "20260822-043409-qwen-qwen3-235b-a22b-2507.md",
+    "20260822-043454-deepseek-deepseek-v4-flash.md"
+  ]
+}
