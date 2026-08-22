@@ -1,0 +1,34 @@
+{
+  "package": "powershell",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The flagged 'unsafe' files (InstallTarballPackage.sh and cloneToOfficialPath.yml) are CI/docker scripts not executed during AUR build/install. PKGBUILD and install hooks show no malicious behavior.",
+  "disagreement_analysis": "qwen overreacted to CI/docker scripts not used in makepkg, while deepseek correctly contextualized them.",
+  "coverage_issues": [
+    "deepseek skipped cloneToOfficialPath.yml (CI template)",
+    "Both missed deeper review of PKGBUILD-called scripts (though none found risky)"
+  ],
+  "false_positives": [
+    "qwen: InstallTarballPackage.sh (Docker helper script, not invoked by PKGBUILD)",
+    "qwen: cloneToOfficialPath.yml (CI template, never executed during AUR build)"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Prioritize files referenced in PKGBUILD functions (build/prepare/package) over CI/docker scripts",
+    "Improve context awareness: suppress alerts for CI/dev tooling unless PKGBUILD-invoked",
+    "Address over-sensitivity to download scripts in non-build contexts",
+    "Enhance file selection logic to deprioritize .github/.pipelines directories"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 13591,
+    "completion_tokens": 1654,
+    "cost": 0.0136487
+  },
+  "audits_judged": [
+    "20260822-032326-qwen-qwen3-235b-a22b-2507.md",
+    "20260822-033332-deepseek-deepseek-v4-flash.md"
+  ]
+}
