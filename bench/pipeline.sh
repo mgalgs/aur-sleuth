@@ -166,6 +166,11 @@ refresh_metadata() {
 }
 
 # --- Build index of already-audited packages from audit-reports branch ---
+# Each line is "name<TAB>pkgver-pkgrel". The AUR metadata "Version" is
+# [epoch:]pkgver-pkgrel; a report records pkgver and pkgrel separately (never an
+# epoch), so the index joins them here and discover_packages strips any epoch off
+# the AUR side before comparing. Storing bare pkgver here was a latent bug: it
+# never equalled the AUR Version, so no package was ever seen as already audited.
 build_audited_index() {
     if git show "${REPORTS_BRANCH}:_dashboard/data.json" &>/dev/null; then
         git show "${REPORTS_BRANCH}:_dashboard/data.json" | python3 -c "
@@ -173,8 +178,9 @@ import json, sys
 d = json.load(sys.stdin)
 for name, pkg in d.get('packages', {}).items():
     pkgver = pkg.get('pkgver', '')
+    pkgrel = pkg.get('pkgrel', '')
     if pkgver:
-        print(f'{name}\t{pkgver}')
+        print(f'{name}\t{pkgver}-{pkgrel}' if pkgrel else f'{name}\t{pkgver}')
 "
     else
         # No dashboard yet — scan branch directly
@@ -182,9 +188,15 @@ for name, pkg in d.get('packages', {}).items():
             | grep -v '^_dashboard/' | grep -v '^index.html' | grep -v '^\.nojekyll' \
             | while read -r path; do
                 pkg="${path%%/*}"
-                pkgver=$(git show "${REPORTS_BRANCH}:${path}" 2>/dev/null \
-                    | sed -n '/^---$/,/^---$/p' | grep '^pkgver:' | head -1 | sed 's/^pkgver: *//')
-                [[ -n "$pkgver" ]] && printf '%s\t%s\n' "$pkg" "$pkgver"
+                fm=$(git show "${REPORTS_BRANCH}:${path}" 2>/dev/null \
+                    | sed -n '/^---$/,/^---$/p')
+                pkgver=$(printf '%s\n' "$fm" | grep '^pkgver:' | head -1 | sed 's/^pkgver: *//')
+                pkgrel=$(printf '%s\n' "$fm" | grep '^pkgrel:' | head -1 | sed 's/^pkgrel: *//')
+                if [[ -n "$pkgver" && -n "$pkgrel" ]]; then
+                    printf '%s\t%s-%s\n' "$pkg" "$pkgver" "$pkgrel"
+                elif [[ -n "$pkgver" ]]; then
+                    printf '%s\t%s\n' "$pkg" "$pkgver"
+                fi
             done | sort -t$'\t' -k1,1 -u
     fi
 }
@@ -249,7 +261,13 @@ def eligible(p):
     if p.get("OutOfDate"):
         return False
     name = p.get("Name", "")
-    return not (name in audited and audited[name] == p.get("Version", ""))
+    # The audited index stores pkgver-pkgrel; the AUR "Version" is
+    # [epoch:]pkgver-pkgrel. Strip the epoch (pkgver cannot contain a colon) so
+    # the two are comparable. A rare epoch-only bump that leaves pkgver-pkgrel
+    # unchanged is not re-audited -- an accepted limitation, since reports carry
+    # no epoch.
+    aur_ver = p.get("Version", "").split(":", 1)[-1]
+    return not (name in audited and audited[name] == aur_ver)
 
 def popularity(p):
     return p.get("Popularity", 0.0)
@@ -292,8 +310,9 @@ else:
     # Stride merge: the k-th item of a stream with target share f gets a virtual
     # position (k + 0.5) / f, and the two streams merge by position. This holds
     # the ratio near UPDATED_SHARE at every prefix -- so wherever the daily budget
-    # cuts the list, the mix is right -- and the + 0.5 offset keeps floats off the
-    # exact tie boundaries. A tie falls to updated (tag 0 sorts before tag 1).
+    # cuts the list, the mix is right. Two positions can tie exactly for some
+    # shares (e.g. 0.75), so the sort key carries a stream tag: a tie always falls
+    # to updated (tag 0 before tag 1), which keeps the order deterministic.
     tagged = [((i + 0.5) / updated_share, 0, name) for i, name in enumerate(updated)]
     tagged += [((j + 0.5) / seed_share, 1, name) for j, name in enumerate(seed)]
     tagged.sort()

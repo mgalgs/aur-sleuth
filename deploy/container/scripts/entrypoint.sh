@@ -216,7 +216,7 @@ collect_audit_env_flags() {
         "AUR_SLEUTH_DAILY_BUDGET:--daily-budget:num"
         "AUR_SLEUTH_LOOKBACK_HOURS:--lookback-hours:int"
         "AUR_SLEUTH_SEED_TOP:--seed-top:int"
-        "AUR_SLEUTH_UPDATED_SHARE:--updated-share:num"
+        "AUR_SLEUTH_UPDATED_SHARE:--updated-share:share"
         "AUR_SLEUTH_JOBS:--jobs:int"
         "AUR_SLEUTH_AUDIT_TIMEOUT:--audit-timeout:int"
         "AUR_SLEUTH_AUDIT_MODELS:--audit-models:models"
@@ -240,6 +240,11 @@ collect_audit_env_flags() {
             num)
                 [[ "$value" =~ ^[0-9]+(\.[0-9]+)?$ ]] \
                     || die "$var must be a number, got '$value'" ;;
+            share)
+                # A fraction 0..1. Range-checked here so a bad UI value is refused
+                # at the boundary, not after the pipeline has already started.
+                [[ "$value" =~ ^(0(\.[0-9]+)?|1(\.0+)?)$ ]] \
+                    || die "$var must be between 0 and 1, got '$value'" ;;
             model)
                 [[ "$value" =~ ^[A-Za-z0-9._/-]+$ ]] \
                     || die "$var is not a model name, got '$value'" ;;

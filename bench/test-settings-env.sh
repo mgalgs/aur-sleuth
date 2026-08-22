@@ -93,6 +93,9 @@ expect_refused "AUR_SLEUTH_AUDIT_MODELS=a,,b"
 expect_refused "AUR_SLEUTH_AUDIT_MODELS=a,"
 expect_refused "AUR_SLEUTH_UPDATED_SHARE=abc"
 expect_refused 'AUR_SLEUTH_UPDATED_SHARE=0.8) or (1'
+# Out of range is refused at the container boundary, not left to abort the run.
+expect_refused "AUR_SLEUTH_UPDATED_SHARE=1.5"
+expect_refused "AUR_SLEUTH_UPDATED_SHARE=2"
 
 echo "== the pipeline takes the last flag, so the environment wins =="
 out="$(bash bench/pipeline.sh --daily-budget 2.00 --jobs 8 \

@@ -58,11 +58,13 @@ cat > "$tmp/a.json" <<JSON
  {"Name":"S3","Maintainer":"m","Version":"1","NumVotes":480,"Popularity":180.0,"LastModified":0},
  {"Name":"ORPHAN","Maintainer":null,"Version":"1","NumVotes":900,"Popularity":900.0,"LastModified":$RECENT},
  {"Name":"OOD","Maintainer":"m","OutOfDate":1699999999,"Version":"1","NumVotes":900,"Popularity":900.0,"LastModified":$RECENT},
- {"Name":"DONE","Maintainer":"m","Version":"2","NumVotes":900,"Popularity":900.0,"LastModified":$RECENT}
+ {"Name":"DONE","Maintainer":"m","Version":"2.0-1","NumVotes":900,"Popularity":900.0,"LastModified":$RECENT}
 ]
 JSON
 gzip -c "$tmp/a.json" > "$tmp/a.json.gz"
-printf 'DONE\t2\n' > "$tmp/a.tsv"
+# The audited index stores pkgver-pkgrel (what build_audited_index emits), not
+# bare pkgver, so it can equal the AUR "Version" field.
+printf 'DONE\t2.0-1\n' > "$tmp/a.tsv"
 
 got="$(run_discover "$tmp/a.json.gz" "$tmp/a.tsv" 0 3 0.8)"
 # updated (pop desc): U1 U2 U3 U4 U5 ; seed (pop desc): S1 S2 S3
@@ -104,20 +106,26 @@ else
     printf '    got:  %s\n' "$(echo "$got"  | tr '\n' ' ')"
 fi
 
-echo "== a version change re-opens an audited package =="
+echo "== a version change re-opens an audited package; epoch is stripped =="
+# AUR "Version" is [epoch:]pkgver-pkgrel; the audited index is pkgver-pkgrel with
+# no epoch. RE changed pkgrel (re-audit); SAME is unchanged (skip); EP is an
+# epoch package whose pkgver-pkgrel is unchanged, so stripping the epoch makes it
+# match and skip. Using bare versions here (the old fixtures did) would hide the
+# real pkgver-vs-Version mismatch, so these carry pkgrel and an epoch.
 cat > "$tmp/c.json" <<JSON
 [
- {"Name":"RE","Maintainer":"m","Version":"5","NumVotes":10,"Popularity":3.0,"LastModified":$RECENT},
- {"Name":"SAME","Maintainer":"m","Version":"9","NumVotes":10,"Popularity":3.0,"LastModified":$RECENT}
+ {"Name":"RE","Maintainer":"m","Version":"1.5-2","NumVotes":10,"Popularity":3.0,"LastModified":$RECENT},
+ {"Name":"SAME","Maintainer":"m","Version":"9.0-1","NumVotes":10,"Popularity":3.0,"LastModified":$RECENT},
+ {"Name":"EP","Maintainer":"m","Version":"1:1.0-1","NumVotes":10,"Popularity":3.0,"LastModified":$RECENT}
 ]
 JSON
 gzip -c "$tmp/c.json" > "$tmp/c.json.gz"
-printf 'RE\t4\nSAME\t9\n' > "$tmp/c.tsv"
+printf 'RE\t1.5-1\nSAME\t9.0-1\nEP\t1.0-1\n' > "$tmp/c.tsv"
 got="$(run_discover "$tmp/c.json.gz" "$tmp/c.tsv" 0 0 0.8)"
 if [[ "$got" == "RE" ]]; then
-    ok "RE re-audited (audited at 4, now 5); SAME skipped (audited at 9)"
+    ok "RE re-audited (pkgrel 1->2); SAME skipped (9.0-1); EP skipped (epoch stripped)"
 else
-    bad "version-change dedup wrong; got '$got'"
+    bad "version-change/epoch dedup wrong; got '$got'"
 fi
 
 echo "== updated-share 1.0 is updated-only, 0.0 is seed-only =="
