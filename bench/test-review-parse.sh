@@ -38,6 +38,12 @@ check("prose around the object", p('Sure:\n{"a":1}\nhope that helps') == {"a": 1
 # JSON but parses with strict=False.
 check("literal newline in a string", p('{"summary":"line1\nline2"}') == {"summary": "line1\nline2"})
 check("trailing junk after the object", p('{"a":1} and more text') == {"a": 1})
+# Two top-level objects: no single slice parses, so a leading decoy cannot shadow
+# the real answer -- the reply is reported as broken instead.
+check("decoy first object -> None", p('{"summary":"all clear"} {"concerns":[{"detail":"real"}]}') is None)
+# An empty object parses (it IS valid JSON); the caller, not the parser, treats a
+# reply with neither concerns nor summary as broken rather than an all-clear.
+check("empty object parses", p('{}') == {})
 check("truncated: unterminated string", p('{"summary":"unterminated') is None)
 check("truncated: no closing brace", p('{"concerns":[{"detail":"abc') is None)
 check("a list is not a dict", p('[1,2,3]') is None)

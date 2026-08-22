@@ -146,13 +146,15 @@ def summarise(gitdir, head, base):
 def parse_model_json(content):
     """Best-effort parse of a model's JSON reply into a dict.
 
-    Models wrap the JSON in prose or a ``` fence, put a literal newline inside a
-    string value (which is invalid JSON), or trail junk after the object. Try, in
-    order: a fenced block, the whole reply, and the first "{"..last "}" slice --
-    each first strict, then with strict=False so a literal control character
-    inside a string is tolerated -- then a lenient decode of just the first
-    object. Returns the dict, or None if nothing parses (a truncated reply with
-    no closing brace lands here, and the caller reports it).
+    Models wrap the JSON in prose or a code fence and sometimes put a literal
+    newline inside a string value (which is invalid strict JSON). Try, in order:
+    a fenced block, the whole reply, and the first "{"..last "}" slice -- each
+    first strict, then with strict=False so a literal control character inside a
+    string is tolerated. Returns the parsed dict, or None.
+
+    None covers a truncated reply and a reply that carries more than one top-level
+    object: no single slice parses, so nothing is returned rather than trusting
+    the first fragment (which, in hostile-influenced text, could be a decoy).
     """
     if not content:
         return None
@@ -163,6 +165,9 @@ def parse_model_json(content):
     elif "```" in content:
         candidates.append(content.split("```", 1)[1].split("```", 1)[0])
     candidates.append(content)
+    # The first "{"..last "}" slice drops surrounding prose. It parses only when
+    # there is a single object; two top-level objects leave a slice that does
+    # not parse, so a leading decoy cannot shadow the real answer.
     start, end = content.find("{"), content.rfind("}")
     if start != -1 and end > start:
         candidates.append(content[start:end + 1])
@@ -174,15 +179,7 @@ def parse_model_json(content):
         for strict in (True, False):
             try:
                 obj = json.loads(text, strict=strict)
-            except (ValueError, TypeError):
-                obj = None
-            if isinstance(obj, dict):
-                return obj
-        brace = text.find("{")
-        if brace != -1:
-            try:
-                obj, _ = json.JSONDecoder(strict=False).raw_decode(text[brace:])
-            except (ValueError, TypeError):
+            except (ValueError, TypeError, RecursionError):
                 obj = None
             if isinstance(obj, dict):
                 return obj
@@ -194,7 +191,7 @@ def ask_model(entries, model, base_url, api_key):
     try:
         from openai import OpenAI
     except ImportError:
-        return {"error": "the openai package is not installed"}
+        return {"_error": "the openai package is not installed"}
 
     client = OpenAI(
         base_url=base_url, api_key=api_key,
@@ -249,15 +246,23 @@ Respond in JSON, no markdown fencing:
         )
         content = resp.choices[0].message.content or ""
     except Exception as exc:
-        return {"error": str(exc)}
+        return {"_error": str(exc)}
 
-    parsed = parse_model_json(content)
-    if parsed is None:
-        # Nothing parseable came back (e.g. a truncated reply). Advisory, so this
-        # is reported, not fatal; include the start of the reply so a person can
-        # see what happened.
+    # The advisory read must never crash the run, so any parse-time failure
+    # (including a RecursionError on pathologically nested input) is caught.
+    try:
+        parsed = parse_model_json(content)
+    except Exception as exc:
+        return {"_error": f"could not parse the model reply: {exc}"}
+
+    # A usable reply carries the requested shape. A dict with neither key -- "{}",
+    # or something off-schema -- is a broken reply, not an all-clear, and is
+    # reported as one. The start of the reply goes with it so a person can see
+    # what came back. The sentinel key is "_error" so it cannot collide with an
+    # "error" key the model itself might emit.
+    if not isinstance(parsed, dict) or not ("concerns" in parsed or "summary" in parsed):
         head = " ".join(content.split())[:200] or "(empty reply)"
-        return {"error": f"the model did not return usable JSON; reply began: {head}"}
+        return {"_error": f"the model did not return a usable review; reply began: {head}"}
     return parsed
 
 
@@ -360,11 +365,13 @@ def main():
     out["llm"] = {"status": "ok", "model": args.model, "read": len(subset),
                   "of": len(flagged), "concerns": [], "summary": ""}
 
-    if "error" in verdict:
+    if "_error" in verdict:
         # Advisory, so a failure here is reported and does not change the outcome.
-        print(f"  the review did not complete: {verdict['error']}")
+        # "_error" is ask_model's own sentinel, distinct from any "error" key the
+        # model's JSON might carry.
+        print(f"  the review did not complete: {verdict['_error']}")
         out["llm"]["status"] = "error"
-        out["llm"]["summary"] = str(verdict["error"])[:300]
+        out["llm"]["summary"] = str(verdict["_error"])[:300]
         return finish(0)
 
     concerns = verdict.get("concerns") or []
