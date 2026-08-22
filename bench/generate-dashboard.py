@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 from collections import defaultdict
+from datetime import datetime, timedelta, timezone
 
 REPORTS_BRANCH = "audit-reports"
 
@@ -219,6 +220,7 @@ def build_index_data(audits, judges):
             "pkgver": latest.get("pkgver", ""),
             "pkgrel": latest.get("pkgrel", ""),
             "latest_date": latest.get("date", ""),
+            "first_date": pkg_audits[-1]["date"] if pkg_audits else "",
             "total_cost": round(total_cost, 6),
             "audit_count": len(pkg_audits),
             "files_reviewed": latest.get("files_reviewed", 0),
@@ -267,6 +269,49 @@ def build_index_data(audits, judges):
         by_date[d]["judges"] += 1
         by_date[d]["cost"] += (j["data"].get("_judge_usage", {}).get("cost") or 0)
 
+    # --- Trailing-week activity, for the public dashboard headline ---
+    # "Now" is generation time; data.json is rebuilt every run, so the window
+    # always trails the latest audits. ISO date strings compare correctly, so a
+    # lexical compare against the cutoff is enough -- no per-row date parsing.
+    # These count what aur-sleuth AUDITED this week, not every AUR update: the
+    # audit set is drawn from recently-updated and top-popular packages.
+    week_start = (datetime.now(timezone.utc) - timedelta(days=7)).strftime("%Y-%m-%d")
+
+    flagged_majorities = {"unsafe", "contested"}
+    wk_updated = wk_new = wk_suspicious = wk_green = 0
+    for ps in pkg_summaries.values():
+        if (ps["latest_date"] or "")[:10] < week_start:
+            continue
+        wk_updated += 1
+        if (ps["first_date"] or "")[:10] >= week_start:
+            wk_new += 1
+        if ps["audit_majority"] in flagged_majorities or ps["judge_majority"] == "unsafe":
+            wk_suspicious += 1
+        elif ps["audit_majority"] == "safe":
+            wk_green += 1
+
+    wk_by_model = defaultdict(int)
+    wk_audits_total = 0
+    for a in audits:
+        if a["frontmatter"].get("date", "")[:10] >= week_start:
+            wk_audits_total += 1
+            wk_by_model[a["frontmatter"].get("model", "unknown")] += 1
+
+    # Most recent audits for the activity strip. Built from the tagged per-package
+    # audits so the re-audit flag matches the table's.
+    recent = []
+    for pkg_name, pkg_data in packages.items():
+        for a in pkg_data["audits"]:
+            recent.append({
+                "package": pkg_name,
+                "model": a["model"],
+                "result": a["result"],
+                "date": a["date"],
+                "reaudit": bool(a.get("triggered_by")),
+            })
+    recent.sort(key=lambda r: r["date"] or "", reverse=True)
+    recent = recent[:24]
+
     summary = {
         "packages_audited": len(pkg_summaries),
         "total_reports": len(audits),
@@ -283,6 +328,17 @@ def build_index_data(audits, judges):
         "by_date": {k: {"audits": v["audits"], "judges": v["judges"], "cost": round(v["cost"], 4)}
                     for k, v in sorted(by_date.items())},
         "re_audit_count": sum(1 for j in judges if j["data"].get("re_audit_recommended")),
+        "week": {
+            "start": week_start,
+            "packages": {"updated": wk_updated, "new": wk_new,
+                         "suspicious": wk_suspicious, "green": wk_green},
+            "audits_total": wk_audits_total,
+            # "unknown" is not worth naming on the public headline; audits_total
+            # still counts it, so the named models need not sum to the total.
+            "by_model": dict(sorted(((k, v) for k, v in wk_by_model.items() if k != "unknown"),
+                                    key=lambda x: -x[1])),
+        },
+        "recent": recent,
     }
 
     return {"summary": summary, "packages": pkg_summaries}
@@ -440,6 +496,13 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             </div>
         </div>
 
+        <!-- This week's activity -->
+        <div id="activity" class="bg-slate-800 rounded-lg p-5 border border-slate-700 mb-6">
+            <p id="activity-packages" class="text-slate-200"></p>
+            <p id="activity-audits" class="text-slate-400 text-sm mt-1"></p>
+            <div id="activity-recent" class="mt-4 flex flex-wrap gap-2"></div>
+        </div>
+
         <!-- Summary Cards -->
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
             <div class="bg-slate-800 rounded-lg p-4 border border-slate-700">
@@ -549,9 +612,56 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             return;
         }
         renderSummary();
+        renderActivity();
         renderCharts();
         renderTable();
         setupEventListeners();
+    }
+
+    function shortModel(m) {
+        return String(m).split('/').pop();
+    }
+
+    function joinNicely(parts) {
+        if (parts.length <= 1) return parts.join('');
+        if (parts.length === 2) return parts[0] + ' and ' + parts[1];
+        return parts.slice(0, -1).join(', ') + ', and ' + parts[parts.length - 1];
+    }
+
+    function renderActivity() {
+        const activity = document.getElementById('activity');
+        const wk = (DATA.summary && DATA.summary.week) || null;
+        const rec = (DATA.summary && DATA.summary.recent) || [];
+        // Older data.json (before this field existed) has no week block.
+        if (!wk) { activity.style.display = 'none'; return; }
+
+        const p = wk.packages || {};
+        document.getElementById('activity-packages').innerHTML =
+            '<span class="text-2xl font-bold text-white">' + Number(p.updated || 0).toLocaleString() + '</span>' +
+            ' packages audited in the past week ' +
+            '<span class="text-slate-400 text-base">(' +
+            Number(p.new || 0) + ' new, ' +
+            '<span class="result-unsafe font-semibold">' + Number(p.suspicious || 0) + ' suspicious</span>, ' +
+            '<span class="result-safe font-semibold">' + Number(p.green || 0) + ' green</span>)</span>';
+
+        const parts = Object.entries(wk.by_model || {}).slice(0, 6)
+            .map(([m, c]) => escapeHtml(shortModel(m)) + ' (' + Number(c) + ')');
+        document.getElementById('activity-audits').innerHTML =
+            Number(wk.audits_total || 0).toLocaleString() + ' security audits' +
+            (parts.length ? ' by ' + joinNicely(parts) : '');
+
+        document.getElementById('activity-recent').innerHTML = rec.map(r => {
+            const d = String(r.date || '').split('T')[0];
+            const reaudit = r.reaudit
+                ? '<span class="text-yellow-400" title="re-audit">&#8635;</span>' : '';
+            return '<span class="inline-flex items-center gap-1.5 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs" ' +
+                'title="' + escapeAttr(shortModel(r.model || '') + ' • ' + (r.date || '')) + '">' +
+                '<span class="block block-' + escapeAttr(r.result || 'unknown') + '" style="margin-right:0"></span>' +
+                '<span class="text-blue-300">' + escapeHtml(r.package || '') + '</span>' +
+                reaudit +
+                '<span class="text-slate-500">' + escapeHtml(d) + '</span>' +
+                '</span>';
+        }).join('');
     }
 
     function renderSummary() {
@@ -915,7 +1025,6 @@ def main():
     print("Building index data...")
     index_data = build_index_data(audits, judges)
 
-    from datetime import datetime, timezone
     index_data["generated_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     print("Building per-package details...")
