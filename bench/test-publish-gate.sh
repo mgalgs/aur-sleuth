@@ -208,6 +208,186 @@ else
     ok "a deleted report is not reported as broken"
 fi
 
+echo "== a report that names the deployment's own infrastructure is refused =="
+eval "$(sed -n '/^INTERNAL_STRINGS=/p' "$ENTRYPOINT")"
+eval "$(sed -n '/^internal_string_paths()/,/^}/p' "$ENTRYPOINT")"
+eval "$(sed -n '/^internal_string_working_files()/,/^}/p' "$ENTRYPOINT")"
+eval "$(sed -n '/^sanitize_store()/,/^}/p' "$ENTRYPOINT")"
+eval "$(sed -n '/^do_quarantine()/,/^}/p' "$ENTRYPOINT")"
+
+# Like make_commit, but with real content and a parent, so a history can be
+# built whose commits each add one report.
+make_commit_content() {
+    local parent="$1"; shift
+    local idx="$tmp/index" path content blob tree
+    rm -f "$idx"
+    if [[ -n "$parent" ]]; then
+        GIT_INDEX_FILE="$idx" git --git-dir="$repo" read-tree "$parent"
+    fi
+    while (( $# )); do
+        path="$1"; content="$2"; shift 2
+        blob="$(printf '%b' "$content" | git --git-dir="$repo" hash-object -w --stdin)"
+        GIT_INDEX_FILE="$idx" git --git-dir="$repo" update-index --add \
+            --cacheinfo "100644,${blob},${path}"
+    done
+    tree="$(GIT_INDEX_FILE="$idx" git --git-dir="$repo" write-tree)"
+    GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t \
+        git --git-dir="$repo" commit-tree "$tree" ${parent:+-p "$parent"} -m t
+}
+
+published="$(make_commit_content "" "pkg-a/1.md" '---\nresult: safe\n---\nclean\n')"
+leaky="$(make_commit_content "$published" "pkg-b/1.md" \
+    '---\nresult: safe\nprovider: gateway.default.svc.cluster.local\n---\nbody\n')"
+tip="$(make_commit_content "$leaky" "pkg-c/1.md" '---\nresult: unsafe\n---\nfine\n')"
+
+if [[ "$(internal_string_paths "$repo" "$tip")" == "pkg-b/1.md" ]]; then
+    ok "the leaky report is found, and only it"
+else
+    bad "internal_string_paths found: $(internal_string_paths "$repo" "$tip" | tr '\n' ' ')"
+fi
+if [[ -z "$(internal_string_paths "$repo" "$published")" ]]; then
+    ok "the published commit is clean"
+else
+    bad "the published commit should be clean"
+fi
+# A site-specific string is honoured too.
+if [[ "$(INTERNAL_STRINGS=nope,gateway.default internal_string_paths "$repo" "$tip")" == "pkg-b/1.md" ]]; then
+    ok "a configured string is matched"
+else
+    bad "AUR_SLEUTH_INTERNAL_STRINGS was not honoured"
+fi
+
+git --git-dir="$repo" rev-parse "$tip" > "$store/refs/heads/audit-reports"
+git --git-dir="$repo" rev-parse "$published" > "$store/refs/remotes/origin/audit-reports"
+# The stage's own log lines are part of what is checked, so they are not
+# silenced by -q here.
+# shellcheck disable=SC2329  # log is called by do_review
+out="$( (set +e; log() { echo "$*"; }; do_review --no-llm 2>&1; echo "exit=$?") )"
+if grep -q 'exit=1' <<< "$out"; then
+    ok "review exits 1 on an internal string, even though the gate passes"
+else
+    bad "review should exit 1: $out"
+fi
+if grep -q 'pkg-b/1.md' <<< "$out" && grep -q 'quarantine' <<< "$out"; then
+    ok "review names the file and the remedy"
+else
+    bad "review output lacks the path or the remedy"
+fi
+json="$(grep '^REVIEW_JSON ' <<< "$out" | tail -1 | sed 's/^REVIEW_JSON //')"
+if [[ -n "$json" ]] && python3 -c '
+import json, sys
+d = json.loads(sys.argv[1])
+assert d["gate"] == "pass", d
+assert d["internal"] == ["pkg-b/1.md"], d
+assert d["publishable"] is False, d
+assert d["pending"] == 2, d
+assert d["audit_reports"] == 2, d
+' "$json"; then
+    ok "REVIEW_JSON carries the gate, the hits, and the counts"
+else
+    bad "REVIEW_JSON is wrong or missing: $json"
+fi
+
+echo "== quarantine drops them, and nothing else =="
+# A real, non-bare store, as on the volume: objects fetched in, origin at the
+# published commit, and the gitfile generate-dashboard.py resolves through.
+qwt="$tmp/qstore"
+git init --quiet "$qwt"
+qstore="$qwt/.git"
+git --git-dir="$qstore" fetch --quiet "$repo" "$tip:refs/heads/audit-reports"
+git --git-dir="$qstore" update-ref refs/remotes/origin/audit-reports "$published"
+mkdir -p "$tmp/src/bench" "$tmp/data/bulk-audit" \
+         "$tmp/data/bulk-reports/model-a" "$tmp/data/bulk-reports/model-b"
+cp bench/generate-dashboard.py "$tmp/src/bench/"
+printf 'gitdir: %s\n' "$qstore" > "$tmp/src/.git"
+printf -- '---\nresult: safe\nprovider: x.svc.cluster.local\n---\n' \
+    > "$tmp/data/bulk-reports/model-a/aur-sleuth-report-pkg-b.txt"
+printf -- '---\nresult: safe\n---\n' \
+    > "$tmp/data/bulk-reports/model-b/aur-sleuth-report-pkg-a.txt"
+
+quarantine() (
+    set +e
+    # All read by do_quarantine, which arrives through the eval above; scoped
+    # to this subshell on purpose.
+    # shellcheck disable=SC2030,SC2031,SC2034
+    GIT_STORE="$qstore" DATA_DIR="$tmp/data" SRC_DIR="$tmp/src" MODE=quarantine \
+        FETCH_URL=https://example.invalid/r.git
+    # shellcheck disable=SC2329  # both called by do_quarantine
+    die() { echo "die: $*"; exit 1; }
+    # shellcheck disable=SC2329
+    log() { echo "$*"; }
+    do_quarantine 2>&1
+    echo "exit=$?"
+)
+out="$(quarantine)"
+if grep -q 'exit=0' <<< "$out"; then
+    ok "quarantine exits 0"
+else
+    bad "quarantine failed: $out"
+fi
+qhead="$(git --git-dir="$qstore" rev-parse refs/heads/audit-reports)"
+if [[ -z "$(internal_string_paths "$qstore" "$qhead")" ]]; then
+    ok "the branch head carries no internal string"
+else
+    bad "internal strings remain at $qhead"
+fi
+if git --git-dir="$qstore" cat-file -e "$qhead:pkg-c/1.md" 2>/dev/null \
+   && git --git-dir="$qstore" cat-file -e "$qhead:pkg-a/1.md" 2>/dev/null; then
+    ok "the clean reports survive"
+else
+    bad "a clean report was dropped"
+fi
+if ! git --git-dir="$qstore" cat-file -e "$qhead:pkg-b/1.md" 2>/dev/null; then
+    ok "the leaky report is gone"
+else
+    bad "the leaky report is still there"
+fi
+if git --git-dir="$qstore" merge-base --is-ancestor "$published" "$qhead"; then
+    ok "origin is still an ancestor"
+else
+    bad "the rewrite detached from origin"
+fi
+# The leaky commit only ever added pkg-b, so it is pruned: one report commit
+# remains, plus the dashboard rebuild.
+n="$(git --git-dir="$qstore" rev-list --count "$published..$qhead")"
+if [[ "$n" == "2" ]]; then
+    ok "the emptied commit was pruned, the dashboard rebuilt"
+else
+    bad "expected 2 commits after the rewrite, got $n"
+fi
+backup="$(git --git-dir="$qstore" for-each-ref --format='%(objectname)' 'refs/backup/quarantine-*' | head -1)"
+if [[ "$backup" == "$tip" ]]; then
+    ok "the previous head is kept under refs/backup/"
+else
+    bad "backup ref is $backup, want $tip"
+fi
+if [[ ! -e "$tmp/data/bulk-reports/model-a/aur-sleuth-report-pkg-b.txt" \
+      && -e "$tmp/data/bulk-reports/model-b/aur-sleuth-report-pkg-a.txt" ]]; then
+    ok "the leaky working file is removed, the clean one kept"
+else
+    bad "working files: $(ls "$tmp"/data/bulk-reports/*/)"
+fi
+if git --git-dir="$qstore" cat-file -e "$qhead:_dashboard/pkg/pkg-c.json" 2>/dev/null \
+   && ! git --git-dir="$qstore" cat-file -e "$qhead:_dashboard/pkg/pkg-b.json" 2>/dev/null; then
+    ok "the dashboard was rebuilt from the cleaned branch"
+else
+    bad "dashboard JSON does not match the cleaned branch"
+fi
+# Running again is a no-op.
+out="$(quarantine)"
+if grep -q 'exit=0' <<< "$out" && grep -q 'nothing to do' <<< "$out" \
+   && [[ "$(git --git-dir="$qstore" rev-parse refs/heads/audit-reports)" == "$qhead" ]]; then
+    ok "a second quarantine changes nothing"
+else
+    bad "second quarantine: $out"
+fi
+# And the store it leaves behind passes review.
+if [[ "$(GIT_STORE="$qstore" review_status)" == "0" ]]; then
+    ok "review passes after quarantine"
+else
+    bad "review should pass after quarantine"
+fi
+
 echo
 if (( fails > 0 )); then
     echo "FAILED: $fails check(s)"

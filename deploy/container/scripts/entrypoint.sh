@@ -11,6 +11,11 @@
 #             is the answer. Optionally asks a model to read the reports that
 #             reached an unclear verdict, which is advice for a person and
 #             never a gate.
+#   quarantine
+#             Drop every unpublished report that names this deployment's own
+#             infrastructure, which review reports as the reason it failed.
+#             Rewrites only the unpushed commits, keeps a backup ref, and
+#             needs the volume read-write. No credential.
 #   publish   Push the audit-reports branch. Needs the git write credential, and
 #             deliberately runs after the untrusted stage has finished. Refuses
 #             to push a branch carrying anything but inert report data.
@@ -56,6 +61,55 @@ export GIT_COMMITTER_EMAIL="${GIT_COMMITTER_EMAIL:-$GIT_AUTHOR_EMAIL}"
 # every git command under $SRC_DIR resolves through this file.
 printf 'gitdir: %s\n' "$GIT_STORE" > "$SRC_DIR/.git"
 
+# --- the shared store ----------------------------------------------------------
+
+# The previous run's audit stage could write anything into the store, and a
+# repository's own config and hooks are executable input: url.*.insteadOf
+# rewrites where `git fetch` connects, core.sshCommand and filter drivers are
+# commands. Reset all of it to known-good before any trusted stage runs git
+# in the store itself.
+sanitize_store() {
+    rm -rf "$GIT_STORE/hooks" "$GIT_STORE/objects/info/alternates"
+    cat > "$GIT_STORE/config" <<EOF
+[core]
+	repositoryformatversion = 0
+	bare = false
+	logallrefupdates = true
+[remote "origin"]
+	url = $FETCH_URL
+	fetch = +refs/heads/*:refs/remotes/origin/*
+EOF
+}
+
+# --- internal strings ------------------------------------------------------------
+
+# Strings that name this deployment's own infrastructure and must never be
+# published: a cluster-internal hostname, a proxy's name. A report that carries
+# one was written by a build that leaked it, and every such report is dropped
+# before anything is pushed.
+#
+# Comma- or whitespace-separated. The default is the one every Kubernetes
+# deployment shares; a site adds its own. Matching is fixed-string, so nothing
+# here is a pattern.
+INTERNAL_STRINGS="${AUR_SLEUTH_INTERNAL_STRINGS:-svc.cluster.local}"
+
+# Print every path at REF in REPO whose content contains an internal string,
+# one per line, sorted and unique. Prints nothing when there are none.
+internal_string_paths() {
+    local repo="$1" ref="$2" needle
+    for needle in ${INTERNAL_STRINGS//,/ }; do
+        git --git-dir="$repo" grep -l -F -e "$needle" "$ref" -- 2>/dev/null || true
+    done | sed "s/^[^:]*://" | sort -u
+}
+
+# The same, for the working copies the pipeline keeps on the volume.
+internal_string_working_files() {
+    local needle
+    for needle in ${INTERNAL_STRINGS//,/ }; do
+        grep -l -F -e "$needle" "$DATA_DIR"/bulk-reports/*/aur-sleuth-report-*.txt 2>/dev/null || true
+    done | sort -u
+}
+
 # --- prepare ------------------------------------------------------------------
 
 do_prepare() {
@@ -72,20 +126,7 @@ do_prepare() {
         log "Cloned $(du -sh "$GIT_STORE" | cut -f1) into $GIT_STORE"
     fi
 
-    # The previous run's audit stage could write anything into the store, and a
-    # repository's own config and hooks are executable input: url.*.insteadOf
-    # rewrites where `git fetch` connects, core.sshCommand and filter drivers are
-    # commands. Reset all of it to known-good before the first git command runs.
-    rm -rf "$GIT_STORE/hooks" "$GIT_STORE/objects/info/alternates"
-    cat > "$GIT_STORE/config" <<EOF
-[core]
-	repositoryformatversion = 0
-	bare = false
-	logallrefupdates = true
-[remote "origin"]
-	url = $FETCH_URL
-	fetch = +refs/heads/*:refs/remotes/origin/*
-EOF
+    sanitize_store
 
     cd "$SRC_DIR"
     log "Fetching $FETCH_URL"
@@ -445,9 +486,19 @@ do_publish() {
 #
 # Needs no credential and writes nothing, so it is safe to run at any time and
 # from anywhere. The exit status is the answer to the first question: zero when
-# the gate passes. Everything printed is context for the second, and the model's
-# read at the end is advisory -- it is reading text a hostile package can
-# influence, which makes it useful to a person and unfit to gate anything.
+# the gate passes AND no report on the branch carries an internal string.
+# Everything printed is context for the second, and the model's read at the
+# end is advisory -- it is reading text a hostile package can influence, which
+# makes it useful to a person and unfit to gate anything.
+#
+# Two checks decide, both in code. The gate looks at paths: only inert report
+# data may be on the branch. The content check looks inside: no report may
+# name this deployment's own infrastructure. Each is decidable without a
+# model, and each is the kind of thing a person skims past in a few hundred
+# reports, which is why neither is left to one.
+#
+# The last line printed is REVIEW_JSON followed by one JSON object, for a
+# caller that wants the answer without parsing prose.
 do_review() {
     [[ -d "$GIT_STORE" ]] || die "$GIT_STORE missing; run the prepare stage first"
 
@@ -459,6 +510,7 @@ do_review() {
         "refs/heads/$REPORTS_BRANCH" || true)"
     if [[ -z "$sha" ]]; then
         log "No $REPORTS_BRANCH ref exists yet; nothing to review"
+        echo 'REVIEW_JSON {"gate":"pass","internal":[],"pending":0,"nothing":true}'
         return 0
     fi
     base="$(git --git-dir="$repo" rev-parse --verify --quiet \
@@ -466,21 +518,138 @@ do_review() {
 
     if [[ -n "$base" && "$base" == "$sha" ]]; then
         log "Nothing unpublished: local matches origin at ${sha:0:12}"
+        echo 'REVIEW_JSON {"gate":"pass","internal":[],"pending":0,"nothing":true}'
         return 0
     fi
 
-    local gate=0
-    validate_reports_tree "$repo" "$sha" || gate=1
+    local gate=pass
+    validate_reports_tree "$repo" "$sha" || gate=fail
+
+    local hits
+    hits="$(mktemp)"
+    internal_string_paths "$repo" "$sha" > "$hits"
+    local nhits
+    nhits="$(wc -l < "$hits")"
+    if (( nhits > 0 )); then
+        log "Internal strings ($INTERNAL_STRINGS) found in $nhits file(s):"
+        head -20 "$hits" | sed 's/^/  /'
+        (( nhits > 20 )) && log "  ... and $(( nhits - 20 )) more"
+        log "The quarantine stage drops them from the unpublished commits."
+    else
+        log "No internal strings on the branch"
+    fi
 
     python3 "$SRC_DIR/bench/review-pending.py" \
-        --git-dir "$repo" --head "$sha" --base "$base" "$@" || true
+        --git-dir "$repo" --head "$sha" --base "$base" \
+        --gate "$gate" --internal-file "$hits" "$@" || true
+    rm -f "$hits"
 
-    if (( gate != 0 )); then
+    if [[ "$gate" != pass ]]; then
         log "GATE FAILED: this branch is not publishable as it stands"
+        return 1
+    fi
+    if (( nhits > 0 )); then
+        log "NOT PUBLISHABLE: $nhits file(s) carry internal strings; run quarantine"
         return 1
     fi
     log "Gate passed: this branch is publishable"
     return 0
+}
+
+# --- quarantine ---------------------------------------------------------------
+
+# Drop every unpublished report that carries an internal string, by rewriting
+# the unpushed range of the reports branch without those paths. The published
+# history is never touched: origin must be an ancestor, and stays one.
+#
+# This is the remedy the review stage points at. It runs trusted code only,
+# under the same lock the pipeline takes, and it is reversible: the head it
+# started from is kept under refs/backup/ in the store.
+#
+# The rewrite happens in a throwaway bare repository that borrows the store's
+# objects, for the same reason the publish stage stages one -- and because the
+# store is non-bare with an index the audit stage leaves dirty, which
+# filter-branch refuses to work beside. The result is fetched back, which
+# moves only the objects the rewrite made.
+do_quarantine() {
+    [[ -d "$GIT_STORE" ]] || die "$GIT_STORE missing; run the prepare stage first"
+
+    exec 9>"$DATA_DIR/bulk-audit/archive.lock"
+    flock -n 9 || die "another run holds the archive lock; refusing to rewrite under it"
+
+    sanitize_store
+    local g=(git --git-dir="$GIT_STORE")
+
+    local head base
+    head="$("${g[@]}" rev-parse --verify --quiet "refs/heads/$REPORTS_BRANCH" || true)"
+    [[ -n "$head" ]] || die "no $REPORTS_BRANCH ref to quarantine"
+    base="$("${g[@]}" rev-parse --verify --quiet "refs/remotes/origin/$REPORTS_BRANCH" || true)"
+    [[ -n "$base" ]] || die "origin has no $REPORTS_BRANCH; refusing to rewrite a branch with no published baseline"
+    "${g[@]}" merge-base --is-ancestor "$base" "$head" \
+        || die "origin is not an ancestor of the local branch; needs a human"
+    log "$REPORTS_BRANCH is at ${head:0:12}; origin at ${base:0:12};" \
+        "$("${g[@]}" rev-list --count "$base..$head") unpublished commit(s)"
+
+    local list
+    list="$(mktemp)"
+    internal_string_paths "$GIT_STORE" "$head" > "$list"
+    local n
+    n="$(wc -l < "$list")"
+    if (( n == 0 )); then
+        log "Nothing carries an internal string ($INTERNAL_STRINGS); nothing to do"
+        rm -f "$list"
+        return 0
+    fi
+    log "Dropping $n path(s) that carry an internal string:"
+    sed 's/^/  /' "$list"
+
+    local backup
+    backup="refs/backup/quarantine-$(date -u +%Y%m%d-%H%M%S)"
+    "${g[@]}" update-ref "$backup" "$head"
+    log "Previous head kept at $backup"
+
+    local work
+    work="$(mktemp -d)/rewrite.git"
+    git init --bare --quiet "$work"
+    printf '%s\n' "$GIT_STORE/objects" > "$work/objects/info/alternates"
+    git --git-dir="$work" update-ref "refs/heads/$REPORTS_BRANCH" "$head"
+    FILTER_BRANCH_SQUELCH_WARNING=1 git --git-dir="$work" filter-branch -f --prune-empty \
+        --index-filter "git rm -q --cached --ignore-unmatch --pathspec-from-file=$list" \
+        -- "$base..refs/heads/$REPORTS_BRANCH" >/dev/null
+    local rewritten
+    rewritten="$(git --git-dir="$work" rev-parse "refs/heads/$REPORTS_BRANCH")"
+    "${g[@]}" fetch --quiet "$work" "+refs/heads/$REPORTS_BRANCH:refs/heads/$REPORTS_BRANCH"
+    rm -rf "$(dirname "$work")"
+
+    local new
+    new="$("${g[@]}" rev-parse "refs/heads/$REPORTS_BRANCH")"
+    [[ "$new" == "$rewritten" ]] || die "branch is at $new, expected $rewritten"
+    "${g[@]}" merge-base --is-ancestor "$base" "$new" \
+        || die "origin is no longer an ancestor after the rewrite; backup at $backup"
+    log "Rewrote $REPORTS_BRANCH to ${new:0:12};" \
+        "$("${g[@]}" rev-list --count "$base..$new") unpublished commit(s) remain"
+
+    # The dashboard JSON embeds report bodies, so it carries the same strings.
+    # Rebuild it from the cleaned branch; this adds one commit.
+    cd "$SRC_DIR"
+    python3 bench/generate-dashboard.py >/dev/null
+    new="$("${g[@]}" rev-parse "refs/heads/$REPORTS_BRANCH")"
+
+    local left
+    left="$(internal_string_paths "$GIT_STORE" "$new" | wc -l)"
+    (( left == 0 )) || die "$left file(s) still carry an internal string after the rewrite; backup at $backup"
+
+    # The working copies the pipeline keeps beside the branch carry the same
+    # text, and the judge reads them.
+    local removed=0 f
+    while IFS= read -r f; do
+        rm -f "$f"
+        removed=$(( removed + 1 ))
+    done < <(internal_string_working_files)
+    rm -f "$list"
+
+    log "Quarantine complete: dropped $n path(s), removed $removed working file(s);" \
+        "$REPORTS_BRANCH is at ${new:0:12}, clean"
 }
 
 # --- bundle -------------------------------------------------------------------
@@ -545,9 +714,10 @@ shift || true
 case "$MODE" in
     prepare) do_prepare ;;
     audit)   do_audit "$@" ;;
-    review)  do_review "$@" ;;
-    publish) do_publish ;;
-    bundle)  do_bundle ;;
-    *)       die "unknown stage '$MODE'" \
-                 "(want prepare, audit, review, publish or bundle)" ;;
+    review)     do_review "$@" ;;
+    quarantine) do_quarantine ;;
+    publish)    do_publish ;;
+    bundle)     do_bundle ;;
+    *)          die "unknown stage '$MODE'" \
+                    "(want prepare, audit, review, quarantine, publish or bundle)" ;;
 esac
