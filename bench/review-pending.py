@@ -143,6 +143,52 @@ def summarise(gitdir, head, base):
     }
 
 
+def parse_model_json(content):
+    """Best-effort parse of a model's JSON reply into a dict.
+
+    Models wrap the JSON in prose or a ``` fence, put a literal newline inside a
+    string value (which is invalid JSON), or trail junk after the object. Try, in
+    order: a fenced block, the whole reply, and the first "{"..last "}" slice --
+    each first strict, then with strict=False so a literal control character
+    inside a string is tolerated -- then a lenient decode of just the first
+    object. Returns the dict, or None if nothing parses (a truncated reply with
+    no closing brace lands here, and the caller reports it).
+    """
+    if not content:
+        return None
+
+    candidates = []
+    if "```json" in content:
+        candidates.append(content.split("```json", 1)[1].split("```", 1)[0])
+    elif "```" in content:
+        candidates.append(content.split("```", 1)[1].split("```", 1)[0])
+    candidates.append(content)
+    start, end = content.find("{"), content.rfind("}")
+    if start != -1 and end > start:
+        candidates.append(content[start:end + 1])
+
+    for text in candidates:
+        text = text.strip()
+        if not text:
+            continue
+        for strict in (True, False):
+            try:
+                obj = json.loads(text, strict=strict)
+            except (ValueError, TypeError):
+                obj = None
+            if isinstance(obj, dict):
+                return obj
+        brace = text.find("{")
+        if brace != -1:
+            try:
+                obj, _ = json.JSONDecoder(strict=False).raw_decode(text[brace:])
+            except (ValueError, TypeError):
+                obj = None
+            if isinstance(obj, dict):
+                return obj
+    return None
+
+
 def ask_model(entries, model, base_url, api_key):
     """Ask a model whether anything here should not be published. Advisory."""
     try:
@@ -202,15 +248,17 @@ Respond in JSON, no markdown fencing:
             temperature=0.2, max_tokens=2048,
         )
         content = resp.choices[0].message.content or ""
-        if "```json" in content:
-            content = content.split("```json")[1].split("```")[0]
-        elif "```" in content:
-            content = content.split("```")[1].split("```")[0]
-        return json.loads(content.strip())
-    except json.JSONDecodeError as exc:
-        return {"error": f"the model did not return JSON: {exc}"}
     except Exception as exc:
         return {"error": str(exc)}
+
+    parsed = parse_model_json(content)
+    if parsed is None:
+        # Nothing parseable came back (e.g. a truncated reply). Advisory, so this
+        # is reported, not fatal; include the start of the reply so a person can
+        # see what happened.
+        head = " ".join(content.split())[:200] or "(empty reply)"
+        return {"error": f"the model did not return usable JSON; reply began: {head}"}
+    return parsed
 
 
 def main():
