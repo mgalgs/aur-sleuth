@@ -1,0 +1,31 @@
+{
+  "package": "azerothcore-wotlk-git",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The 'acore_mod' script flagged as unsafe by qwen is a legitimate post-install helper tool not executed during makepkg. Its privileged operations require manual user invocation and don't violate AUR packaging principles.",
+  "disagreement_analysis": "qwen misinterpreted 'acore_mod' as executing automatically during installation, while deepseek correctly identified it as a user-run helper script.",
+  "coverage_issues": [
+    "qwen failed to review critical build files (CMakeLists.txt, compiler scripts) that deepseek audited"
+  ],
+  "false_positives": [
+    "qwen's 'acore_mod' verdict: Privileged operations require manual user execution and don't run during package build/install"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Improve prompt clarity: Emphasize that user helper scripts (not executed by PKGBUILD/.install) shouldn't trigger unsafe verdicts",
+    "Prioritize file selection: Audit tools should focus on build scripts (CMake, Makefiles) and PKGBUILD-called utilities before optional helpers",
+    "Address false-positive pattern: Train models to distinguish between build-time automation vs post-install user tools requiring manual execution"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 8926,
+    "completion_tokens": 1500,
+    "cost": 0.0099982
+  },
+  "audits_judged": [
+    "20260822-233812-qwen-qwen3-235b-a22b-2507.md",
+    "20260822-234118-deepseek-deepseek-v4-flash.md"
+  ]
+}
