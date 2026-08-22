@@ -1,0 +1,32 @@
+{
+  "package": "guayadeque",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Both models confirmed PKGBUILD safety with standard practices. Qwen's thorough source code audit (11 files) found no malicious patterns. Deepseek's limited review missed source files but found no PKGBUILD risks.",
+  "disagreement_analysis": null,
+  "coverage_issues": [
+    "deepseek failed to review source files due to incorrect path selection (e.g., 'CMakeLists.txt' instead of 'src/guayadeque/CMakeLists.txt')",
+    "deepseek skipped all source code despite network/filesystem access points (e.g., lyrics fetching in lyrics_sources.xml)"
+  ],
+  "false_positives": [],
+  "false_negatives": [
+    "deepseek missed reviewing LibUpdate.cpp (file operations) and MediaCtrl.cpp (network/proxy handling) \u2013 potential risks if malicious code existed"
+  ],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Improve file selection: Models must enforce path validation. Present full relative paths during selection to avoid non-existent files.",
+    "Prioritization: Audit tools should auto-include build scripts (CMakeLists.txt) and files with network/filesystem access patterns.",
+    "Failure mode: Path handling errors reliably cause coverage gaps. Add path normalization to model inputs."
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 7789,
+    "completion_tokens": 1839,
+    "cost": 0.0100498
+  },
+  "audits_judged": [
+    "20260822-040601-qwen-qwen3-235b-a22b-2507.md",
+    "20260822-040553-deepseek-deepseek-v4-flash.md"
+  ]
+}
