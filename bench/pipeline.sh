@@ -7,6 +7,7 @@
 #                     [--skip-dashboard] [--no-push] [--packages-file FILE]
 #                     [--audit-timeout SECONDS] [--audit-models LIST]
 #                     [--judge-model MODEL] [--reaudit-model MODEL]
+#                     [--audit-budget-share FRACTION]
 #
 # State is derived from the audit-reports branch (no local state files needed).
 # Daily spend is tracked in $DATA_DIR/pipeline/spend-YYYY-MM-DD.log.
@@ -24,6 +25,15 @@ JOBS=8
 # hung mirror or a wedged API call costs one audit instead of the whole run.
 # Without it a single stalled download can consume the entire job deadline.
 AUDIT_TIMEOUT=900
+# Share of the day's budget the audit phase may spend, leaving the rest for the
+# phases after it.
+#
+# Without a reserve the judge never runs at all. It is gated on the same budget
+# as the audit loop, and the audit loop runs until that budget is gone, so by
+# the time the judge is reached there is nothing left. This is measured, not
+# predicted: a run that completed normally went audit -> "Daily budget
+# exhausted" -> dashboard, with no judge phase in between.
+AUDIT_BUDGET_SHARE=0.8
 DRY_RUN=false
 SKIP_JUDGE=false
 SKIP_DASHBOARD=false
@@ -54,6 +64,7 @@ while [[ $# -gt 0 ]]; do
         --no-push) NO_PUSH=true; shift ;;
         --seed-top) SEED_TOP="$2"; shift 2 ;;
         --audit-timeout) AUDIT_TIMEOUT="$2"; shift 2 ;;
+        --audit-budget-share) AUDIT_BUDGET_SHARE="$2"; shift 2 ;;
         --audit-models) AUDIT_MODELS="$2"; shift 2 ;;
         --judge-model) JUDGE_MODEL="$2"; shift 2 ;;
         --reaudit-model) REAUDIT_MODEL="$2"; shift 2 ;;
@@ -63,6 +74,13 @@ while [[ $# -gt 0 ]]; do
 done
 
 IFS=',' read -ra MODEL_LIST <<< "$AUDIT_MODELS"
+
+case "$AUDIT_BUDGET_SHARE" in
+    0.[1-9]|0.[0-9][0-9]|1|1.0) ;;
+    *) echo "--audit-budget-share must be between 0.1 and 1.0, got '$AUDIT_BUDGET_SHARE'" >&2
+       exit 1 ;;
+esac
+AUDIT_BUDGET="$(python3 -c "print(round($DAILY_BUDGET * $AUDIT_BUDGET_SHARE, 6))")"
 
 mkdir -p "$PIPELINE_DIR" "$DATA_DIR/bulk-reports" "$DATA_DIR/judge"
 
@@ -97,8 +115,11 @@ budget_remaining() {
     python3 -c "print(max(0, $DAILY_BUDGET - $(get_daily_spent)))"
 }
 
+# True when the day's spend has reached a ceiling. With no argument the ceiling
+# is the whole budget; the audit phase passes its own, lower one.
 is_over_budget() {
-    python3 -c "import sys; sys.exit(0 if $(get_daily_spent) >= $DAILY_BUDGET else 1)"
+    local ceiling="${1:-$DAILY_BUDGET}"
+    python3 -c "import sys; sys.exit(0 if $(get_daily_spent) >= $ceiling else 1)"
 }
 
 # --- Refresh AUR metadata (at most once per hour) ---
@@ -335,6 +356,7 @@ print(d.get('_judge_usage', {}).get('cost') or 0)
 main() {
     log "=== AUR Sleuth Pipeline ==="
     log "Config: min-votes=$MIN_VOTES, lookback=${LOOKBACK_HOURS}h, budget=\$$DAILY_BUDGET/day, jobs=$JOBS"
+    log "Audit phase stops at \$$AUDIT_BUDGET, leaving the rest for judge and re-audit"
     if [[ "$SEED_TOP" -gt 0 ]]; then
         log "Seed: top $SEED_TOP most popular unaudited packages"
     fi
@@ -380,8 +402,8 @@ main() {
         local batch=()
 
         while IFS= read -r pkg; do
-            if is_over_budget; then
-                log "Daily budget exhausted after $audited_n packages"
+            if is_over_budget "$AUDIT_BUDGET"; then
+                log "Audit budget reached (\$$(get_daily_spent) >= \$$AUDIT_BUDGET) after $audited_n packages"
                 break
             fi
 
@@ -409,7 +431,7 @@ main() {
         done < <(head -n 500 "$candidates_file")
 
         # Flush remaining batch
-        if [[ ${#batch[@]} -gt 0 ]] && ! is_over_budget; then
+        if [[ ${#batch[@]} -gt 0 ]] && ! is_over_budget "$AUDIT_BUDGET"; then
             log "--- Batch of ${#batch[@]} (final) ---"
             local pids=()
             for p in "${batch[@]}"; do
