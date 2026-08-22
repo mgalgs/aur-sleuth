@@ -155,6 +155,37 @@ else
     bad "rewriting twice should be a no-op (got $again, want $fixed)"
 fi
 
+echo "== the pin ties a publish to the commit its review approved =="
+# In a subshell: check_expected_head needs its own log(), and defining one out
+# here would replace the harness's for every check after this.
+pin_verdict() (
+    eval "$(sed -n '/^check_expected_head()/,/^}/p' "$ENTRYPOINT")"
+    # shellcheck disable=SC2329  # called by the eval'd function above
+    log() { :; }
+    # shellcheck disable=SC2034  # read by check_expected_head, via the eval
+    EXPECT_HEAD="$1"
+    check_expected_head "$2" >/dev/null 2>&1 && echo allow || echo refuse
+)
+reviewed="1111111111111111111111111111111111111111"
+moved="2222222222222222222222222222222222222222"
+
+if [[ "$(pin_verdict "$reviewed" "$reviewed")" == allow ]]; then
+    ok "the branch still at the reviewed commit publishes"
+else
+    bad "an unchanged branch must publish"
+fi
+if [[ "$(pin_verdict "$reviewed" "$moved")" == refuse ]]; then
+    ok "a branch that moved after the review is refused"
+else
+    bad "a branch that moved after the review must NOT publish"
+fi
+# The scheduled dry run passes no pin, and must stay able to report.
+if [[ "$(pin_verdict "" "$moved")" == allow ]]; then
+    ok "no pin set means unpinned, as the scheduled dry run needs"
+else
+    bad "an unset pin must not refuse"
+fi
+
 echo "== the review stage's exit status, which a caller gates on =="
 eval "$(sed -n '/^stage_reports_repo()/,/^}/p' "$ENTRYPOINT")"
 eval "$(sed -n '/^do_review()/,/^}/p' "$ENTRYPOINT")"

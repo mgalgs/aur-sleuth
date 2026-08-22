@@ -38,6 +38,11 @@ SSH_KEY="${AUR_SLEUTH_SSH_KEY:-/secrets/git/ssh-privatekey}"
 KNOWN_HOSTS="${AUR_SLEUTH_KNOWN_HOSTS:-/etc/ssh/ssh_known_hosts}"
 SPEND_LOG_RETENTION_DAYS="${AUR_SLEUTH_SPEND_LOG_RETENTION_DAYS:-30}"
 PUBLISH_DRY_RUN="${AUR_SLEUTH_PUBLISH_DRY_RUN:-false}"
+# The commit a review approved. When set, publish refuses unless the branch is
+# still exactly there, which is what makes a review and its publish one
+# transaction rather than two events with a gap between them. Empty means
+# unpinned: the stage publishes whatever the branch holds.
+EXPECT_HEAD="${AUR_SLEUTH_EXPECT_HEAD:-}"
 
 log() { echo "[$(date -u '+%H:%M:%S')] [$MODE] $*"; }
 die() { echo "[$MODE] ERROR: $*" >&2; exit 1; }
@@ -430,6 +435,30 @@ rewrite_dashboard_html() {
     printf '%s\n' "$commit"
 }
 
+# The pin that makes a review and its publish one transaction.
+#
+# A review reports on the commit it saw. Publish would otherwise push whatever
+# the branch holds when it runs, so an audit landing in between would publish
+# reports nobody reviewed. The caller that pressed the button passes the reviewed
+# commit in AUR_SLEUTH_EXPECT_HEAD, and this refuses anything else.
+#
+# Unset means unpinned, which is what the scheduled dry run uses: it reports on
+# the branch as it stands and never pushes.
+check_expected_head() {
+    local sha="$1"
+
+    if [[ -z "$EXPECT_HEAD" ]]; then
+        return 0
+    fi
+    if [[ "$EXPECT_HEAD" == "$sha" ]]; then
+        log "Pinned to the reviewed commit ${EXPECT_HEAD:0:12}"
+        return 0
+    fi
+    log "The review approved ${EXPECT_HEAD:0:12}, but $REPORTS_BRANCH is now ${sha:0:12}."
+    log "Something changed the branch after the review. Review again, then publish."
+    return 1
+}
+
 # --- publish ------------------------------------------------------------------
 
 do_publish() {
@@ -448,6 +477,10 @@ do_publish() {
         return 0
     fi
     log "$REPORTS_BRANCH is at $sha"
+
+    # Checked before the dry-run branch, so a dry run reports a mismatch too, and
+    # before the dashboard rewrite below, which adds a commit of its own.
+    check_expected_head "$sha" || die "refusing to publish: $REPORTS_BRANCH moved since the review"
 
     # Gate before anything else, dry run included: a dry run is how an operator
     # finds out whether the branch is publishable, so it has to answer the same
