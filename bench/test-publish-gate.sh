@@ -190,6 +190,24 @@ else
     bad "branch with a planted .html: review should exit 1"
 fi
 
+echo "== the sweep summary counts what the push adds, not what it removes =="
+# A sweep that removes a report has nothing to read at that path. Counting it
+# made every deletion show up as a phantom broken report.
+two="$(make_commit "a-bin/1.md" "b-bin/1.md")"
+one="$(make_commit "a-bin/1.md")"
+summary="$(python3 bench/review-pending.py --git-dir "$repo" \
+    --head "$one" --base "$two" --no-llm 2>&1)"
+if grep -q 'audit reports:  0' <<< "$summary"; then
+    ok "a deleted report is not counted as pending"
+else
+    bad "a deleted report was counted: $(grep -m1 'audit reports' <<< "$summary")"
+fi
+if grep -q 'no findings' <<< "$summary"; then
+    bad "a deleted report was reported as skipped or errored"
+else
+    ok "a deleted report is not reported as broken"
+fi
+
 echo
 if (( fails > 0 )); then
     echo "FAILED: $fails check(s)"

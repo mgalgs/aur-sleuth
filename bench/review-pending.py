@@ -68,10 +68,16 @@ def tree_paths(gitdir, ref):
 
 
 def pending_paths(gitdir, head, base):
-    """Paths this push would add or change."""
+    """Paths this push would add or change.
+
+    Deletions are left out on purpose: a path that no longer exists at head
+    has no content to read, and counting it would report a phantom broken
+    report for every file a sweep removes or renames.
+    """
     if not base:
         return sorted(tree_paths(gitdir, head))
-    out = git(gitdir, "diff", "--name-only", "-z", f"{base}..{head}")
+    out = git(gitdir, "diff", "--name-only", "-z", "--diff-filter=ACMR",
+              f"{base}..{head}")
     return sorted(p for p in out.split("\0") if p)
 
 
