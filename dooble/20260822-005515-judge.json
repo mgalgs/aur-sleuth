@@ -1,0 +1,33 @@
+{
+  "package": "dooble",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The flagged 'unsafe' scripts are upstream build helpers unused in AUR packaging. PKGBUILD uses standard qmake/make without invoking these scripts. No malicious patterns exist in build/install hooks.",
+  "disagreement_analysis": "qwen overreacted to upstream build scripts (build-kubuntu-amd64.bash/build-tar-amd64.bash) that aren't executed during makepkg. deepseek correctly recognized their irrelevance to AUR safety.",
+  "coverage_issues": [
+    "Both models missed reviewing .install hooks (none exist, but verification needed)",
+    "qwen skipped 166 unauditable files (expected for binary artifacts)"
+  ],
+  "false_positives": [
+    "qwen: build-kubuntu-amd64.bash (unused upstream script; hardcoded ~/Qt paths don't affect AUR builds)",
+    "qwen: build-tar-amd64.bash (ldd usage is standard for binary bundling; not executed in PKGBUILD)"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "File selection: Prioritize PKGBUILD-referenced files. Deprioritize unused upstream scripts like Distributions/*.bash",
+    "Prompt refinement: Emphasize that upstream build scripts are irrelevant unless called by PKGBUILD functions",
+    "Failure mode: Models confuse legitimate build patterns (ldd, hardcoded paths) with supply-chain risks when scripts are unused"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 14735,
+    "completion_tokens": 1920,
+    "cost": 0.0151145
+  },
+  "audits_judged": [
+    "20260822-003746-qwen-qwen3-235b-a22b-2507.md",
+    "20260822-003958-deepseek-deepseek-v4-flash.md"
+  ]
+}
