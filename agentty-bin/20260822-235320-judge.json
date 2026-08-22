@@ -1,0 +1,33 @@
+{
+  "package": "agentty-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Both models confirmed PKGBUILD uses pinned GitHub releases with valid checksums, minimal install logic, and no dangerous operations during makepkg execution.",
+  "disagreement_analysis": null,
+  "coverage_issues": [
+    "Both models failed to review .install hooks if present (none existed)",
+    "No review of release.sh script mentioned in PKGBUILD comments (though not executed during makepkg)"
+  ],
+  "false_positives": [],
+  "false_negatives": [
+    "Potential binary risk: Neither model could audit the prebuilt agentty binary (compiled file)",
+    "release.sh script: Mentioned in PKGBUILD but not reviewed; could theoretically tamper with checksums if executed improperly (though not run during makepkg)"
+  ],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "File selection: Prioritize .install scripts when present; treat PKGBUILD-referenced scripts (like release.sh) as secondary review targets",
+    "Prompt improvement: Explicitly instruct models to flag PKGBUILD comments referencing external scripts",
+    "Failure mode: Improve handling of prebuilt binaries - consider sandboxed execution tests for -bin packages"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 2809,
+    "completion_tokens": 1651,
+    "cost": 0.0060938
+  },
+  "audits_judged": [
+    "20260822-231919-qwen-qwen3-235b-a22b-2507.md",
+    "20260822-231903-deepseek-deepseek-v4-flash.md"
+  ]
+}
