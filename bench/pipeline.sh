@@ -75,11 +75,14 @@ done
 
 IFS=',' read -ra MODEL_LIST <<< "$AUDIT_MODELS"
 
-case "$AUDIT_BUDGET_SHARE" in
-    0.[1-9]|0.[0-9][0-9]|1|1.0) ;;
-    *) echo "--audit-budget-share must be between 0.1 and 1.0, got '$AUDIT_BUDGET_SHARE'" >&2
-       exit 1 ;;
-esac
+# Accept 0.1 through 1.0 inclusive, with any number of trailing zeros. The first
+# decimal digit of the 0.x form must be 1-9, so 0.00-0.09 (below the minimum, and
+# enough to zero the audit budget) is refused. Kept a syntactic allowlist because
+# this value is interpolated straight into a `python3 -c` below.
+if [[ ! "$AUDIT_BUDGET_SHARE" =~ ^(0\.[1-9][0-9]*|1(\.0+)?)$ ]]; then
+    echo "--audit-budget-share must be between 0.1 and 1.0, got '$AUDIT_BUDGET_SHARE'" >&2
+    exit 1
+fi
 AUDIT_BUDGET="$(python3 -c "print(round($DAILY_BUDGET * $AUDIT_BUDGET_SHARE, 6))")"
 
 mkdir -p "$PIPELINE_DIR" "$DATA_DIR/bulk-reports" "$DATA_DIR/judge"

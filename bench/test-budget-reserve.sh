@@ -25,13 +25,26 @@ tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
 echo "== the share is validated =="
-for bad_share in "abc" "2.0" "-0.5" '1) or 1'; do
+# 0.05 and 0.00 are below the minimum; the old glob accepted them, and 0.00
+# silently zeroed the audit budget. A bare 0. is not a number either.
+for bad_share in "abc" "2.0" "-0.5" '1) or 1' "0.05" "0.00" "0." "0.1.1"; do
     if bash bench/pipeline.sh --audit-budget-share "$bad_share" \
             --packages-file /dev/null --dry-run --skip-judge --skip-dashboard \
             >/dev/null 2>&1; then
         bad "should have refused --audit-budget-share '$bad_share'"
     else
         ok "refused --audit-budget-share '$bad_share'"
+    fi
+done
+# The whole range with trailing zeros is legitimate. 1.00 used to be refused.
+for good_share in "0.1" "0.10" "0.75" "0.999" "1" "1.0" "1.00"; do
+    if AUR_SLEUTH_DATA_DIR="$tmp/share-ok" bash bench/pipeline.sh \
+            --audit-budget-share "$good_share" \
+            --packages-file /dev/null --dry-run --skip-judge --skip-dashboard \
+            --no-push >/dev/null 2>&1; then
+        ok "accepted --audit-budget-share '$good_share'"
+    else
+        bad "should have accepted --audit-budget-share '$good_share'"
     fi
 done
 
