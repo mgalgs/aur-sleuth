@@ -72,6 +72,8 @@ expect_flags "--audit-models qwen/qwen3-235b-a22b-2507,deepseek/deepseek-v4-flas
     AUR_SLEUTH_AUDIT_MODELS=qwen/qwen3-235b-a22b-2507,deepseek/deepseek-v4-flash
 expect_flags "--daily-budget 1.00 --jobs 2" \
     AUR_SLEUTH_DAILY_BUDGET=1.00 AUR_SLEUTH_JOBS=2
+expect_flags "--updated-share 0.8" AUR_SLEUTH_UPDATED_SHARE=0.8
+expect_flags "--seed-top 1000" AUR_SLEUTH_SEED_TOP=1000
 
 echo "== a budget that is not a number is code, so refuse it =="
 expect_refused 'AUR_SLEUTH_DAILY_BUDGET=1) or __import__("os").system("id") or (0'
@@ -89,6 +91,8 @@ expect_refused 'AUR_SLEUTH_JUDGE_MODEL=a b'
 expect_refused 'AUR_SLEUTH_JUDGE_MODEL=$(id)'
 expect_refused "AUR_SLEUTH_AUDIT_MODELS=a,,b"
 expect_refused "AUR_SLEUTH_AUDIT_MODELS=a,"
+expect_refused "AUR_SLEUTH_UPDATED_SHARE=abc"
+expect_refused 'AUR_SLEUTH_UPDATED_SHARE=0.8) or (1'
 
 echo "== the pipeline takes the last flag, so the environment wins =="
 out="$(bash bench/pipeline.sh --daily-budget 2.00 --jobs 8 \

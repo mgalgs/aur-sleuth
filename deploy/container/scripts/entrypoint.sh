@@ -216,6 +216,7 @@ collect_audit_env_flags() {
         "AUR_SLEUTH_DAILY_BUDGET:--daily-budget:num"
         "AUR_SLEUTH_LOOKBACK_HOURS:--lookback-hours:int"
         "AUR_SLEUTH_SEED_TOP:--seed-top:int"
+        "AUR_SLEUTH_UPDATED_SHARE:--updated-share:num"
         "AUR_SLEUTH_JOBS:--jobs:int"
         "AUR_SLEUTH_AUDIT_TIMEOUT:--audit-timeout:int"
         "AUR_SLEUTH_AUDIT_MODELS:--audit-models:models"

@@ -3,7 +3,8 @@
 # Runs: discover → audit → judge → re-audit → dashboard → push
 #
 # Usage: pipeline.sh [--min-votes N] [--daily-budget AMOUNT] [--lookback-hours N]
-#                     [--seed-top N] [--jobs N] [--dry-run] [--skip-judge]
+#                     [--seed-top N] [--updated-share FRACTION] [--jobs N]
+#                     [--dry-run] [--skip-judge]
 #                     [--skip-dashboard] [--no-push] [--packages-file FILE]
 #                     [--audit-timeout SECONDS] [--audit-models LIST]
 #                     [--judge-model MODEL] [--reaudit-model MODEL]
@@ -16,7 +17,10 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 # --- Defaults ---
-MIN_VOTES=5
+# MIN_VOTES is a hard floor on an updated package's vote count. It defaults to 0
+# because the updated stream is ranked and cut by Popularity, not votes: a new or
+# niche package with no votes is exactly the kind of fresh push we want to see.
+MIN_VOTES=0
 DAILY_BUDGET=2.00
 LOOKBACK_HOURS=24
 JOBS=8
@@ -38,7 +42,11 @@ DRY_RUN=false
 SKIP_JUDGE=false
 SKIP_DASHBOARD=false
 NO_PUSH=false
-SEED_TOP=0
+SEED_TOP=1000
+# Share of the audited packages that come from the updated stream, the rest from
+# the popularity seed. The updated stream runs far past the daily budget on its
+# own, so without a reserved share the seed is never reached. See discover_packages.
+UPDATED_SHARE=0.8
 AUDIT_MODELS="qwen/qwen3-235b-a22b-2507,deepseek/deepseek-v4-flash"
 JUDGE_MODEL="deepseek/deepseek-r1"
 REAUDIT_MODEL="anthropic/claude-sonnet-4.6"
@@ -63,6 +71,7 @@ while [[ $# -gt 0 ]]; do
         --skip-dashboard) SKIP_DASHBOARD=true; shift ;;
         --no-push) NO_PUSH=true; shift ;;
         --seed-top) SEED_TOP="$2"; shift 2 ;;
+        --updated-share) UPDATED_SHARE="$2"; shift 2 ;;
         --audit-timeout) AUDIT_TIMEOUT="$2"; shift 2 ;;
         --audit-budget-share) AUDIT_BUDGET_SHARE="$2"; shift 2 ;;
         --audit-models) AUDIT_MODELS="$2"; shift 2 ;;
@@ -84,6 +93,14 @@ if [[ ! "$AUDIT_BUDGET_SHARE" =~ ^(0\.[1-9][0-9]*|1(\.0+)?)$ ]]; then
     exit 1
 fi
 AUDIT_BUDGET="$(python3 -c "print(round($DAILY_BUDGET * $AUDIT_BUDGET_SHARE, 6))")"
+
+# The updated-vs-seed split. Accepts 0 through 1 inclusive: 1.0 is updated-only
+# (the seed never runs), 0.0 is seed-only. Read as a float in discover_packages,
+# not interpolated into code, but validated here so a bad value fails fast.
+if [[ ! "$UPDATED_SHARE" =~ ^(0(\.[0-9]+)?|1(\.0+)?)$ ]]; then
+    echo "--updated-share must be between 0 and 1, got '$UPDATED_SHARE'" >&2
+    exit 1
+fi
 
 mkdir -p "$PIPELINE_DIR" "$DATA_DIR/bulk-reports" "$DATA_DIR/judge"
 
@@ -173,12 +190,33 @@ for name, pkg in d.get('packages', {}).items():
 }
 
 # --- Discover packages needing audit ---
+#
+# Two candidate streams, both ranked by AUR Popularity (a time-decayed vote
+# score, closer to "installed right now" than the raw all-time vote count):
+#
+#   updated -- every package changed within the lookback window that is not
+#              already audited at its current version. This is the threat we care
+#              about most: a fresh push, a brand-new package, a maintainer
+#              takeover. A new package has no votes, so this stream is NOT gated
+#              on votes; MIN_VOTES is only a hard floor (default 0).
+#   seed    -- the top SEED_TOP most popular packages overall, so the
+#              long-established set is not a permanent blind spot.
+#
+# The updated stream alone runs far past the daily budget (roughly 850 packages
+# change per day against a budget of a few dozen), so the budget always binds
+# inside it and the seed would never be reached. The two streams are therefore
+# interleaved to a fixed ratio: UPDATED_SHARE of the audited packages come from
+# the updated stream, the rest from the seed. Because each stream is sorted by
+# Popularity first, the point where the budget cuts the interleaved list off acts
+# as an effective popularity floor -- the highest-popularity packages that fit
+# the budget get audited, and that floor is as high as the split allows.
 discover_packages() {
     local audited_index="$1"
 
     MIN_VOTES="$MIN_VOTES" \
     LOOKBACK_HOURS="$LOOKBACK_HOURS" \
     SEED_TOP="$SEED_TOP" \
+    UPDATED_SHARE="$UPDATED_SHARE" \
     AUDITED_INDEX="$audited_index" \
     python3 << 'PYEOF'
 import json, gzip, os, sys, time
@@ -187,6 +225,7 @@ metadata_cache = os.environ.get("METADATA_CACHE", "")
 min_votes = int(os.environ["MIN_VOTES"])
 lookback_hours = int(os.environ["LOOKBACK_HOURS"])
 seed_top = int(os.environ.get("SEED_TOP", "0"))
+updated_share = float(os.environ.get("UPDATED_SHARE", "0.8"))
 audited_index = os.environ["AUDITED_INDEX"]
 
 # Load audited versions
@@ -203,50 +242,70 @@ with gzip.open(metadata_cache, "rt") as f:
 
 cutoff = time.time() - lookback_hours * 3600
 
-# Recently updated packages with min votes
-recent = []
-for p in packages:
-    name = p.get("Name", "")
+def eligible(p):
+    """Maintained, in-date, and not already audited at its current version."""
     if not p.get("Maintainer"):
-        continue
+        return False
     if p.get("OutOfDate"):
-        continue
-    aur_ver = p.get("Version", "")
-    if name in audited and audited[name] == aur_ver:
-        continue
+        return False
+    name = p.get("Name", "")
+    return not (name in audited and audited[name] == p.get("Version", ""))
 
-    if p.get("NumVotes", 0) >= min_votes and p.get("LastModified", 0) >= cutoff:
-        recent.append({"name": name, "votes": p.get("NumVotes", 0)})
+def popularity(p):
+    return p.get("Popularity", 0.0)
 
-# Seed: top N most popular unaudited packages (regardless of update time)
+# Stream 1: recently updated packages, most popular first.
+updated = [
+    p.get("Name", "")
+    for p in sorted(
+        (p for p in packages
+         if eligible(p)
+         and p.get("LastModified", 0) >= cutoff
+         and p.get("NumVotes", 0) >= min_votes),
+        key=popularity, reverse=True)
+]
+
+# Stream 2: the top SEED_TOP most popular packages overall, minus anything
+# already in the updated stream.
 seed = []
 if seed_top > 0:
-    seen = {c["name"] for c in recent}
-    all_by_votes = sorted(packages, key=lambda p: p.get("NumVotes", 0), reverse=True)
-    for p in all_by_votes:
+    seen = set(updated)
+    for p in sorted((p for p in packages if eligible(p)),
+                    key=popularity, reverse=True):
         if len(seed) >= seed_top:
             break
         name = p.get("Name", "")
-        if not p.get("Maintainer"):
-            continue
-        if p.get("OutOfDate"):
-            continue
-        aur_ver = p.get("Version", "")
-        if name in audited and audited[name] == aur_ver:
-            continue
         if name in seen:
             continue
-        seed.append({"name": name, "votes": p.get("NumVotes", 0)})
+        seed.append(name)
         seen.add(name)
 
-# Combine: recent first (by votes), then seed (by votes)
-candidates = sorted(recent, key=lambda c: -c["votes"]) + seed
+# Interleave the two streams so the audited set holds roughly UPDATED_SHARE
+# updated packages to (1 - UPDATED_SHARE) seed packages, wherever the budget cuts
+# the list off.
+seed_share = 1.0 - updated_share
+if seed_share <= 0:
+    candidates = updated + seed            # updated-only; seed as a fallback tail
+elif updated_share <= 0:
+    candidates = seed + updated            # seed-only; updated as a fallback tail
+else:
+    # Stride merge: the k-th item of a stream with target share f gets a virtual
+    # position (k + 0.5) / f, and the two streams merge by position. This holds
+    # the ratio near UPDATED_SHARE at every prefix -- so wherever the daily budget
+    # cuts the list, the mix is right -- and the + 0.5 offset keeps floats off the
+    # exact tie boundaries. A tie falls to updated (tag 0 sorts before tag 1).
+    tagged = [((i + 0.5) / updated_share, 0, name) for i, name in enumerate(updated)]
+    tagged += [((j + 0.5) / seed_share, 1, name) for j, name in enumerate(seed)]
+    tagged.sort()
+    candidates = [name for _, _, name in tagged]
 
-if seed:
-    print(f"# {len(recent)} recently updated + {len(seed)} seed packages", file=sys.stderr)
+print(f"# {len(updated)} updated + {len(seed)} seed, interleaved "
+      f"{round(updated_share * 100)}/{round((1 - updated_share) * 100)}",
+      file=sys.stderr)
 
-for c in candidates:
-    print(c["name"])
+for name in candidates:
+    if name:
+        print(name)
 PYEOF
 }
 
@@ -361,7 +420,7 @@ main() {
     log "Config: min-votes=$MIN_VOTES, lookback=${LOOKBACK_HOURS}h, budget=\$$DAILY_BUDGET/day, jobs=$JOBS"
     log "Audit phase stops at \$$AUDIT_BUDGET, leaving the rest for judge and re-audit"
     if [[ "$SEED_TOP" -gt 0 ]]; then
-        log "Seed: top $SEED_TOP most popular unaudited packages"
+        log "Candidates: updated + top $SEED_TOP by popularity, interleaved at updated-share=$UPDATED_SHARE"
     fi
     log "Models: ${MODEL_LIST[*]} | Judge: $JUDGE_MODEL | Re-audit: $REAUDIT_MODEL"
     log "Daily spend so far: \$$(get_daily_spent)"
