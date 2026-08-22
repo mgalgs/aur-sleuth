@@ -1,0 +1,33 @@
+{
+  "package": "eddie-ui",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The flagged 'unsafe' files (apprun scripts, deploy.sh) are development artifacts not executed during makepkg. PKGBUILD and install hooks show no malicious behavior.",
+  "disagreement_analysis": "qwen overreacted to unused scripts; deepseek correctly ignored them per AUR context",
+  "coverage_issues": [
+    "deepseek missed apprun.cli.sh/apprun.ui.sh review, but these files are irrelevant to package build"
+  ],
+  "false_positives": [
+    "apprun.cli.sh: ARGV0 issue irrelevant (script not called in PKGBUILD)",
+    "apprun.ui.sh: Self-extraction unused in Arch packaging",
+    "deploy.sh: Internal CI script not executed during build"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Prioritize files referenced in PKGBUILD/.install hooks",
+    "Improve context awareness: suppress alerts for unused dev scripts",
+    "Enhance file selection: deprioritize AppImage/CI artifacts"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 13905,
+    "completion_tokens": 1568,
+    "cost": 0.013653499999999999
+  },
+  "audits_judged": [
+    "20260822-034913-qwen-qwen3-235b-a22b-2507.md",
+    "20260822-034939-deepseek-deepseek-v4-flash.md"
+  ]
+}
