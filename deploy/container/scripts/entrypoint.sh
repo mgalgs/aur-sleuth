@@ -256,7 +256,7 @@ collect_audit_env_flags() {
         "AUR_SLEUTH_SEED_TOP:--seed-top:int"
         "AUR_SLEUTH_UPDATED_SHARE:--updated-share:share"
         "AUR_SLEUTH_JOBS:--jobs:int"
-        "AUR_SLEUTH_AUDIT_TIMEOUT:--audit-timeout:int"
+        "AUR_SLEUTH_AUDIT_TIMEOUT:--audit-timeout:posint"
         "AUR_SLEUTH_AUDIT_MODELS:--audit-models:models"
         "AUR_SLEUTH_JUDGE_MODEL:--judge-model:model"
         "AUR_SLEUTH_REAUDIT_MODEL:--reaudit-model:model"
@@ -275,6 +275,11 @@ collect_audit_env_flags() {
             int)
                 [[ "$value" =~ ^[0-9]+$ ]] \
                     || die "$var must be a whole number, got '$value'" ;;
+            posint)
+                # `timeout 0` means no limit -- the opposite of what the
+                # setting is for -- so zero is refused here, not passed on.
+                [[ "$value" =~ ^0*[1-9][0-9]*$ ]] \
+                    || die "$var must be a whole number of at least 1, got '$value'" ;;
             num)
                 [[ "$value" =~ ^[0-9]+(\.[0-9]+)?$ ]] \
                     || die "$var must be a number, got '$value'" ;;
@@ -333,7 +338,7 @@ do_benchmark() {
         "AUR_SLEUTH_BENCH_PACKAGES:--packages:packages"
         "AUR_SLEUTH_BENCH_ROLE:--role:role"
         "AUR_SLEUTH_BENCH_TARGET:--target:word"
-        "AUR_SLEUTH_AUDIT_TIMEOUT:--audit-timeout:int"
+        "AUR_SLEUTH_AUDIT_TIMEOUT:--audit-timeout:posint"
     )
     for spec in "${specs[@]}"; do
         var="${spec%%:*}"
@@ -344,6 +349,7 @@ do_benchmark() {
         [[ -n "$value" ]] || continue
         case "$kind" in
             int) [[ "$value" =~ ^[0-9]+$ ]] || die "$var must be a whole number, got '$value'" ;;
+            posint) [[ "$value" =~ ^0*[1-9][0-9]*$ ]] || die "$var must be a whole number of at least 1, got '$value'" ;;
             num) [[ "$value" =~ ^[0-9]+(\.[0-9]+)?$ ]] || die "$var must be a number, got '$value'" ;;
             id)  [[ "$value" =~ ^[A-Za-z0-9._-]+$ ]] || die "$var is not a run id, got '$value'" ;;
             role) [[ "$value" =~ ^(audit|judge)$ ]] || die "$var must be audit or judge, got '$value'" ;;

@@ -74,6 +74,7 @@ expect_flags "--daily-budget 1.00 --jobs 2" \
     AUR_SLEUTH_DAILY_BUDGET=1.00 AUR_SLEUTH_JOBS=2
 expect_flags "--updated-share 0.8" AUR_SLEUTH_UPDATED_SHARE=0.8
 expect_flags "--seed-top 1000" AUR_SLEUTH_SEED_TOP=1000
+expect_flags "--audit-timeout 600" AUR_SLEUTH_AUDIT_TIMEOUT=600
 
 echo "== a budget that is not a number is code, so refuse it =="
 expect_refused 'AUR_SLEUTH_DAILY_BUDGET=1) or __import__("os").system("id") or (0'
@@ -96,6 +97,10 @@ expect_refused 'AUR_SLEUTH_UPDATED_SHARE=0.8) or (1'
 # Out of range is refused at the container boundary, not left to abort the run.
 expect_refused "AUR_SLEUTH_UPDATED_SHARE=1.5"
 expect_refused "AUR_SLEUTH_UPDATED_SHARE=2"
+# `timeout 0` is no timeout at all: the one value the setting must never be.
+expect_refused "AUR_SLEUTH_AUDIT_TIMEOUT=0"
+expect_refused "AUR_SLEUTH_AUDIT_TIMEOUT=00"
+expect_refused "AUR_SLEUTH_AUDIT_TIMEOUT=-5"
 
 echo "== the pipeline takes the last flag, so the environment wins =="
 out="$(bash bench/pipeline.sh --daily-budget 2.00 --jobs 8 \
