@@ -141,6 +141,8 @@ reason to do?
   under `$DATA_DIR/bench/`, never to the branch. `bench/test-benchmark.sh` covers the
   scoring offline. The ops UI runs it as the `benchmark` container stage.
 - `.claude/skills/self-improve/` — the audit-review-improve loop.
+- `docs/PIPELINE.md` — the machinery, end to end; `docs/ROADMAP.md` — queued
+  improvements, so intent survives the chat it came from.
 
 ## Verifying a change
 
