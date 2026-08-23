@@ -1,0 +1,33 @@
+{
+  "package": "proton-ge-custom-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The 'unsafe' verdict was based solely on protonfixes/download.py, which isn't executed during makepkg/build/install. This script is part of Proton's runtime functionality, not AUR package operations. All files executed during packaging (PKGBUILD, .install) are safe.",
+  "disagreement_analysis": "Qwen incorrectly flagged runtime code (download.py) as package risk. Deepseek correctly focused on build/install scope.",
+  "coverage_issues": [
+    "Both models skipped review of actual binary payloads (5115 files) - inherent limitation for bin packages",
+    "Qwen prioritized low-risk files (debug scripts, JS configs) over critical build scripts"
+  ],
+  "false_positives": [
+    "Qwen's download.py verdict: Runtime game-fix utility flagged despite no execution during packaging"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Improve scope awareness: Train models to strictly differentiate build-time vs runtime risks",
+    "Prioritize file selection: Weight PKGBUILD/.install higher than application code",
+    "Clarify audit boundaries: Explicitly state in prompt that application runtime behavior is out-of-scope unless triggered by packaging",
+    "Reduce false positives: Add heuristics to flag Google Drive downloads only if used in PKGBUILD/prepare scripts"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 11326,
+    "completion_tokens": 1070,
+    "cost": 0.0106032
+  },
+  "audits_judged": [
+    "20260822-230232-qwen-qwen3-235b-a22b-2507.md",
+    "20260822-230242-deepseek-deepseek-v4-flash.md"
+  ]
+}
