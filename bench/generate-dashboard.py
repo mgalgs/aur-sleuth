@@ -659,21 +659,15 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             <div id="activity-recent" class="mt-4 flex flex-wrap gap-2"></div>
         </div>
 
-        <!-- What was read before these reports were published. Filled from
-             _dashboard/review.json, which the publish stage writes; hidden when
-             there is none. This is about the wording of the reports, never
-             about a package, so it stays away from the table and the states. -->
+        <!-- Where these reports came from. Filled from _dashboard/review.json,
+             which the publish stage writes; hidden when there is none. The
+             model's pre-publish read stays internal: its one job is to catch a
+             leaked private detail of the operator, and a find is a reason not
+             to publish, never something to print here. -->
         <div id="review" class="hidden bg-slate-800/60 rounded-lg px-5 py-4 border border-slate-700 mb-6 text-sm">
             <div class="text-slate-400 text-xs uppercase tracking-wide mb-1">Before publishing</div>
             <p id="review-read" class="text-slate-300"></p>
             <p id="review-found" class="text-slate-400 mt-1"></p>
-            <details id="review-details" class="hidden mt-2">
-                <summary class="text-xs text-blue-400 hover:text-blue-300 cursor-pointer">Show the notes</summary>
-                <p class="text-xs text-slate-500 mt-2">Each note is about the wording of a report,
-                    not about the package it names. They are here so the reader can see what
-                    was raised, not because the package did anything.</p>
-                <ul id="review-list" class="mt-2 space-y-1 text-xs text-slate-400"></ul>
-            </details>
         </div>
 
         <!-- Summary Cards -->
@@ -814,17 +808,6 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         return String(m).split('/').pop();
     }
 
-    // The four things the pre-publish read looks for, by the number the
-    // reviewer's prompt gives them. Anything else is shown as the model wrote it.
-    const REVIEW_KINDS = {
-        'leak': 'a private detail of the operator',
-        // Older records, from when the read had a wider brief.
-        '1': 'a message planted for whoever reads the report',
-        '2': 'a private detail of the operator',
-        '3': 'a broken report',
-        '4': 'abusive text',
-    };
-
     // What was read before these reports were published. Advisory text from a
     // model that read attacker-influenced reports, so every field is escaped and
     // nothing here feeds a package's state.
@@ -851,42 +834,14 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         read.innerHTML = intro;
 
         if (llm.status === 'ok' || llm.status === 'partial') {
-            let s = `${escapeHtml(shortModel(llm.model || 'a model'))} then read ${Number(llm.read) || 0} of the `
-                + `${Number(llm.of) || 0} report(s) that reached an unclear verdict, looking for one thing only: a leaked `
-                + `private detail of the operator (a credential, an internal hostname, a path on the machine that ran the audit).`;
-            // A note about a package an audit flagged and a judge then cleared is,
-            // on this corpus, the reviewer repeating the audit's overturned
-            // accusation ("fictitious CVE patches ... likely injecting backdoors").
-            // The judge's answer stands on this page, so the note's text is not
-            // repeated under the package's name; the count still says it was raised.
-            const all = Array.isArray(llm.concerns) ? llm.concerns : [];
-            const overturned = c => {
-                const p = DATA.packages && DATA.packages[String(c.package || '')];
-                return !!p && p.judge_majority === 'safe'
-                    && (p.audit_majority === 'unsafe' || p.audit_majority === 'contested');
-            };
-            const shown = all.filter(c => !overturned(c));
-            const hidden = all.length - shown.length;
-            s += all.length === 0 ? ' It raised nothing.' : ` It raised ${all.length} note(s).`;
-            if (hidden > 0) {
-                s += ` ${hidden} of those repeat${hidden === 1 ? 's' : ''} an audit finding a judge has since overturned, so the package is listed as clean and the note is not shown.`;
-            }
-            if (Number(llm.dismissed) > 0) {
-                s += ` ${Number(llm.dismissed)} more, about the reviewer’s own trimming of long reports, were set aside.`;
-            }
-            if (llm.status === 'partial') s += ' Part of the read did not complete.';
+            let s = `Before that, ${escapeHtml(shortModel(llm.model || 'a model'))} read ${Number(llm.read) || 0} of the `
+                + `${Number(llm.of) || 0} report(s) that reached an unclear verdict, for one thing only: a leaked private `
+                + `detail of the operator (a credential, an internal hostname, a path on the machine that ran the audit). `
+                + `Anything it finds is handled before publishing and is not listed here.`;
+            if (llm.status === 'partial') s += ' Part of that read did not complete.';
             found.textContent = s;
-            if (shown.length > 0) {
-                const list = document.getElementById('review-list');
-                list.innerHTML = shown.map(c => {
-                    const kind = REVIEW_KINDS[String(c.kind || '').trim()] || String(c.kind || '');
-                    return `<li><span class="text-slate-300">${escapeHtml(c.package || '?')}</span>`
-                        + ` <span class="text-slate-500">(${escapeHtml(kind)})</span> &mdash; ${escapeHtml(c.detail || '')}</li>`;
-                }).join('');
-                document.getElementById('review-details').classList.remove('hidden');
-            }
         } else if (llm.status === 'error') {
-            found.textContent = 'The model’s read of the flagged reports did not complete; the code check alone stood.';
+            found.textContent = 'The model’s pre-publish read did not complete; the code check alone stood.';
         } else {
             found.textContent = 'No model read the reports this time; the code check alone stood.';
         }

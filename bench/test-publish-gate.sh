@@ -187,11 +187,12 @@ r = json.load(sys.stdin)
 assert r["head"] == sys.argv[1], r["head"]
 assert r["pending"] == 3 and r["flagged"] == 2, r
 assert r["llm"]["model"] == "m/x" and r["llm"]["dismissed"] == 1, r["llm"]
-assert r["llm"]["concerns"] == [{"package": "p", "kind": "1", "detail": "addresses the reader"}], r["llm"]["concerns"]
-assert "internal" not in r and "extra" not in json.dumps(r), r
+# The notes themselves never reach the public record: only how many.
+assert r["llm"]["concerns"] == 2, r["llm"]
+assert "addresses the reader" not in json.dumps(r) and "internal" not in r and "extra" not in json.dumps(r), r
 assert r["published_at"].endswith("Z"), r["published_at"]
 ' "$tampered"; then
-        ok "review.json carries the record, reshaped and pinned to the reviewed commit"
+        ok "review.json carries the provenance, without the notes, pinned to the reviewed commit"
     else
         bad "review.json does not carry the expected record: $rec"
     fi

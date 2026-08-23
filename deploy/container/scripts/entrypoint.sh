@@ -488,10 +488,10 @@ if not isinstance(src, dict):
     sys.exit("AUR_SLEUTH_REVIEW_JSON is not a JSON object")
 
 llm = src.get("llm") if isinstance(src.get("llm"), dict) else {}
-concerns = []
-for c in (llm.get("concerns") or [])[:200]:
-    if isinstance(c, dict):
-        concerns.append({k: str(c.get(k, ""))[:500] for k in ("package", "kind", "detail")})
+# The model's notes stay out of the public record on purpose. Its one job is
+# to spot a leaked private detail of the operator, and a leak it found is a
+# reason not to publish, never something to list on the published page. What
+# goes out is provenance: that the read happened, and how much it covered.
 
 def num(v):
     return v if isinstance(v, (int, float)) and not isinstance(v, bool) else 0
@@ -512,8 +512,7 @@ out = dict(
         read=num(llm.get("read")),
         of=num(llm.get("of")),
         dismissed=num(llm.get("dismissed")),
-        summary=str(llm.get("summary", ""))[:500],
-        concerns=concerns,
+        concerns=num(len(llm.get("concerns") or [])),
     ),
 )
 json.dump(out, sys.stdout, separators=(",", ":"), sort_keys=True)
