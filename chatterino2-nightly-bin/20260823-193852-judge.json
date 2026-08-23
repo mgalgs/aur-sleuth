@@ -1,0 +1,33 @@
+{
+  "package": "chatterino2-nightly-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Both models correctly identified the PKGBUILD as safe with verified checksums from trusted sources, no dangerous commands, and standard packaging practices. The binary payload limitation is inherent to -bin packages.",
+  "disagreement_analysis": null,
+  "coverage_issues": [
+    "Both models skipped the binary payload (tar.zst) and unauditable files. For -bin packages, payload auditing is impossible via text analysis, but this gap should be explicitly acknowledged.",
+    "No review of potential install hooks or scripts; though none exist in this package, the tool didn't verify absence."
+  ],
+  "false_positives": [],
+  "false_negatives": [
+    "Payload risk: Models didn't flag the inherent trust requirement for prebuilt binaries, though this is expected for -bin packages."
+  ],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "File selection: Prioritize reviewing any .install scripts or hooks referenced in PKGBUILD, even if absent here.",
+    "Prompt quality: Improve guidance for -bin packages to explicitly state payload trust assumptions in verdicts.",
+    "Failure modes: Binary packages consistently trigger coverage gaps; add warnings about payload trust in reports.",
+    "Coverage detection: Audit tool should explicitly check for/verify absence of install scripts and hooks."
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 3332,
+    "completion_tokens": 1662,
+    "cost": 0.006487400000000001
+  },
+  "audits_judged": [
+    "20260823-192928-qwen-qwen3-235b-a22b-2507.md",
+    "20260823-192919-deepseek-deepseek-v4-flash.md"
+  ]
+}
