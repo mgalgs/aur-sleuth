@@ -68,9 +68,11 @@ DEFAULT_MAX_REVIEWS = 0
 # few reports at a time keeps each request inside a context the model can
 # actually attend to, and one weak batch cannot bury the rest.
 DEFAULT_BATCH = 8
-# Batches in flight. The review Job has a deadline, and a large sweep is many
-# batches; a few at a time keeps the wall clock down without hammering the API.
-DEFAULT_WORKERS = 4
+# Batches in flight. Every batch is an independent request, so this is bounded
+# only by the provider's rate limit: a sweep of ~300 texts is ~37 requests,
+# which at 4 in flight took ten minutes and at 16 takes about three. The read
+# is cheap per token, so the wall clock is the cost that matters here.
+DEFAULT_WORKERS = 16
 
 
 def git(gitdir, *args, check=True):
