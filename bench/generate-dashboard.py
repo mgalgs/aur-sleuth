@@ -753,7 +753,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         <div class="flex items-center justify-between mb-6">
             <div>
                 <h1 class="text-3xl font-bold text-blue-400">AUR Sleuth</h1>
-                <p class="text-slate-400 text-sm mt-1">Supply-chain audits of AUR packages: is the packaging clean?</p>
+                <p class="text-slate-400 text-sm mt-1">Supply-chain audits of AUR packages</p>
             </div>
             <div class="text-right text-sm text-slate-500 shrink-0 whitespace-nowrap">
                 <span id="generated-at"></span>
