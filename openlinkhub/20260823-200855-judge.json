@@ -1,0 +1,32 @@
+{
+  "package": "openlinkhub",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The flagged scripts (install-user-space.sh, upgrade.sh, remote-install.sh) are not executed during AUR package installation via makepkg. They appear to be helper scripts unused by PKGBUILD or .install hooks. No malicious behavior exists in files executed during package build/install.",
+  "disagreement_analysis": "qwen incorrectly flagged unused helper scripts as security risks, while deepseek correctly recognized they're not executed during package installation.",
+  "coverage_issues": [],
+  "false_positives": [
+    "src/openlinkhub/install-user-space.sh: Command injection risk irrelevant since script not executed during installation",
+    "src/openlinkhub/upgrade.sh: Untrusted file copy concern doesn't apply to AUR installation flow",
+    "src/openlinkhub/remote-install.sh: Remote download risk exists only if manually executed, not during package build"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Prioritize files referenced in PKGBUILD (build/package/prepare/check) and .install scripts",
+    "Improve prompt clarity: Explicitly exclude non-build/install scripts from security assessment",
+    "Add context: Flag helper scripts as low-risk unless directly invoked by packaging process",
+    "Enhance reasoning: Require models to justify why a file's execution path matters"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 11075,
+    "completion_tokens": 1926,
+    "cost": 0.0125675
+  },
+  "audits_judged": [
+    "20260823-183826-qwen-qwen3-235b-a22b-2507.md",
+    "20260823-183756-deepseek-deepseek-v4-flash.md"
+  ]
+}
