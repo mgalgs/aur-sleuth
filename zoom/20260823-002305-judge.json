@@ -1,0 +1,34 @@
+{
+  "package": "zoom",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Both models correctly identified the PKGBUILD as safe: official HTTPS source, pinned checksum, no malicious code or execution risks during build/install. Binary payload is expected for proprietary software.",
+  "disagreement_analysis": null,
+  "coverage_issues": [
+    "Both models skipped audit of .install script (src/.INSTALL) which could contain post-install hooks",
+    "No review of extracted package contents (e.g., possible setuid binaries or cron jobs in payload)"
+  ],
+  "false_positives": [],
+  "false_negatives": [
+    "Potential telemetry/network behavior in binary payload (unreviewed due to binary skipping)",
+    "Possible setuid binaries or insecure permissions in installed files (unchecked)"
+  ],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Prioritize .install scripts for audit (post-install hooks)",
+    "Add binary metadata scanning (e.g., ELF headers, setuid flags)",
+    "Improve handling of tarball contents: flag executable scripts/configs even in binary archives",
+    "Clarify prompt: explicitly require assessment of post-install scripts and payload metadata"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 3265,
+    "completion_tokens": 924,
+    "cost": 0.0045955
+  },
+  "audits_judged": [
+    "20260822-234218-qwen-qwen3-235b-a22b-2507.md",
+    "20260822-234224-deepseek-deepseek-v4-flash.md"
+  ]
+}
