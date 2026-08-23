@@ -1,0 +1,32 @@
+{
+  "package": "ktailctl",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The flagged script (add-neon-apt-repo.sh) is a development/CI tool not executed during AUR build/install. PKGBUILD and build scripts show no malicious behavior.",
+  "disagreement_analysis": "qwen incorrectly flagged a CI script as unsafe while deepseek correctly ignored it as irrelevant to AUR build safety.",
+  "coverage_issues": [
+    "deepseek failed to review src/KTailctl/scripts/add-neon-apt-repo.sh (though irrelevant)",
+    "Both models missed reviewing .install hooks (none exist)"
+  ],
+  "false_positives": [
+    "qwen: src/KTailctl/scripts/add-neon-apt-repo.sh - CI script not executed during makepkg"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "File selection: Prioritize PKGBUILD hooks over CI scripts. Models should ignore /scripts/ci/ unless referenced in PKGBUILD.",
+    "Prompt quality: Improve context about AUR build lifecycle to avoid false flags on dev tooling.",
+    "Failure mode: Over-sensitivity to HTTP/apt-key in non-build scripts is common; train models to contextualize execution paths."
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 12481,
+    "completion_tokens": 1877,
+    "cost": 0.0134292
+  },
+  "audits_judged": [
+    "20260823-192225-qwen-qwen3-235b-a22b-2507.md",
+    "20260823-192330-deepseek-deepseek-v4-flash.md"
+  ]
+}
