@@ -1,0 +1,31 @@
+{
+  "package": "wayvr",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The flagged unsafe script (appimage_build_satellite.sh) is part of GitHub CI workflows and not executed during AUR package build/install. PKGBUILD uses secure Rust build practices with pinned sources and frozen dependencies.",
+  "disagreement_analysis": "qwen incorrectly flagged CI script execution as a package risk; deepseek correctly focused on build-relevant files.",
+  "coverage_issues": [
+    "deepseek failed to review CI scripts (.github/workflows/scripts/*), creating coverage gap"
+  ],
+  "false_positives": [
+    "appimage_build_satellite.sh: GitHub CI script flagged despite not being executed during makepkg"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Improve file prioritization: deprioritize CI scripts unless referenced in PKGBUILD",
+    "Enhance context awareness: explicitly ignore non-build hooks in assessment prompts",
+    "Implement cross-report validation: flag when critical files are missed by some models"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 9524,
+    "completion_tokens": 1290,
+    "cost": 0.0098918
+  },
+  "audits_judged": [
+    "20260823-192511-qwen-qwen3-235b-a22b-2507.md",
+    "20260823-192452-deepseek-deepseek-v4-flash.md"
+  ]
+}
