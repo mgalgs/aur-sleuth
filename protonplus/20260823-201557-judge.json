@@ -1,0 +1,29 @@
+{
+  "package": "protonplus",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The 'unsafe' verdict from qwen was based solely on get-dependencies.sh executing 'get-debloated-pkgs'. However, this script isn't executed during makepkg (build/install) as it's not referenced in PKGBUILD functions or .install scripts. It's a development helper, which falls outside AUR security scope per audit rules.",
+  "disagreement_analysis": "qwen misinterpreted get-dependencies.sh as a build-time risk, while deepseek correctly recognized it as non-executed development tooling.",
+  "coverage_issues": [],
+  "false_positives": [
+    "qwen's unsafe verdict on get-dependencies.sh: Overreacted to a development script not executed during packaging"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Improve file prioritization: Weight files referenced in PKGBUILD/build hooks higher than standalone scripts",
+    "Enhance context awareness: Models should explicitly verify execution context before flagging scripts as risks",
+    "Reduce false positives: Train models to distinguish between build-executed scripts vs development/CI tooling"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 12617,
+    "completion_tokens": 1719,
+    "cost": 0.0131294
+  },
+  "audits_judged": [
+    "20260823-044110-qwen-qwen3-235b-a22b-2507.md",
+    "20260823-044144-deepseek-deepseek-v4-flash.md"
+  ]
+}
