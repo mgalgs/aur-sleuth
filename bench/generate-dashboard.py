@@ -7,7 +7,7 @@ import re
 import subprocess
 import sys
 import tempfile
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 
 REPORTS_BRANCH = "audit-reports"
@@ -353,6 +353,12 @@ def build_index_data(audits, judges):
         "total_completion_tokens": total_ct,
         "total_tokens": total_pt + total_ct,
         "results": dict(sorted(results.items(), key=lambda x: -x[1])),
+        # Per PACKAGE, after the judge has had its say -- what the page charts.
+        # "results" above is per audit REPORT and still counts a verdict the
+        # judge overturned, so charting it puts overridden findings in a headline
+        # figure. Those belong in a package's own row, not in the summary.
+        "package_states": dict(Counter(package_state(ps)
+                                       for ps in pkg_summaries.values())),
         "by_model": {k: {"count": v["count"], "cost": round(v["cost"], 4), "tokens": v["tokens"]}
                      for k, v in sorted(by_model.items(), key=lambda x: -x[1]["cost"])},
         "by_date": {k: {"audits": v["audits"], "judges": v["judges"], "cost": round(v["cost"], 4)}
@@ -484,8 +490,16 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         .badge-unknown { background: #6b7280; color: white; }
         .block { display: inline-block; width: 14px; height: 14px; border-radius: 2px; margin-right: 2px; cursor: default; }
         .block-safe { background: #22c55e; }
+        /* Red is reserved for a finding a judge agreed with. */
         .block-unsafe { background: #ef4444; }
-        .block-inconclusive { background: #f59e0b; }
+        /* Amber: a model flagged it and nothing has confirmed it. */
+        .block-flagged { background: #f59e0b; }
+        /* The same state in the activity strip, drawn hollow: beside a package
+           name a filled amber dot reads as a warning about the package. */
+        .block-look { background: transparent; box-shadow: inset 0 0 0 2px #a16207; }
+        /* Inconclusive is the absence of an answer, not a warning, so it is
+           grey with the other no-information states rather than amber. */
+        .block-inconclusive { background: #64748b; }
         .block-skipped { background: #4b5563; }
         .block-unknown { background: #4b5563; }
         .block-reaudit { width: 16px; height: 16px; border: 2px solid #eab308; margin-right: 3px; }
@@ -573,7 +587,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         <!-- Charts Row -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
             <div class="bg-slate-800 rounded-lg p-4 border border-slate-700">
-                <h2 class="text-sm font-semibold text-slate-300 mb-3 uppercase tracking-wide">Result Distribution</h2>
+                <h2 class="text-sm font-semibold text-slate-300 mb-3 uppercase tracking-wide">Packages, after the judge</h2>
                 <div class="h-64 flex items-center justify-center">
                     <canvas id="results-chart"></canvas>
                 </div>
@@ -590,8 +604,8 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         <div class="bg-slate-800 rounded-lg p-4 border border-slate-700 mb-4">
             <div class="flex flex-wrap items-center gap-3">
                 <input id="search" type="text" placeholder="Search packages..."
-                    class="bg-slate-700 border border-slate-600 rounded px-3 py-1.5 text-sm text-slate-200 placeholder-slate-400 focus:outline-none focus:border-blue-500 w-64">
-                <div class="flex gap-1" id="filter-buttons">
+                    class="bg-slate-700 border border-slate-600 rounded px-3 py-1.5 text-sm text-slate-200 placeholder-slate-400 focus:outline-none focus:border-blue-500 w-full sm:w-64">
+                <div class="flex flex-wrap gap-1" id="filter-buttons">
                     <button class="filter-btn active px-3 py-1 rounded text-xs font-medium bg-slate-700 text-slate-300" data-filter="all">All</button>
                     <button class="filter-btn px-3 py-1 rounded text-xs font-medium bg-slate-700 text-slate-300 border border-red-800/50" data-filter="needs-attention">Needs Attention</button>
                     <button class="filter-btn px-3 py-1 rounded text-xs font-medium bg-slate-700 text-slate-300" data-filter="confirmed-safe">Confirmed Safe</button>
@@ -603,20 +617,31 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                 </div>
                 <span id="result-count" class="text-xs text-slate-500 ml-auto"></span>
             </div>
+            <div class="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 text-xs text-slate-500">
+                <span><span class="block block-safe"></span>no findings</span>
+                <span><span class="block block-flagged"></span>flagged, unconfirmed</span>
+                <span><span class="block block-unsafe"></span>confirmed by a judge</span>
+                <span><span class="block block-inconclusive"></span>no verdict</span>
+                <span><span class="block block-unsafe block-overridden"></span>overridden by a judge</span>
+                <span><span class="block block-safe block-reaudit"></span>re-audit</span>
+            </div>
         </div>
 
         <!-- Package Table -->
-        <div class="bg-slate-800 rounded-lg border border-slate-700">
+        <!-- The narrow columns drop out on a phone rather than pushing the page
+             sideways: package, its verdicts and when it was read are the point,
+             and the rest is detail that fits on a wider screen. -->
+        <div class="bg-slate-800 rounded-lg border border-slate-700 overflow-x-auto">
             <table class="w-full text-sm">
                 <thead>
                     <tr class="bg-slate-750 border-b border-slate-700 text-left text-xs uppercase tracking-wide text-slate-400">
-                        <th class="px-4 py-3" data-sort="name">Package</th>
-                        <th class="px-4 py-3" data-sort="version">Version</th>
-                        <th class="px-4 py-3" data-sort="audits">Audits</th>
-                        <th class="px-4 py-3" data-sort="judges">Judgements</th>
-                        <th class="px-4 py-3 text-right" data-sort="files">Files</th>
-                        <th class="px-4 py-3 text-right" data-sort="cost">Cost</th>
-                        <th class="px-4 py-3" data-sort="date">Date</th>
+                        <th class="px-3 sm:px-4 py-3" data-sort="name">Package</th>
+                        <th class="px-4 py-3 hidden md:table-cell" data-sort="version">Version</th>
+                        <th class="px-3 sm:px-4 py-3" data-sort="audits">Audits</th>
+                        <th class="px-4 py-3 hidden sm:table-cell" data-sort="judges">Judgements</th>
+                        <th class="px-4 py-3 text-right hidden lg:table-cell" data-sort="files">Files</th>
+                        <th class="px-4 py-3 text-right hidden lg:table-cell" data-sort="cost">Cost</th>
+                        <th class="px-3 sm:px-4 py-3" data-sort="date">Date</th>
                     </tr>
                 </thead>
                 <tbody id="package-table"></tbody>
@@ -626,7 +651,9 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 
     <script>
     let DATA = null;
-    let currentSort = {key: 'name', asc: true};
+    // Newest audit first: the page is a record of what the tool has been doing,
+    // and alphabetical put 1password at the top for months on end.
+    let currentSort = {key: 'date', asc: false};
     let currentFilter = 'all';
     let searchTerm = '';
     const detailCache = {};
@@ -717,7 +744,10 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         // One chip per package, coloured by its settled state. Per audit, a
         // package the models disagreed about showed twice -- green and red --
         // which reads as a finding when it is only a disagreement.
-        const DOT = {confirmed: 'block-unsafe', look: 'block-inconclusive',
+        // "Worth a closer look" is drawn hollow, not filled. A solid amber dot
+        // beside a package name reads as a warning about that package; an
+        // outline reads as what it is -- noted, nothing concluded.
+        const DOT = {confirmed: 'block-unsafe', look: 'block-look',
                      clean: 'block-safe', other: 'block-skipped'};
         const WHAT = {confirmed: 'audits and judge agree: unsafe',
                       look: 'flagged by a model; not confirmed',
@@ -751,16 +781,25 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     function renderCharts() {
         const s = DATA.summary;
 
-        // Results doughnut
+        // Packages, after the judge. Charting the raw per-report results would
+        // put verdicts the judge overturned into a headline figure; a package
+        // the judge cleared is simply clean here, and the audit that called it
+        // unsafe stays visible in its own row.
+        const STATE_LABEL = {clean: 'No findings', look: 'Worth a closer look',
+                             confirmed: 'Confirmed', other: 'No verdict'};
+        const STATE_COLOR = {clean: '#22c55e', look: '#f59e0b',
+                             confirmed: '#ef4444', other: '#6b7280'};
+        const states = s.package_states
+            || {other: Object.keys(DATA.packages || {}).length};
+        const stateKeys = ['clean', 'look', 'confirmed', 'other'].filter(k => states[k]);
         const resultsCtx = document.getElementById('results-chart').getContext('2d');
-        const resultLabels = Object.keys(s.results);
         new Chart(resultsCtx, {
             type: 'doughnut',
             data: {
-                labels: resultLabels.map(l => l.charAt(0).toUpperCase() + l.slice(1)),
+                labels: stateKeys.map(k => STATE_LABEL[k] || k),
                 datasets: [{
-                    data: resultLabels.map(l => s.results[l]),
-                    backgroundColor: resultLabels.map(l => RESULT_COLORS[l] || '#6b7280'),
+                    data: stateKeys.map(k => states[k]),
+                    backgroundColor: stateKeys.map(k => STATE_COLOR[k] || '#6b7280'),
                     borderColor: '#1e293b',
                     borderWidth: 2,
                 }],
@@ -887,11 +926,24 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             const model = (item.model || 'unknown').split('/').pop();
             const reaudit = item.reaudit ? ' block-reaudit' : '';
             const label = item.reaudit ? 're-audit' : type;
+            // Colour says how much weight the verdict carries, not just what it
+            // said. Red is only for a finding the judge agreed with: a lone
+            // model's "unsafe" is usually a false positive, and painting it the
+            // same red as a confirmed one says something the evidence does not.
+            let shade = value || 'unknown';
+            let note = '';
+            if (type === 'audit') {
+                if (judgeVerdict === 'safe' && (value === 'unsafe' || value === 'inconclusive')) {
+                    note = ' — the judge did not agree; overridden';
+                } else if (value === 'unsafe' && judgeVerdict !== 'unsafe') {
+                    shade = 'flagged';        // amber: nobody has confirmed it
+                    note = ' — flagged, not confirmed by a judge';
+                }
+            }
             const overridden = type === 'audit' && judgeVerdict === 'safe'
                 && (value === 'unsafe' || value === 'inconclusive');
             const cls = overridden ? ' block-overridden' : '';
-            const note = overridden ? ' — the judge did not agree; overridden' : '';
-            return `<span class="block block-${escapeAttr(value || 'unknown')}${reaudit}${cls}" title="${escapeAttr(model)}: ${escapeAttr(value || 'unknown')} (${label})${escapeAttr(note)}"></span>`;
+            return `<span class="block block-${escapeAttr(shade)}${reaudit}${cls}" title="${escapeAttr(model)}: ${escapeAttr(value || 'unknown')} (${label})${escapeAttr(note)}"></span>`;
         }).join('');
     }
 
@@ -906,13 +958,14 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             const safeId = escapeAttr(name);
 
             return `<tr class="border-b border-slate-700/50 hover:bg-slate-750 cursor-pointer pkg-row" data-pkg="${safeId}">
-                <td class="px-4 py-2.5 font-medium text-blue-400">${escapeHtml(name)}</td>
-                <td class="px-4 py-2.5 text-slate-400">${escapeHtml(pkg.pkgver || '—')}</td>
-                <td class="px-4 py-2.5"><span class="inline-flex items-center gap-0.5">${renderBlocks(pkg.audits, 'audit', pkg.judge_majority)}</span></td>
-                <td class="px-4 py-2.5"><span class="inline-flex items-center gap-0.5">${renderBlocks(pkg.judges, 'judge')}</span></td>
-                <td class="px-4 py-2.5 text-right text-slate-400">${pkg.files_reviewed === 0 && pkg.audits && pkg.audits.every(a => a.result === 'skipped' || a.result === 'inconclusive') ? '—' : escapeHtml(pkg.files_reviewed)}</td>
-                <td class="px-4 py-2.5 text-right text-slate-400">$${pkg.total_cost.toFixed(4)}</td>
-                <td class="px-4 py-2.5 text-slate-400">${escapeHtml(date)}</td>
+                <td class="px-3 sm:px-4 py-2.5 font-medium text-blue-400 break-words">${escapeHtml(name)}
+                    <div class="text-xs text-slate-500 font-normal sm:hidden">${escapeHtml(date)}</div></td>
+                <td class="px-4 py-2.5 text-slate-400 hidden md:table-cell">${escapeHtml(pkg.pkgver || '—')}</td>
+                <td class="px-3 sm:px-4 py-2.5"><span class="inline-flex items-center gap-0.5">${renderBlocks(pkg.audits, 'audit', pkg.judge_majority)}</span></td>
+                <td class="px-4 py-2.5 hidden sm:table-cell"><span class="inline-flex items-center gap-0.5">${renderBlocks(pkg.judges, 'judge')}</span></td>
+                <td class="px-4 py-2.5 text-right text-slate-400 hidden lg:table-cell">${pkg.files_reviewed === 0 && pkg.audits && pkg.audits.every(a => a.result === 'skipped' || a.result === 'inconclusive') ? '—' : escapeHtml(pkg.files_reviewed)}</td>
+                <td class="px-4 py-2.5 text-right text-slate-400 hidden lg:table-cell">$${pkg.total_cost.toFixed(4)}</td>
+                <td class="px-3 sm:px-4 py-2.5 text-slate-400 whitespace-nowrap">${escapeHtml(date)}</td>
             </tr>
             <tr class="detail-row" id="detail-${safeId}">
                 <td colspan="7" class="p-0">
