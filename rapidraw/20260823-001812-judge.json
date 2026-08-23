@@ -1,0 +1,33 @@
+{
+  "package": "rapidraw",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The unsafe verdict from qwen incorrectly flags standard build behavior. The build.rs script downloads ONNX Runtime binaries from the project's own Hugging Face repository with SHA-256 verification, which is an acceptable practice for Rust projects requiring precompiled libraries. Deepseek's analysis correctly identifies this as safe.",
+  "disagreement_analysis": "qwen misinterpreted the Hugging Face download as untrusted despite hash verification and project ownership, while deepseek properly contextualized it as standard practice.",
+  "coverage_issues": [
+    "Both models skipped rapidraw-1.6.2.tar.gz (source archive)",
+    "qwen missed reviewing PKGBUILD install hooks",
+    "Neither reviewed .install scripts if present"
+  ],
+  "false_positives": [
+    "qwen's build.rs verdict: Overreacted to verified dependency fetch from project-controlled repository"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Improve build script assessment: Recognize verified dependency fetches from project-owned repos as safe",
+    "Prioritize PKGBUILD install hooks and .install files over development configs",
+    "Clarify prompt: Explicitly state that hash-verified fetches from project-controlled sources aren't automatic red flags"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 11326,
+    "completion_tokens": 1656,
+    "cost": 0.012068200000000001
+  },
+  "audits_judged": [
+    "20260822-233356-qwen-qwen3-235b-a22b-2507.md",
+    "20260822-233504-deepseek-deepseek-v4-flash.md"
+  ]
+}
