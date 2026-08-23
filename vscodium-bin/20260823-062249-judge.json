@@ -1,0 +1,33 @@
+{
+  "package": "vscodium-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Both audits confirmed PKGBUILD and install hooks are safe with trusted sources. All reviewed files showed legitimate VSCodium functionality. The inconclusive status was solely due to technical errors auditing one large vendored file (cssServerMain.js), which isn't AUR-maintainer-modified code.",
+  "disagreement_analysis": null,
+  "coverage_issues": [
+    "Failed to audit cssServerMain.js due to file size (413 error)",
+    "Limited review of vendored upstream binaries (170 unauditable files)"
+  ],
+  "false_positives": [
+    "Models flagged safe vendored scripts (askpass.sh, watchdog.js) - these are normal VSCodium components",
+    "Deepseek reviewed bat/package.json and emmetNodeMain.js unnecessarily - dev tooling not executed during install"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Improve file selection: Prioritize AUR-controlled files (PKGBUILD/hooks) over vendored content. Skip files > model context limit.",
+    "Enhance error handling: Automatically skip files causing 413 errors without failing entire audit.",
+    "Refine assessment: Train models to deprioritize dev/extension code unless referenced in PKGBUILD functions."
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 13875,
+    "completion_tokens": 1231,
+    "cost": 0.01279
+  },
+  "audits_judged": [
+    "20260823-032517-qwen-qwen3-235b-a22b-2507.md",
+    "20260823-032548-deepseek-deepseek-v4-flash.md"
+  ]
+}
