@@ -1,0 +1,34 @@
+{
+  "package": "protonup-qt",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Both models agree the package is safe after reviewing PKGBUILD. Qwen's deeper source code audit found no malicious behavior in critical components like network operations and tool installation.",
+  "disagreement_analysis": null,
+  "coverage_issues": [
+    "deepseek failed to review source files due to incorrect path selection (selected 'pupgui2/...' without 'src/ProtonUp-Qt-2.15.1/' base)",
+    "deepseek didn't review any source code files despite package functionality involving network/file operations"
+  ],
+  "false_positives": [],
+  "false_negatives": [
+    "deepseek missed security review of critical components: networkutil.py (downloads), ctmods (tool installation), and pupgui2.py (main logic)",
+    "Neither model reviewed all ctmods (e.g., ctmod_kron4ekvanilla) though qwen sampled key ones"
+  ],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Improve path handling: Audit tool should normalize paths or show base directory to prevent model path errors",
+    "Prioritize files with network/filesystem access higher than i18n/CI scripts",
+    "Add validation for selected file existence before audit",
+    "Increase weight for files referenced in PKGBUILD functions during selection"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 9541,
+    "completion_tokens": 2226,
+    "cost": 0.0122437
+  },
+  "audits_judged": [
+    "20260823-192659-qwen-qwen3-235b-a22b-2507.md",
+    "20260823-192603-deepseek-deepseek-v4-flash.md"
+  ]
+}
