@@ -1486,20 +1486,18 @@ def audit_file(
             "region is a good sign but not conclusive.\n\n"
         )
     under_fixture, referenced = fixture_context(pkgdir, file_path)
+    # The auditor judges content: malware is malware wherever it sits, and
+    # whether the package runs the file is a question it cannot answer from
+    # one file (an auto-discovering test runner names no directory). It gets
+    # the location as a plain fact and nothing that steers the decision; the
+    # fixture cap below, and then a judge, handle "is it run".
     fixture_note = ""
-    if under_fixture and not referenced:
-        try:
-            rel = file_path.relative_to(pkgdir)
-        except ValueError:
-            rel = file_path.name
-        fixture_note = (
-            f"LOCATION: {sanitize_for_llm(str(rel))}. This file sits under a test or fixture "
-            "directory, and nothing in the PKGBUILD, the install hooks, or the top-level "
-            "build files refers to it or to its directory. Code that nothing runs at build "
-            "or install time cannot attack the build, however it looks; a project that "
-            "tests a malware detector ships malware samples. Describe what the file does, "
-            "but decide by whether the package runs it.\n\n"
-        )
+    try:
+        rel = file_path.relative_to(pkgdir)
+    except ValueError:
+        rel = file_path.name
+    if str(rel) != file_path.name:
+        fixture_note = f"LOCATION: {sanitize_for_llm(str(rel))}\n\n"
     prompt = f"""{extra_instructions + "\n" if extra_instructions else ""}{truncation_note}{fixture_note}
 Respond with a security assessment in the following XML format. Ensure that all special characters (e.g., &, <, >) within the XML tags are properly escaped (e.g., &amp;, &lt;, &gt;).
 Do not include any XML tags other than <security_assessment>, <decision>, <details>, <evidence>, and <summary>. If you must mention other XML-like tags (for example <defaults>), escape them like &lt;defaults&gt; instead of emitting raw tags.
@@ -2047,8 +2045,9 @@ _LOW_VALUE_DIRS = frozenset(
 # Directories whose contents are test data: code there is expected to look
 # like anything at all -- including malware, when the project tests a malware
 # detector -- and none of it runs at build or install time unless the build
-# refers to it. A subset of _LOW_VALUE_DIRS: scripts/ and tools/ are not
-# fixtures, they are just less likely to run.
+# refers to it, or runs a test runner that finds it by itself. A subset of
+# _LOW_VALUE_DIRS: scripts/ and tools/ are not fixtures, they are just less
+# likely to run.
 _FIXTURE_DIRS = frozenset(
     {
         "test", "tests", "testing", "testdata", "fixtures", "fixture",
@@ -2078,15 +2077,30 @@ def _build_files(pkgdir: Path) -> List[Path]:
     return out
 
 
+# Test runners that find test code by themselves: a build that invokes one
+# runs everything under the test directories without naming them. Matched as
+# plain strings in the build files, and any hit means "referenced".
+_TEST_RUNNERS = (
+    "pytest", "py.test", "unittest", "nose", "tox", "cargo test", "go test",
+    "npm test", "yarn test", "pnpm test", "make check", "make test", "ctest",
+    "meson test", "ninja test", "rspec", "rake test", "phpunit", "mvn test",
+    "gradle test", "dotnet test", "bats", "prove",
+)
+
+
 def fixture_context(pkgdir: Path, file_path: Path) -> Tuple[bool, bool]:
     """(under a fixture directory, referenced by the build).
 
     Decided in code, because it is decidable: the auditor sees one file at a
     time and cannot know that a malicious-looking .install hook is a test
     fixture nothing in the package runs. "Referenced" is a plain string
-    search of the build files for the file's name or any directory on its
-    path below the package root, which errs toward "referenced": a build that
-    mentions tests/ at all keeps every file under it auditable in full.
+    search of the build files for the file's name, any directory on its path
+    below the package root, or any test runner that would find the file by
+    itself (check() { pytest; } names no directory and runs tests/conftest.py
+    all the same). It errs toward "referenced": a build that mentions tests/
+    at all, or runs any test runner, keeps every file under it auditable in
+    full. The answer only ever softens an UNSAFE to INCONCLUSIVE -- "review
+    manually" -- never to SAFE.
     """
     try:
         rel = file_path.relative_to(pkgdir)
@@ -2103,7 +2117,7 @@ def fixture_context(pkgdir: Path, file_path: Path) -> Tuple[bool, bool]:
             text = bf.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
-        if any(n in text for n in needles):
+        if any(n in text for n in needles) or any(r in text for r in _TEST_RUNNERS):
             return True, True
     return True, False
 
@@ -3144,6 +3158,12 @@ def selftest_fixture_context():
         (pkg / "src" / "x-1.0" / "Makefile").write_text("all:\n", encoding="utf-8")
         (pkg / "x.install").write_text("post_install() { bash malware.install; }\n", encoding="utf-8")
         assert fixture_context(pkg, fx / "malware.install") == (True, True)
+        # A test runner in check() finds test code without naming it.
+        (pkg / "x.install").unlink()
+        (pkg / "PKGBUILD").write_text("pkgname=x\ncheck() { pytest; }\n", encoding="utf-8")
+        assert fixture_context(pkg, fx / "malware.install") == (True, True)
+        (pkg / "PKGBUILD").write_text("pkgname=x\nsource=()\n", encoding="utf-8")
+        assert fixture_context(pkg, fx / "malware.install") == (True, False)
         # A file outside the package is left alone.
         assert fixture_context(pkg, Path("/etc/passwd")) == (False, True)
 
