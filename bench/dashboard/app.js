@@ -421,7 +421,7 @@ async function toggleDetail(name) {
 function explainState(pkg) {
     const state = packageState(pkg);
     if (pkg.human) {
-        return 'A person reviewed the evidence'
+        return (pkg.human.by || 'A reviewer') + ' reviewed the evidence'
             + (pkg.human.since ? ' on ' + pkg.human.since : '')
             + (pkg.human.verdict === 'safe' ? ' and cleared it.' : ' and confirmed it.');
     }
@@ -468,10 +468,10 @@ function renderDetail(name, data) {
         + '<a class="detail-link" href="#pkg=' + escapeAttr(encodeURIComponent(name)) + '">#pkg=' + escapeHtml(name) + '</a>'
         + '</div>';
 
-    // A verdict a person settled, and why. This outranks everything below it.
+    // A settled verdict, and why. This outranks everything below it.
     if (pkg.human && pkg.human.note) {
         html += '<div class="detail-section"><div class="finding"><div class="head">'
-            + '<span class="file">Reviewed by a person</span>'
+            + '<span class="file">Reviewed by ' + escapeHtml(pkg.human.by || 'a reviewer') + '</span>'
             + (pkg.human.since ? '<span class="where">' + escapeHtml(pkg.human.since) + '</span>' : '')
             + '<span class="summary">' + escapeHtml(pkg.human.note) + '</span>'
             + '</div></div></div>';
@@ -501,7 +501,7 @@ function renderDetail(name, data) {
             return '<div class="finding"><div class="head">'
                 + '<span class="file">' + escapeHtml(v.file || '') + '</span>'
                 + (start ? '<span class="where">line ' + start + '</span>' : '')
-                + '<span class="tag">flagged by ' + escapeHtml(joinNicely(f.models)) + (humanSafe ? ', overturned by human review' : judgeSafe ? ', overturned by the judge' : '') + '</span>'
+                + '<span class="tag">flagged by ' + escapeHtml(joinNicely(f.models)) + (humanSafe ? ', overturned on review' : judgeSafe ? ', overturned by the judge' : '') + '</span>'
                 + f.summaries.map(s => '<span class="summary">' + escapeHtml(s) + '</span>').join('')
                 + '</div>'
                 + (v.evidence ? renderEvidence(v, state) : '')

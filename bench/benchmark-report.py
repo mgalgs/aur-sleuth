@@ -159,11 +159,11 @@ def score(model, rows, synth):
     hard = [r for r in scored if r["reference"] == "safe" and r.get("overridden")]
     hard_flags = sum(1 for r in hard if r["result"] == "unsafe")
 
-    # The same, split by who settled the reference. Disagreeing with a verdict
-    # a person settled is being wrong; disagreeing with one the pipeline's own
-    # models settled may be right -- the first run "missed" a package whose
-    # reference was a single audit's false positive. Only the human-settled
-    # misses disqualify.
+    # The same, split by who settled the reference. Disagreeing with a
+    # hand-settled verdict (bench/verdicts.json; 'by' names who decided) is
+    # being wrong; disagreeing with one the pipeline's own models settled may
+    # be right -- the first run "missed" a package whose reference was a
+    # single audit's false positive. Only the hand-settled misses disqualify.
     def tally(rows_):
         return {
             "scored": len(rows_),
@@ -263,7 +263,7 @@ def table(models):
     lines.append("* = a current model, scored from its own reports on the branch (its verdicts")
     lines.append("helped settle the pipeline references, so its agreement is an upper bound; its")
     lines.append("cost is real). synth: fixtures passed. agree: matches over everything scored.")
-    lines.append("human f/m: false flags / misses against verdicts a person settled -- a miss")
+    lines.append("human f/m: false flags / misses against hand-settled verdicts -- a miss")
     lines.append("here disqualifies. pipe f/m: the same against verdicts the pipeline's own")
     lines.append("models settled -- a disagreement, which may be right. hard: false flags on")
     lines.append("packages a judge had already had to clear. inc: inconclusive.")

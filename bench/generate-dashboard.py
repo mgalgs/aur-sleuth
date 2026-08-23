@@ -139,10 +139,11 @@ def compute_majority(results):
 def package_state(ps):
     """How settled a package's verdict is: confirmed, look, clean, or other.
 
-    A verdict a person settled (bench/verdicts.json, attached to the summary
-    as "human") outranks every model: a human "safe" makes the package clean,
-    a human "unsafe" makes it confirmed. The models can be re-run; the human
-    read the evidence and decided.
+    A verdict settled outside the pipeline (bench/verdicts.json, attached to
+    the summary as "human") outranks the pipeline's models: a settled "safe"
+    makes the package clean, a settled "unsafe" makes it confirmed. The
+    pipeline can be re-run; the reviewer named in "by" read the evidence and
+    decided.
 
     "confirmed" is deliberately narrow -- the audits agreed on unsafe AND the
     judge agreed with them. Only that may be presented as a finding.
@@ -339,11 +340,12 @@ def load_reports():
 
 
 def load_human_verdicts():
-    """bench/verdicts.json: verdicts a person settled after reading the
-    evidence. Ships with the image, so the page rebuilt at publish time
-    carries them. Only the fields the page needs go through; "by" stays
-    out of the public output. The benchmark reads the same file through
-    its own loader in benchmark-sample.py."""
+    """bench/verdicts.json: verdicts settled outside the pipeline by whoever
+    read the evidence and decided -- "by" names them honestly, a person or a
+    model adjudicating on their behalf, and the page shows that name. Ships
+    with the image, so the page rebuilt at publish time carries them. The
+    benchmark reads the same file through its own loader in
+    benchmark-sample.py."""
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "verdicts.json")
     try:
         with open(path, encoding="utf-8") as f:
@@ -356,6 +358,7 @@ def load_human_verdicts():
             out[name] = {
                 "verdict": entry["verdict"],
                 "since": str(entry.get("since", "")),
+                "by": str(entry.get("by", "")),
                 "note": str(entry.get("note", "")),
             }
     return out

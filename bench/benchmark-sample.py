@@ -17,7 +17,8 @@ with reference "unknown", so the run can show what the candidate said even when
 nothing can be scored.
 
 Two kinds of reference, and the report keeps them apart:
-  human  -- a verdict a person settled, from bench/verdicts.json. Disagreeing
+  human  -- a hand-settled verdict from bench/verdicts.json (its 'by' field
+            names who decided: a person, or a model adjudicating). Disagreeing
             with one of these is being wrong.
   models -- the pipeline's own settled verdict (package_state). Disagreeing
             with one of these is disagreeing with the current models, which
@@ -204,7 +205,7 @@ def main():
           f"{sum(1 for r in picked if r['reference'] == 'safe')} safe "
           f"({sum(1 for r in picked if r['overridden'])} overturned by a judge), "
           f"{sum(1 for r in picked if r['reference'] == 'unknown')} unscored; "
-          f"{sum(1 for r in picked if r['reference_source'] == 'human')} settled by a person",
+          f"{sum(1 for r in picked if r['reference_source'] == 'human')} hand-settled",
           file=sys.stderr)
     return 0
 
