@@ -1,0 +1,31 @@
+{
+  "package": "antigravity-ide",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The flagged RCE vulnerability in extension.js is application runtime behavior, not executed during AUR package build/install. Packaging files (PKGBUILD, install hooks, launchers) show no malicious patterns.",
+  "disagreement_analysis": "qwen incorrectly treated application code (extension.js) as in-scope for AUR audit despite it not being executed during makepkg/install.",
+  "coverage_issues": [
+    "deepseek skipped review of src/Antigravity IDE/resources/app/extensions/ files, though correctly deemed irrelevant"
+  ],
+  "false_positives": [
+    "qwen's RCE finding: extension.js executes during IDE runtime, not package build/install"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Improve scope enforcement: Models should explicitly filter out application runtime code unless referenced in PKGBUILD/.install",
+    "Enhance file prioritization: Rank packaging scripts higher than application code in binary packages",
+    "Clarify prompts: Emphasize that prebuilt application payloads are out-of-scope unless executed during packaging"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 10054,
+    "completion_tokens": 1789,
+    "cost": 0.011510300000000001
+  },
+  "audits_judged": [
+    "20260823-043733-qwen-qwen3-235b-a22b-2507.md",
+    "20260823-043727-deepseek-deepseek-v4-flash.md"
+  ]
+}
