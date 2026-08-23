@@ -506,6 +506,8 @@ git --git-dir="$qstore" update-ref refs/remotes/origin/audit-reports "$published
 mkdir -p "$tmp/src/bench" "$tmp/data/bulk-audit" \
          "$tmp/data/bulk-reports/model-a" "$tmp/data/bulk-reports/model-b"
 cp bench/generate-dashboard.py "$tmp/src/bench/"
+# The page's source lives beside the generator; it inlines the three files.
+cp -r bench/dashboard "$tmp/src/bench/"
 printf 'gitdir: %s\n' "$qstore" > "$tmp/src/.git"
 printf -- '---\nresult: safe\nprovider: x.svc.cluster.local\n---\n' \
     > "$tmp/data/bulk-reports/model-a/aur-sleuth-report-pkg-b.txt"
