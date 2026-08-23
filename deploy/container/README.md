@@ -10,19 +10,25 @@ One run is one `pipeline.sh` invocation. The pipeline throttles itself: it accum
 
 Runs must not overlap, or two of them race on the archive and the push.
 
-## The four stages, and why
+## The stages, and why
 
-The pipeline runs untrusted code by design. `makepkg --nobuild` sources arbitrary AUR `PKGBUILD` files, which executes their top-level shell and `pkgver()`. That is the point of the tool, but it means a hostile package gets a shell in the container. A run is therefore split into stages that run in sequence, each in its own container:
+The pipeline runs untrusted code by design. `makepkg --nobuild` sources arbitrary AUR `PKGBUILD` files, which executes their top-level shell and `pkgver()`. That is the point of the tool, but it means a hostile package gets a shell in the container. A run is therefore split into stages, each in its own container. Three run on the schedule, in sequence; the rest are on demand:
 
-| Stage | Credential | Volume | Runs untrusted code |
-|---|---|---|---|
-| `prepare` | none | read-write | no |
-| `audit` | LLM API key | read-write | **yes** |
-| `publish` | git deploy key | **read-only** | no |
-| `bundle` | none | **read-only** | no |
-| `benchmark` | LLM API key | read-write | **yes** |
+| Stage | Credential | Volume | Runs untrusted code | When |
+|---|---|---|---|---|
+| `prepare` | none | read-write | no | every run |
+| `audit` | LLM API key | read-write | **yes** | every run |
+| `publish` | git deploy key | **read-only** | no | every run (dry run), or on demand |
+| `review` | LLM route (advisory read) | **read-only** | no | on demand, before a publish |
+| `quarantine` | none | read-write | no | on demand, when review finds a leak |
+| `bundle` | none | **read-only** | no | on demand, instead of `publish` |
+| `benchmark` | LLM API key | read-write | **yes** | on demand |
 
-`prepare` creates or refreshes the git object store on the volume and prunes old state. `audit` runs the whole pipeline with `--no-push`, so every commit stays local. `publish` pushes two branches: the reviewed commit of `audit-reports`, exactly as the audit stage wrote it, and the public page on `site` (`AUR_SLEUTH_SITE_BRANCH`), which is that commit's tree plus `index.html` and `_dashboard/*` rebuilt by this image. Point GitHub Pages at `site`. The page is never committed to `audit-reports`, so `origin`'s copy of it is always an ancestor of the store's, and nothing ever has to be rebased.
+`prepare` creates or refreshes the git object store on the volume and prunes old state. `audit` runs the whole pipeline with `--no-push`, so every commit stays local.
+
+`review` answers "is this branch publishable, and what is in it?" without publishing: the path gate and the internal-string check (`AUR_SLEUTH_INTERNAL_STRINGS`) decide its exit status, `bench/review-pending.py` summarises the pending sweep, and a model (`AUR_SLEUTH_REVIEW_MODEL`) reads every generated text for one thing only, a leak of the operator's own details. That read is advice for a person, never a gate. `quarantine` is the remedy review names: it rewrites the unpushed commits without the leaky reports, keeps the old head under `refs/backup/`, and is the one trusted stage that writes to the store.
+
+`publish` runs both checks again itself, dry run included, and then pushes two branches: the reviewed commit of `audit-reports`, exactly as the audit stage wrote it, and the public page on `site` (`AUR_SLEUTH_SITE_BRANCH`), which is that commit's tree plus `index.html` and `_dashboard/*` rebuilt by this image. Point GitHub Pages at `site`. The page is never committed to `audit-reports`, so `origin`'s copy of it is always an ancestor of the store's, and nothing ever has to be rebased.
 
 `publish` writes nothing to the store -- it reads a snapshot of the refs and borrows the objects read-only -- so it may run while an `audit` stage is committing. It publishes the commit the review saw (`AUR_SLEUTH_EXPECT_HEAD`); reports that landed since wait for the next review. What it refuses is a pin the branch no longer contains, which is what a quarantine rewrite leaves behind.
 
@@ -107,9 +113,9 @@ git bundle verify ./out/audit-reports.bundle
 Whatever runs it must provide:
 
 - **UID 1000, non-root.** `makepkg` refuses to run as root.
-- **One persistent volume mounted at `/data` on every stage**, writable by UID 1000, and mounted **read-only** on `publish` and `bundle`. That read-only mount is load-bearing, not decoration; see [The four stages, and why](#the-four-stages-and-why). Keep the volume even when the job is removed: the spend ledger on it is the one piece of state that is not derivable from git, and losing it mid-day resets the budget to zero.
-- **The stages in sequence, never overlapping**, so two runs cannot race on the archive and the push.
-- **Secrets only where needed.** Only `audit` gets the LLM key; only `publish` gets the git key; `prepare` and `bundle` get none. Create the git key as a deploy key with write access scoped to the one repository that holds the `audit-reports` branch, rather than a broad personal access token.
+- **One persistent volume mounted at `/data` on every stage**, writable by UID 1000, and mounted **read-only** on `publish` and `bundle`. That read-only mount is load-bearing, not decoration; see [The stages, and why](#the-stages-and-why). Keep the volume even when the job is removed: the spend ledger on it is the one piece of state that is not derivable from git, and losing it mid-day resets the budget to zero.
+- **Writers never overlap.** `prepare`, `audit`, `quarantine` and `benchmark` write the store, so only one of them runs at a time. `review`, `publish` and `bundle` read a snapshot and may run beside a writer.
+- **Secrets only where needed.** Only `audit` and `benchmark` get the LLM key; only `publish` gets the git key; `review` gets the LLM route for its advisory read and nothing else; `prepare`, `quarantine` and `bundle` get none. Create the git key as a deploy key with write access scoped to the one repository that holds the `audit-reports` branch, rather than a broad personal access token.
 - **Restricted egress for the audit stage.** Legitimate AUR sources use http, https and the git protocol, so allow DNS plus outbound TCP on 80, 443 and 9418 to the internet and deny every private range, including link-local. A hostile `PKGBUILD` should reach nothing on your network. If the audit stage talks to a self-hosted model on a private address, add one narrow rule for that host and port rather than widening the exclusions.
 - **Enough disk.** `aur-sleuth` extracts each package's sources under `$DATA_DIR/bulk-reports/`, so a run with `--jobs 4` and two models can hold eight package trees at once. `prepare` removes any tree left behind by a run that died.
 
@@ -131,8 +137,10 @@ Set as environment variables on the container.
 | `AUR_SLEUTH_SITE_BRANCH` | publish | `site` | The branch the public page is pushed to; point GitHub Pages at it |
 | `AUR_SLEUTH_REVIEW_JSON` | publish | — | The review's `REVIEW_JSON` object, written to the branch as `_dashboard/review.json` |
 | `AUR_SLEUTH_FUNDING_URL` | publish | — | An https link for the public page's funding card ("Chip in"). Unset hides the button; the card's numbers still show |
+| `AUR_SLEUTH_INTERNAL_STRINGS` | review, quarantine, publish | `svc.cluster.local` | Fixed strings that name your own infrastructure; a report carrying one is never published |
+| `AUR_SLEUTH_REVIEW_MODEL` | review | `deepseek/deepseek-v4-flash` | The model for the advisory read |
 | `AUR_SLEUTH_BENCH_MODELS` | benchmark | — | Required; comma-separated candidate models |
-| `AUR_SLEUTH_BENCH_SAMPLE` / `_BUDGET` / `_SYNTHETICS` / `_PACKAGES` / `_RUN_ID` | benchmark | `20` / `2.00` / `true` / — / timestamp | See above |
+| `AUR_SLEUTH_BENCH_SAMPLE` / `_BUDGET` / `_JOBS` / `_SYNTHETICS` / `_PACKAGES` / `_RUN_ID` / `_ROLE` / `_TARGET` | benchmark | `20` / `2.00` / pipeline default / `true` / — / timestamp / `audit` / — | See above |
 | `AUR_SLEUTH_BUNDLE_PATH` | bundle | `/out/audit-reports.bundle` | Where the bundle is written; its directory must be writable |
 | `AUR_SLEUTH_SPEND_LOG_RETENTION_DAYS` | prepare | `30` | Nothing else prunes the ledger |
 | `AUR_SLEUTH_MAKEPKG_TIMEOUT` | audit | `600` | Seconds for one `makepkg` invocation; its download agents have no timeout of their own |
@@ -144,6 +152,8 @@ Set as environment variables on the container.
 | `GIT_AUTHOR_NAME` / `GIT_AUTHOR_EMAIL` | all | `aur-sleuth` | Identity on archive commits |
 
 The pipeline's own `--audit-timeout` (default 900 seconds) caps a whole package/model audit from outside and applies to re-audits too; pass it after the `audit` verb like any other pipeline flag.
+
+The pipeline's tunables can also arrive as environment variables on the `audit` stage, each checked against a type at the boundary and appended after the verb's own flags, so the environment wins: `AUR_SLEUTH_DAILY_BUDGET`, `AUR_SLEUTH_AUDIT_MODELS`, `AUR_SLEUTH_JUDGE_MODEL`, `AUR_SLEUTH_REAUDIT_MODEL`, `AUR_SLEUTH_JOBS`, `AUR_SLEUTH_MIN_VOTES`, `AUR_SLEUTH_LOOKBACK_HOURS`, `AUR_SLEUTH_SEED_TOP`, `AUR_SLEUTH_UPDATED_SHARE`, `AUR_SLEUTH_AUDIT_TIMEOUT`. This is how a deployment changes a setting without a redeploy: the baseline stays in the job's arguments, a projected ConfigMap overrides individual values.
 
 ## Verifying a change
 
