@@ -1,0 +1,33 @@
+{
+  "package": "arduino-ide-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Both models confirmed PKGBUILD and wrapper script are safe with no malicious build/install behavior. Inconclusive verdicts stem from HTTP 413 errors on irrelevant runtime JS files, not executed during makepkg.",
+  "disagreement_analysis": null,
+  "coverage_issues": [
+    "Models wasted effort auditing runtime application JS files (e.g., backend-init-theia.js) irrelevant to build/install process",
+    "Deepseek failed file selection (empty response), falling back to default files"
+  ],
+  "false_positives": [
+    "All 'inconclusive' verdicts on JS files are false positives - these are runtime components unrelated to PKGBUILD execution"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Improve file prioritization: Exclude application runtime files for -bin packages unless referenced in PKGBUILD/install hooks",
+    "Implement size-based file skipping: Automatically exclude large files (>1MB) to prevent HTTP 413 errors",
+    "Enhance model instructions: Emphasize AUR's build-time focus; clarify irrelevance of IDE source code in binary packages",
+    "Add package-type awareness: Binary packages should only audit packaging scripts, not upstream binaries/content"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 15934,
+    "completion_tokens": 1255,
+    "cost": 0.0142913
+  },
+  "audits_judged": [
+    "20260823-190641-qwen-qwen3-235b-a22b-2507.md",
+    "20260823-190624-deepseek-deepseek-v4-flash.md"
+  ]
+}
