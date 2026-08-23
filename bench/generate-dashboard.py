@@ -530,6 +530,13 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         th { cursor: pointer; user-select: none; background: #1e293b; }
         th:hover { background: #253248; }
         .filter-btn.active { background: #3b82f6; color: white; }
+        /* A headline count that filters the table. Underlined on hover only, so
+           the sentence still reads as a sentence. */
+        .count-link { background: none; border: 0; padding: 0; font: inherit;
+                      color: inherit; cursor: pointer; }
+        .count-link:hover, .count-link:focus-visible { text-decoration: underline; }
+        .chip { cursor: pointer; }
+        .chip:hover { border-color: #64748b; }
     </style>
     <script>
         tailwind.config = {
@@ -621,12 +628,12 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                     class="bg-slate-700 border border-slate-600 rounded px-3 py-1.5 text-sm text-slate-200 placeholder-slate-400 focus:outline-none focus:border-blue-500 w-full sm:w-64">
                 <div class="flex flex-wrap gap-1" id="filter-buttons">
                     <button class="filter-btn active px-3 py-1 rounded text-xs font-medium bg-slate-700 text-slate-300" data-filter="all">All</button>
-                    <button class="filter-btn px-3 py-1 rounded text-xs font-medium bg-slate-700 text-slate-300 border border-red-800/50" data-filter="needs-attention">Needs Attention</button>
-                    <button class="filter-btn px-3 py-1 rounded text-xs font-medium bg-slate-700 text-slate-300" data-filter="confirmed-safe">Confirmed Safe</button>
-                    <button class="filter-btn px-3 py-1 rounded text-xs font-medium bg-slate-700 text-slate-300" data-filter="contested">Contested</button>
+                    <button class="filter-btn px-3 py-1 rounded text-xs font-medium bg-slate-700 text-slate-300" data-filter="clean">No findings</button>
+                    <button class="filter-btn px-3 py-1 rounded text-xs font-medium bg-slate-700 text-slate-300" data-filter="unknown">No verdict</button>
+                    <button class="filter-btn px-3 py-1 rounded text-xs font-medium bg-slate-700 text-slate-300" data-filter="look">Worth a closer look</button>
+                    <button class="filter-btn px-3 py-1 rounded text-xs font-medium bg-slate-700 text-slate-300 border border-red-800/50" data-filter="confirmed">Confirmed</button>
                     <span class="border-l border-slate-600 mx-1"></span>
-                    <button class="filter-btn px-3 py-1 rounded text-xs font-medium bg-slate-700 text-slate-300" data-filter="unsafe">Unsafe</button>
-                    <button class="filter-btn px-3 py-1 rounded text-xs font-medium bg-slate-700 text-slate-300" data-filter="safe">Safe</button>
+                    <button class="filter-btn px-3 py-1 rounded text-xs font-medium bg-slate-700 text-slate-300" data-filter="overridden">Overridden by a judge</button>
                     <button class="filter-btn px-3 py-1 rounded text-xs font-medium bg-slate-700 text-slate-300" data-filter="unjudged">Unjudged</button>
                 </div>
                 <span id="result-count" class="text-xs text-slate-500 ml-auto"></span>
@@ -710,6 +717,51 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         return String(m).split('/').pop();
     }
 
+    // A headline count that filters the table to exactly the packages it counts.
+    // The count and the filter share packageState(), so the number the reader
+    // clicked is the number of rows they get.
+    function countLink(filter, text, cls) {
+        return '<button type="button" class="count-link ' + cls + '" data-filter="'
+            + escapeAttr(filter) + '" title="Show these in the table below">'
+            + escapeHtml(text) + '</button>';
+    }
+
+    // Open one package's detail from anywhere on the page. The current filter or
+    // search may be hiding its row, so both are cleared first -- clicking a
+    // package and landing on nothing would be worse than losing the filter.
+    function openPackage(name) {
+        if (!DATA.packages || !DATA.packages[name]) return;
+        currentFilter = 'all';
+        searchTerm = '';
+        const box = document.getElementById('search');
+        if (box) box.value = '';
+        document.querySelectorAll('.filter-btn').forEach(b =>
+            b.classList.toggle('active', b.dataset.filter === 'all'));
+        renderTable();
+
+        const row = document.querySelector('.pkg-row[data-pkg="' + cssEscape(name) + '"]');
+        if (!row) return;
+        row.scrollIntoView({behavior: 'smooth', block: 'center'});
+        const detail = document.getElementById('detail-' + name);
+        if (detail && !detail.classList.contains('open')) toggleDetail(name);
+    }
+
+    // Package names are restricted by the AUR, but this goes into a selector, so
+    // it is escaped rather than trusted.
+    function cssEscape(s) {
+        return window.CSS && CSS.escape ? CSS.escape(s) : String(s).replace(/["\\]/g, '\\$&');
+    }
+
+    // Apply a filter from anywhere on the page, and take the reader to it.
+    function applyFilter(name) {
+        currentFilter = name;
+        document.querySelectorAll('.filter-btn').forEach(b =>
+            b.classList.toggle('active', b.dataset.filter === name));
+        renderTable();
+        document.getElementById('package-table').closest('.bg-slate-800')
+            .scrollIntoView({behavior: 'smooth', block: 'start'});
+    }
+
     function joinNicely(parts) {
         if (parts.length <= 1) return parts.join('');
         if (parts.length === 2) return parts[0] + ' and ' + parts[1];
@@ -740,14 +792,14 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             '<span class="text-slate-400 text-base">(' + Number(p.new || 0) + ' new)</span>' +
             (!counted ? '' :
             '<br><span class="text-base">' +
-            '<span class="result-safe font-semibold">' + Number(p.green || 0) + ' clean</span>' +
+            countLink('clean', Number(p.green || 0) + ' clean', 'result-safe font-semibold') +
             '<span class="text-slate-500"> &middot; </span>' +
-            '<span class="text-slate-400">' + Number(p.unknown || 0) + ' no verdict</span>' +
+            countLink('unknown', Number(p.unknown || 0) + ' no verdict', 'text-slate-400') +
             '<span class="text-slate-500"> &middot; </span>' +
-            '<span class="text-slate-300">' + Number(p.look || 0) + ' worth a closer look</span>' +
+            countLink('look', Number(p.look || 0) + ' worth a closer look', 'text-slate-300') +
             '<span class="text-slate-500"> &middot; </span>' +
             (confirmed
-                ? '<span class="result-unsafe font-semibold">' + confirmed + ' confirmed</span>'
+                ? countLink('confirmed', confirmed + ' confirmed', 'result-unsafe font-semibold')
                 : '<span class="result-safe font-semibold">none confirmed malicious</span>') +
             '</span>');
 
@@ -771,8 +823,9 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         document.getElementById('activity-recent').innerHTML = rec.map(r => {
             const d = String(r.date || '').split('T')[0];
             const st = DOT[r.state] ? r.state : 'unknown';
-            return '<span class="inline-flex items-center gap-1.5 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs" ' +
-                'title="' + escapeAttr((WHAT[st] || '') + ' • ' + (r.date || '')) + '">' +
+            return '<span class="chip inline-flex items-center gap-1.5 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs" ' +
+                'data-pkg="' + escapeAttr(r.package || '') + '" ' +
+                'title="' + escapeAttr((WHAT[st] || '') + ' • ' + (r.date || '') + ' — open this package') + '">' +
                 '<span class="block ' + DOT[st] + '" style="margin-right:0"></span>' +
                 '<span class="text-blue-300">' + escapeHtml(r.package || '') + '</span>' +
                 '<span class="text-slate-500">' + escapeHtml(d) + '</span>' +
@@ -874,21 +927,32 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         });
     }
 
+    // The same rule as package_state() in generate-dashboard.py. The headline
+    // counts and these filters must agree: clicking "2 confirmed" has to produce
+    // exactly two rows, or one of the two numbers is lying.
+    function packageState(pkg) {
+        const audit = pkg.audit_majority;
+        const judge = pkg.judge_majority;
+        if (audit === 'unsafe' && judge === 'unsafe') return 'confirmed';
+        if (judge === 'safe') return 'clean';
+        if (audit === 'unsafe' || audit === 'contested' || judge === 'unsafe') return 'look';
+        if (audit === 'safe') return 'clean';
+        return 'unknown';
+    }
+
     function matchesPreset(pkg, preset) {
         switch (preset) {
             case 'all': return true;
-            case 'needs-attention':
-                return pkg.audit_majority === 'unsafe' && pkg.judge_majority === 'unsafe';
-            case 'confirmed-safe':
-                return pkg.audit_majority === 'safe' && (pkg.judge_majority === 'safe' || !pkg.judge_majority);
-            case 'contested':
-                return pkg.judge_majority && pkg.audit_majority !== pkg.judge_majority
-                    && (pkg.audit_majority === 'safe' || pkg.audit_majority === 'unsafe')
-                    && (pkg.judge_majority === 'safe' || pkg.judge_majority === 'unsafe');
-            case 'unsafe':
-                return pkg.audit_majority === 'unsafe';
-            case 'safe':
-                return pkg.audit_majority === 'safe';
+            case 'confirmed':
+            case 'look':
+            case 'clean':
+            case 'unknown':
+                return packageState(pkg) === preset;
+            case 'overridden':
+                // The judge disagreed with an audit that called it unsafe. Worth
+                // its own view: these are the false positives being caught.
+                return pkg.judge_majority === 'safe'
+                    && (pkg.audits || []).some(a => a.result === 'unsafe' || a.result === 'inconclusive');
             case 'unjudged':
                 return !pkg.judges || pkg.judges.length === 0;
             default: return true;
@@ -1115,6 +1179,15 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             btn.classList.add('active');
             currentFilter = btn.dataset.filter;
             renderTable();
+        });
+
+        // The activity panel: a headline count filters the table, a package chip
+        // opens that package. Delegated, because the panel is re-rendered.
+        document.getElementById('activity').addEventListener('click', e => {
+            const link = e.target.closest('.count-link');
+            if (link) { applyFilter(link.dataset.filter); return; }
+            const chip = e.target.closest('.chip');
+            if (chip && chip.dataset.pkg) openPackage(chip.dataset.pkg);
         });
 
         document.querySelectorAll('th[data-sort]').forEach(th => {
