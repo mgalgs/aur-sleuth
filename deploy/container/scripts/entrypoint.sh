@@ -722,6 +722,18 @@ do_publish() {
     validate_reports_tree "$pub" "$sha" \
         || die "refusing to publish $REPORTS_BRANCH; see the disallowed paths above"
 
+    # The content check too, the same one the review stage runs. It is
+    # decidable here, so it is decided here: a publish that relied on a review
+    # having run first would publish a leaked hostname the moment someone
+    # turned the dry run off without one.
+    local leaks
+    leaks="$(internal_string_paths "$pub" "$sha")"
+    if [[ -n "$leaks" ]]; then
+        log "Internal strings ($INTERNAL_STRINGS) found in $(wc -l <<< "$leaks") file(s):"
+        head -20 <<< "$leaks" | sed 's/^/  /'
+        die "refusing to publish $REPORTS_BRANCH; run quarantine first"
+    fi
+
     # Where origin is now. Every publish adds a page-rebuild commit on top of
     # the reviewed one, and the store only learns of it at the next prepare;
     # a second publish before then would build on the old head and be

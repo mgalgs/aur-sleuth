@@ -597,6 +597,50 @@ else
     bad "review should pass after quarantine"
 fi
 
+echo "== publish applies the content check itself, dry run included =="
+# The review stage is advice a caller may skip; the publish stage must not
+# depend on it having run. Driven end to end in dry-run mode: no network
+# (origin is unreachable, the AUR dump is a missing file), no push.
+eval "$(sed -n '/^check_expected_head()/,/^}/p' "$ENTRYPOINT")"
+eval "$(sed -n '/^rebase_onto_origin()/,/^}/p' "$ENTRYPOINT")"
+eval "$(sed -n '/^do_publish()/,/^}/p' "$ENTRYPOINT")"
+
+publish_dry() (
+    set +e
+    # All read by do_publish and the functions it calls; scoped to this subshell.
+    # shellcheck disable=SC2030,SC2031,SC2034
+    GIT_STORE="$1" DATA_DIR="$tmp/data" SRC_DIR="$tmp/src" MODE=publish \
+        FETCH_URL=https://example.invalid/r.git PUBLISH_DRY_RUN=true \
+        EXPECT_HEAD="" REVIEW_JSON_IN="" FUNDING_URL="" \
+        AUR_METADATA_URL="file://$tmp/no-such-dump"
+    # shellcheck disable=SC2329  # both called by do_publish
+    die() { echo "die: $*"; exit 1; }
+    # shellcheck disable=SC2329
+    log() { echo "$*"; }
+    # Nested, so die's exit ends do_publish and not this helper.
+    (do_publish) 2>&1
+    echo "exit=$?"
+)
+# $store still points at the leaky tip, from the review checks above.
+out="$(publish_dry "$store")"
+if grep -q 'exit=1' <<< "$out" && grep -q 'run quarantine' <<< "$out"; then
+    ok "a branch carrying an internal string is refused by publish itself"
+else
+    bad "publish did not refuse the leak: $out"
+fi
+if grep -q 'pkg-b/1.md' <<< "$out"; then
+    ok "the leaky path is named"
+else
+    bad "publish did not name the leaky path: $out"
+fi
+# The cleaned store publishes, as far as a dry run goes.
+out="$(publish_dry "$qstore")"
+if grep -q 'exit=0' <<< "$out" && grep -q 'Dry run: would push' <<< "$out"; then
+    ok "the quarantined branch passes publish's own check"
+else
+    bad "publish refused the cleaned branch: $out"
+fi
+
 echo
 if (( fails > 0 )); then
     echo "FAILED: $fails check(s)"
