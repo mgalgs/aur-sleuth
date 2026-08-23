@@ -1,0 +1,32 @@
+{
+  "package": "ktailctl",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The flagged script (add-neon-apt-repo.sh) is a development/CI tool not executed during makepkg. PKGBUILD and build-relevant files show no malicious behavior.",
+  "disagreement_analysis": "qwen incorrectly flagged a non-build script as unsafe; deepseek missed reviewing that script but correctly assessed build-relevant files.",
+  "coverage_issues": [
+    "deepseek failed to review scripts/ directory (including add-neon-apt-repo.sh)",
+    "qwen over-prioritized CI scripts while missing application source files"
+  ],
+  "false_positives": [
+    "qwen: add-neon-apt-repo.sh - Development script not executed during build/install"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Improve file prioritization: PKGBUILD-referenced scripts > source code > CI/dev tools",
+    "Enforce context: Explicitly remind models to ignore non-build scripts unless PKGBUILD-referenced",
+    "Cross-check coverage: When models disagree, compare file review sets for critical gaps"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 12481,
+    "completion_tokens": 1474,
+    "cost": 0.0124217
+  },
+  "audits_judged": [
+    "20260823-192225-qwen-qwen3-235b-a22b-2507.md",
+    "20260823-192330-deepseek-deepseek-v4-flash.md"
+  ]
+}
