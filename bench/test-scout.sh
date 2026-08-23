@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+# Test bench/scout.py: the code-only shortlist of catalog models that could
+# undercut a seat. Offline: a synthetic catalog, synthetic benchmark results,
+# no network and no API call.
+#
+# Usage: bash bench/test-scout.sh [-q]
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+QUIET=false
+[[ "${1:-}" == "-q" ]] && QUIET=true
+
+fails=0
+ok()  { $QUIET || printf '  ok    %s\n' "$1"; }
+bad() { printf '  FAIL  %s\n' "$1"; fails=$(( fails + 1 )); }
+
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+
+NOW=1787400000
+RECENT=$(( NOW - 10 * 86400 ))   # inside the "new" window
+OLD=$(( NOW - 400 * 86400 ))     # far outside it
+
+# A catalog with every case: the seats themselves, a cheap capable model, a
+# brand-new one, a free tier, a small-context model, an image-only model,
+# a ':free' variant, and one too expensive to undercut anything.
+cat > "$tmp/catalog.json" <<JSON
+{"data": [
+ {"id":"seat/judge","name":"Judge","created":$OLD,"context_length":128000,
+  "architecture":{"input_modalities":["text"],"output_modalities":["text"]},
+  "pricing":{"prompt":"0.0000010","completion":"0.0000020"}},
+ {"id":"seat/audit","name":"Audit","created":$OLD,"context_length":128000,
+  "architecture":{"input_modalities":["text"],"output_modalities":["text"]},
+  "pricing":{"prompt":"0.0000002","completion":"0.0000004"}},
+ {"id":"new/cheap","name":"New Cheap","created":$RECENT,"context_length":200000,
+  "architecture":{"input_modalities":["text","image"],"output_modalities":["text"]},
+  "pricing":{"prompt":"0.0000001","completion":"0.0000002"}},
+ {"id":"old/mid","name":"Old Mid","created":$OLD,"context_length":64000,
+  "architecture":{"modality":"text->text"},
+  "pricing":{"prompt":"0.0000005","completion":"0.0000010"}},
+ {"id":"free/model","name":"Free","created":$RECENT,"context_length":128000,
+  "architecture":{"input_modalities":["text"],"output_modalities":["text"]},
+  "pricing":{"prompt":"0","completion":"0"}},
+ {"id":"tiny/context","name":"Tiny","created":$RECENT,"context_length":8000,
+  "architecture":{"input_modalities":["text"],"output_modalities":["text"]},
+  "pricing":{"prompt":"0.0000001","completion":"0.0000001"}},
+ {"id":"image/only","name":"Pics","created":$RECENT,"context_length":128000,
+  "architecture":{"input_modalities":["image"],"output_modalities":["image"]},
+  "pricing":{"prompt":"0.0000001","completion":"0.0000001"}},
+ {"id":"colon/model:free","name":"Colon","created":$RECENT,"context_length":128000,
+  "architecture":{"input_modalities":["text"],"output_modalities":["text"]},
+  "pricing":{"prompt":"0.0000001","completion":"0.0000001"}},
+ {"id":"pricey/giant","name":"Giant","created":$RECENT,"context_length":1000000,
+  "architecture":{"input_modalities":["text"],"output_modalities":["text"]},
+  "pricing":{"prompt":"0.0000100","completion":"0.0000300"}}
+]}
+JSON
+
+# A past benchmark scored one of the candidates.
+mkdir -p "$tmp/bench/20260801-000000"
+cat > "$tmp/bench/20260801-000000/result.json" <<JSON
+{"run_id":"20260801-000000","models":[{"model":"old/mid","agreement":0.947}]}
+JSON
+
+run_scout() {
+    python3 bench/scout.py --catalog "$tmp/catalog.json" --out "$tmp/out.json" \
+        --bench-dir "$tmp/bench" --now "$NOW" \
+        --seats "audit=seat/audit;judge=seat/judge" 2>/dev/null
+}
+
+echo "== the shortlist keeps the right models =="
+run_scout
+have() { python3 -c "
+import json, sys
+d = json.load(open('$tmp/out.json'))
+ids = [c['id'] for c in d['candidates']]
+sys.exit(0 if ('$1' in ids) == ($2) else 1)
+" ; }
+for wanted in new/cheap old/mid; do
+    if have "$wanted" True; then ok "$wanted is a candidate"; else bad "$wanted missing"; fi
+done
+for dropped in seat/judge seat/audit free/model tiny/context image/only colon/model:free pricey/giant; do
+    if have "$dropped" False; then ok "$dropped excluded"; else bad "$dropped should be excluded"; fi
+done
+
+echo "== the fields the card shows are right =="
+if python3 - "$tmp/out.json" <<'PY'; then ok "savings, newness, scores and order check out"; else bad "candidate fields wrong"; fi
+import json, sys
+d = json.load(open(sys.argv[1]))
+by = {c["id"]: c for c in d["candidates"]}
+cheap, mid = by["new/cheap"], by["old/mid"]
+assert cheap["new"] is True and mid["new"] is False
+# new/cheap: 0.125/mtok vs judge 1.25 -> 90%; vs audit 0.25 -> 50%.
+assert cheap["savings_pct"] == {"judge": 90, "audit": 50}, cheap["savings_pct"]
+# old/mid (0.625) undercuts only the judge (1.25).
+assert mid["cheaper_than"] == ["judge"], mid["cheaper_than"]
+assert mid["benchmarked"] == {"agreement": 0.947, "run": "20260801-000000"}
+assert "benchmarked" not in cheap
+# Cheapest first.
+assert [c["id"] for c in d["candidates"]] == ["new/cheap", "old/mid"]
+assert d["seats"]["judge"]["blended_per_mtok"] == 1.25
+PY
+
+echo "== a missing catalog is quiet, not an error =="
+if python3 bench/scout.py --catalog "$tmp/nope.json" --out "$tmp/none.json" --now "$NOW" 2>/dev/null; then
+    ok "exit 0 with no catalog"
+else
+    bad "a missing catalog must not fail the run"
+fi
+if [[ -e "$tmp/none.json" ]]; then
+    bad "no catalog should write no shortlist"
+else
+    ok "and it writes nothing"
+fi
+
+echo
+if (( fails > 0 )); then
+    echo "FAILED: $fails check(s)"
+    exit 1
+fi
+echo "scout: all checks passed"
