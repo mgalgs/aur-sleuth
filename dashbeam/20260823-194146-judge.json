@@ -1,0 +1,31 @@
+{
+  "package": "dashbeam",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The flagged script (build-sources.sh) is a Flatpak helper tool not executed during AUR package build/install. PKGBUILD doesn't reference it, and it's irrelevant to makepkg execution.",
+  "disagreement_analysis": "qwen incorrectly flagged build-sources.sh as unsafe due to unpinned git clone, while deepseek correctly recognized it as unused development tooling.",
+  "coverage_issues": [
+    "Both models skipped binary source tarball audit"
+  ],
+  "false_positives": [
+    "build-sources.sh: Development script unused in AUR build process"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Improve file prioritization: Weight PKGBUILD-referenced files higher than unrelated scripts",
+    "Enhance context awareness: Explicitly prompt models to verify script execution during makepkg",
+    "Reduce false positives: Add rules to ignore non-build scripts like Flatpak/CI helpers"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 9964,
+    "completion_tokens": 1139,
+    "cost": 0.009822299999999999
+  },
+  "audits_judged": [
+    "20260823-185424-qwen-qwen3-235b-a22b-2507.md",
+    "20260823-185348-deepseek-deepseek-v4-flash.md"
+  ]
+}
