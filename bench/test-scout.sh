@@ -38,6 +38,7 @@ cat > "$tmp/catalog.json" <<JSON
   "pricing":{"prompt":"0.0000001","completion":"0.0000002"}},
  {"id":"old/mid","name":"Old Mid","created":$OLD,"context_length":64000,
   "architecture":{"modality":"text->text"},
+  "reasoning":{"mandatory":true,"default_enabled":true},
   "pricing":{"prompt":"0.0000005","completion":"0.0000010"}},
  {"id":"free/model","name":"Free","created":$RECENT,"context_length":128000,
   "architecture":{"input_modalities":["text"],"output_modalities":["text"]},
@@ -60,7 +61,7 @@ JSON
 # A past benchmark scored one of the candidates.
 mkdir -p "$tmp/bench/20260801-000000"
 cat > "$tmp/bench/20260801-000000/result.json" <<JSON
-{"run_id":"20260801-000000","models":[{"model":"old/mid","agreement":0.947}]}
+{"run_id":"20260801-000000","models":[{"model":"old/mid","agreement":0.947,"cost_per_package":0.0113}]}
 JSON
 
 run_scout() {
@@ -95,7 +96,10 @@ assert cheap["new"] is True and mid["new"] is False
 assert cheap["savings_pct"] == {"judge": 90, "audit": 50}, cheap["savings_pct"]
 # old/mid (0.625) undercuts only the judge (1.25).
 assert mid["cheaper_than"] == ["judge"], mid["cheaper_than"]
-assert mid["benchmarked"] == {"agreement": 0.947, "run": "20260801-000000"}
+# A past benchmark brings MEASURED cost along: tokens actually used times
+# their price, which is the number that outranks any catalog price.
+assert mid["benchmarked"] == {"agreement": 0.947, "run": "20260801-000000",
+                              "cost_per_package": 0.0113}
 assert "benchmarked" not in cheap
 # Cheapest first.
 assert [c["id"] for c in d["candidates"]] == ["new/cheap", "old/mid"]

@@ -145,9 +145,12 @@ def spend_shares(data_dir, now, days=7):
 
 
 def load_bench_scores(bench_dir):
-    """{model: {'agreement': float, 'run': id}} from the newest result that
-    scored each model. A result that does not parse is skipped: benchmarks
-    are inputs here, not something to fail over."""
+    """{model: {'agreement', 'run', 'cost_per_package'}} from the newest
+    result that scored each model. The measured cost matters more than any
+    price the catalog can offer: it is tokens actually used times what they
+    cost, so a token-hungry model shows its real appetite here. A result
+    that does not parse is skipped: benchmarks are inputs, not something to
+    fail over."""
     scores = {}
     for path in sorted(glob.glob(os.path.join(bench_dir, "*", "result.json"))):
         try:
@@ -160,7 +163,11 @@ def load_bench_scores(bench_dir):
             model = str(m.get("model") or "")
             agreement = m.get("agreement")
             if model and isinstance(agreement, (int, float)):
-                scores[model] = {"agreement": round(float(agreement), 3), "run": run}
+                entry = {"agreement": round(float(agreement), 3), "run": run}
+                cpp = m.get("cost_per_package")
+                if isinstance(cpp, (int, float)):
+                    entry["cost_per_package"] = round(float(cpp), 4)
+                scores[model] = entry
     return scores
 
 
