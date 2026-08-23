@@ -34,6 +34,7 @@ trap 'rm -rf "$tmp"' EXIT
 run_discover() {
     (
         export MIN_VOTES="$3" LOOKBACK_HOURS=24 SEED_TOP="$4" UPDATED_SHARE="$5"
+        export UPDATED_COUNT="${6:-0}" SEED_COUNT="${7:-0}"
         export METADATA_CACHE="$1"
         eval "$(sed -n '/^discover_packages()/,/^}/p' bench/pipeline.sh)"
         discover_packages "$2" 2>/dev/null
@@ -92,6 +93,49 @@ if [[ "$(head -1 <<< "$got")" == "U1" ]]; then
     ok "excluded high-Popularity packages do not leak to the top"
 else
     bad "expected U1 first, got $(head -1 <<< "$got")"
+fi
+
+echo "== sized runs: the counts cap each stream =="
+got="$(run_discover "$tmp/a.json.gz" "$tmp/a.tsv" 0 3 0.8 2 1)"
+# updated capped to its top 2, seed to its top 1; merge order holds.
+want=$'U1\nU2\nS1'
+if [[ "$got" == "$want" ]]; then
+    ok "updated-count 2 + seed-count 1 -> exactly those three, best first"
+else
+    bad "count caps wrong"
+    printf '    want: %s\n' "$(echo "$want" | tr '\n' ' ')"
+    printf '    got:  %s\n' "$(echo "$got"  | tr '\n' ' ')"
+fi
+# The seed count stands in for SEED_TOP, so "Y popular" works even when the
+# seed is configured off.
+got="$(run_discover "$tmp/a.json.gz" "$tmp/a.tsv" 0 0 0.8 0 2)"
+if grep -qx "S1" <<< "$got" && grep -qx "S2" <<< "$got" && ! grep -qx "S3" <<< "$got"; then
+    ok "seed-count 2 opens the seed stream despite SEED_TOP=0, capped at 2"
+else
+    bad "seed-count with SEED_TOP=0: got $(echo "$got" | tr '\n' ' ')"
+fi
+
+echo "== a named-packages run skips discovery and its filters =="
+data="$tmp/named"
+mkdir -p "$data"
+out="$(AUR_SLEUTH_DATA_DIR="$data" bash bench/pipeline.sh --dry-run \
+        --packages icaclient,snapd --skip-judge --skip-dashboard --no-push 2>&1 || true)"
+if grep -q '2 packages need auditing' <<< "$out"; then
+    ok "--packages icaclient,snapd yields exactly 2 candidates"
+else
+    bad "named packages did not become the candidate list"
+fi
+if bash bench/pipeline.sh --packages 'a;id' --dry-run --skip-judge \
+        --skip-dashboard --no-push >/dev/null 2>&1; then
+    bad "should have refused --packages 'a;id'"
+else
+    ok "refused a package list with shell metacharacters"
+fi
+if bash bench/pipeline.sh --escalate '-rf' --dry-run --skip-judge \
+        --skip-dashboard --no-push >/dev/null 2>&1; then
+    bad "should have refused --escalate '-rf'"
+else
+    ok "refused an escalation list starting with a hyphen"
 fi
 
 echo "== MIN_VOTES is a hard floor on the updated stream =="

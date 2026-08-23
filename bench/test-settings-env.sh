@@ -75,6 +75,10 @@ expect_flags "--daily-budget 1.00 --jobs 2" \
 expect_flags "--updated-share 0.8" AUR_SLEUTH_UPDATED_SHARE=0.8
 expect_flags "--seed-top 1000" AUR_SLEUTH_SEED_TOP=1000
 expect_flags "--audit-timeout 600" AUR_SLEUTH_AUDIT_TIMEOUT=600
+expect_flags "--updated-count 25" AUR_SLEUTH_UPDATED_COUNT=25
+expect_flags "--seed-count 10" AUR_SLEUTH_SEED_COUNT=10
+expect_flags "--packages icaclient,snapd" AUR_SLEUTH_PACKAGES=icaclient,snapd
+expect_flags "--escalate pcloud-drive" AUR_SLEUTH_ESCALATE=pcloud-drive
 
 echo "== a budget that is not a number is code, so refuse it =="
 expect_refused 'AUR_SLEUTH_DAILY_BUDGET=1) or __import__("os").system("id") or (0'
@@ -101,6 +105,15 @@ expect_refused "AUR_SLEUTH_UPDATED_SHARE=2"
 expect_refused "AUR_SLEUTH_AUDIT_TIMEOUT=0"
 expect_refused "AUR_SLEUTH_AUDIT_TIMEOUT=00"
 expect_refused "AUR_SLEUTH_AUDIT_TIMEOUT=-5"
+# Package lists: a name may not start with a hyphen (it would read as a flag),
+# and shell metacharacters are not package names.
+expect_refused "AUR_SLEUTH_PACKAGES=-rf"
+expect_refused "AUR_SLEUTH_PACKAGES=a,,b"
+expect_refused "AUR_SLEUTH_PACKAGES=a b"
+# shellcheck disable=SC2016  # the literal text is the point
+expect_refused 'AUR_SLEUTH_ESCALATE=$(id)'
+expect_refused "AUR_SLEUTH_ESCALATE=pkg;id"
+expect_refused "AUR_SLEUTH_UPDATED_COUNT=ten"
 
 echo "== the pipeline takes the last flag, so the environment wins =="
 out="$(bash bench/pipeline.sh --daily-budget 2.00 --jobs 8 \

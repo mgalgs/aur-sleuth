@@ -9,6 +9,8 @@
 #                     [--audit-timeout SECONDS] [--audit-models LIST]
 #                     [--judge-model MODEL] [--reaudit-model MODEL]
 #                     [--audit-budget-share FRACTION]
+#                     [--updated-count N] [--seed-count N]
+#                     [--packages LIST] [--escalate LIST]
 #
 # State is derived from the audit-reports branch (no local state files needed).
 # Daily spend is tracked in $DATA_DIR/pipeline/spend-YYYY-MM-DD.log.
@@ -56,6 +58,17 @@ AUDIT_MODELS="qwen/qwen3-235b-a22b-2507,deepseek/deepseek-v4-flash"
 JUDGE_MODEL="deepseek/deepseek-r1"
 REAUDIT_MODEL="anthropic/claude-sonnet-4.6"
 PACKAGES_FILE=""
+# Sized runs: cap each discovery stream instead of letting the budget cut the
+# interleaved list. 0 means uncapped -- the full-run default.
+UPDATED_COUNT=0
+SEED_COUNT=0
+# A run over named packages only (comma-separated). Skips discovery, and
+# audits them even at an already-audited version: naming a package is asking.
+PACKAGES=""
+# Escalation: for each named package, a fresh audit by REAUDIT_MODEL and then
+# a forced judge ruling over the enlarged report set. The operator's closer
+# look at a package the judge would otherwise never revisit.
+ESCALATE=""
 
 DATA_DIR="${AUR_SLEUTH_DATA_DIR:-$HOME/aur-sleuth-data}"
 METADATA_CACHE="$DATA_DIR/packages-meta-ext-v1.json.gz"
@@ -83,9 +96,25 @@ while [[ $# -gt 0 ]]; do
         --judge-model) JUDGE_MODEL="$2"; shift 2 ;;
         --reaudit-model) REAUDIT_MODEL="$2"; shift 2 ;;
         --packages-file) PACKAGES_FILE="$2"; shift 2 ;;
+        --updated-count) UPDATED_COUNT="$2"; shift 2 ;;
+        --seed-count) SEED_COUNT="$2"; shift 2 ;;
+        --packages) PACKAGES="$2"; shift 2 ;;
+        --escalate) ESCALATE="$2"; shift 2 ;;
         *) echo "Unknown arg: $1" >&2; exit 1 ;;
     esac
 done
+
+[[ "$UPDATED_COUNT" =~ ^[0-9]+$ ]] \
+    || { echo "--updated-count must be a whole number, got '$UPDATED_COUNT'" >&2; exit 1; }
+[[ "$SEED_COUNT" =~ ^[0-9]+$ ]] \
+    || { echo "--seed-count must be a whole number, got '$SEED_COUNT'" >&2; exit 1; }
+# Package names, comma-separated. The AUR's own charset; checked here because
+# each name ends up as a shell argument and a path segment.
+PKG_LIST_RE='^[A-Za-z0-9@._+][A-Za-z0-9@._+-]*(,[A-Za-z0-9@._+][A-Za-z0-9@._+-]*)*$'
+[[ -z "$PACKAGES" || "$PACKAGES" =~ $PKG_LIST_RE ]] \
+    || { echo "--packages is not a comma-separated package list: '$PACKAGES'" >&2; exit 1; }
+[[ -z "$ESCALATE" || "$ESCALATE" =~ $PKG_LIST_RE ]] \
+    || { echo "--escalate is not a comma-separated package list: '$ESCALATE'" >&2; exit 1; }
 
 IFS=',' read -ra MODEL_LIST <<< "$AUDIT_MODELS"
 
@@ -264,6 +293,8 @@ discover_packages() {
     LOOKBACK_HOURS="$LOOKBACK_HOURS" \
     SEED_TOP="$SEED_TOP" \
     UPDATED_SHARE="$UPDATED_SHARE" \
+    UPDATED_COUNT="$UPDATED_COUNT" \
+    SEED_COUNT="$SEED_COUNT" \
     AUDITED_INDEX="$audited_index" \
     python3 << 'PYEOF'
 import json, gzip, os, sys, time
@@ -273,6 +304,13 @@ min_votes = int(os.environ["MIN_VOTES"])
 lookback_hours = int(os.environ["LOOKBACK_HOURS"])
 seed_top = int(os.environ.get("SEED_TOP", "0"))
 updated_share = float(os.environ.get("UPDATED_SHARE", "0.8"))
+# Sized runs: a positive count caps its stream outright. The seed count also
+# stands in for SEED_TOP, so "Y popular packages" works even when the seed is
+# configured off.
+updated_count = int(os.environ.get("UPDATED_COUNT", "0"))
+seed_count = int(os.environ.get("SEED_COUNT", "0"))
+if seed_count > 0:
+    seed_top = seed_count
 audited_index = os.environ["AUDITED_INDEX"]
 
 # Load audited versions
@@ -317,6 +355,8 @@ updated = [
          and p.get("NumVotes", 0) >= min_votes),
         key=popularity, reverse=True)
 ]
+if updated_count > 0:
+    updated = updated[:updated_count]
 
 # Stream 2: the top SEED_TOP most popular packages overall, minus anything
 # already in the updated stream.
@@ -479,6 +519,44 @@ main() {
     log "Models: ${MODEL_LIST[*]} | Judge: $JUDGE_MODEL | Re-audit: $REAUDIT_MODEL"
     log "Daily spend so far: \$$(get_daily_spent)"
 
+    # Escalation is its own run: no discovery, no audit loop. For each named
+    # package, a fresh audit by the escalation model, then a forced judge
+    # ruling over the enlarged report set. It is judge work, so it has top
+    # priority in the budget: an explicit escalation runs even on a spent day,
+    # and the overrun rules above apply.
+    if [[ -n "$ESCALATE" ]]; then
+        log ""
+        log "=== Escalation ==="
+        local esc_marker="$PIPELINE_DIR/.escalate-marker"
+        touch "$esc_marker"
+        local esc_pkgs=()
+        IFS=',' read -ra esc_pkgs <<< "$ESCALATE"
+        local pkg
+        for pkg in "${esc_pkgs[@]}"; do
+            bash bench/judge.sh --package "$pkg" --escalate \
+                --audit-model "$REAUDIT_MODEL" --judge-model "$JUDGE_MODEL" \
+                --audit-timeout "$AUDIT_TIMEOUT" 2>&1
+        done
+        local esc_cost
+        esc_cost=$(sum_judge_costs_since "$esc_marker")
+        if python3 -c "import sys; sys.exit(0 if float('$esc_cost') > 0 else 1)" 2>/dev/null; then
+            record_cost "$esc_cost"
+            log "Escalation cost: \$$esc_cost"
+        fi
+        push_reports
+        if ! $SKIP_DASHBOARD; then
+            log ""
+            log "=== Dashboard Phase ==="
+            python3 bench/generate-dashboard.py 2>&1
+            push_reports
+        fi
+        log ""
+        log "=== Escalation Complete ==="
+        log "Daily spend: \$$(get_daily_spent) / \$$DAILY_BUDGET"
+        log "Budget remaining: \$$(budget_remaining)"
+        return 0
+    fi
+
     if is_over_budget; then
         log "Daily budget already exhausted (\$$(get_daily_spent) >= \$$DAILY_BUDGET). Exiting."
         return 0
@@ -486,7 +564,12 @@ main() {
 
     local candidates_file="$PIPELINE_DIR/candidates.txt"
 
-    if [[ -n "$PACKAGES_FILE" ]]; then
+    if [[ -n "$PACKAGES" ]]; then
+        # Named packages skip discovery and its already-audited filter both:
+        # naming a package is asking for a fresh audit of it.
+        log "Auditing the named packages: $PACKAGES"
+        tr ',' '\n' <<< "$PACKAGES" > "$candidates_file"
+    elif [[ -n "$PACKAGES_FILE" ]]; then
         log "Using package list from $PACKAGES_FILE"
         cp "$PACKAGES_FILE" "$candidates_file"
     else

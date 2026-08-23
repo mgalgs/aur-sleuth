@@ -159,6 +159,8 @@ The pipeline's own `--audit-timeout` (default 900 seconds) caps a whole package/
 
 The pipeline's tunables can also arrive as environment variables on the `audit` stage, each checked against a type at the boundary and appended after the verb's own flags, so the environment wins: `AUR_SLEUTH_DAILY_BUDGET`, `AUR_SLEUTH_AUDIT_MODELS`, `AUR_SLEUTH_JUDGE_MODEL`, `AUR_SLEUTH_REAUDIT_MODEL`, `AUR_SLEUTH_JOBS`, `AUR_SLEUTH_MIN_VOTES`, `AUR_SLEUTH_LOOKBACK_HOURS`, `AUR_SLEUTH_SEED_TOP`, `AUR_SLEUTH_UPDATED_SHARE`, `AUR_SLEUTH_AUDIT_TIMEOUT`. This is how a deployment changes a setting without a redeploy: the baseline stays in the job's arguments, a projected ConfigMap overrides individual values.
 
+Four more shape a single run rather than the deployment: `AUR_SLEUTH_UPDATED_COUNT` and `AUR_SLEUTH_SEED_COUNT` cap the two discovery streams for a sized run ("audit X recently updated and Y popular packages"); `AUR_SLEUTH_PACKAGES` audits exactly the named packages, skipping discovery and its already-audited filter; `AUR_SLEUTH_ESCALATE` escalates the named packages — a fresh audit by the escalation model (`AUR_SLEUTH_REAUDIT_MODEL`), then a forced judge ruling over the enlarged report set. Escalation is judge work: it runs even on a spent day, under the overrun rules above. The audit stage also drops a copy of OpenRouter's model catalog at `$DATA_DIR/models-catalog.json` for the operations page's model pickers, best-effort.
+
 ## Verifying a change
 
 ```bash

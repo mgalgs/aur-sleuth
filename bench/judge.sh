@@ -2,7 +2,7 @@
 # Judge audit reports: detect disagreements, shallow coverage, and quality issues.
 # A high-intelligence "judge" model reviews reports and optionally triggers re-audits.
 #
-# Usage: judge.sh [--package PKG | --all] [--force] [--re-audit] [--re-audit-pending] [--judge-model MODEL] [--audit-model MODEL] [--judge-dir DIR] [--no-archive] [--audit-timeout SECONDS]
+# Usage: judge.sh [--package PKG | --all] [--force] [--escalate] [--re-audit] [--re-audit-pending] [--judge-model MODEL] [--audit-model MODEL] [--judge-dir DIR] [--no-archive] [--audit-timeout SECONDS]
 #
 # Triggers (automatic), checked in this order:
 #   - Error reports (unknown result, zero cost): nothing to second-guess
@@ -29,6 +29,7 @@ JUDGE_DIR="$DATA_DIR/judge"
 PACKAGE=""
 ALL=false
 FORCE=false
+ESCALATE=false
 LOCK_FILE="$DATA_DIR/bulk-audit/archive.lock"
 NO_ARCHIVE=false
 
@@ -38,6 +39,7 @@ while [[ $# -gt 0 ]]; do
         --package) PACKAGE="$2"; shift 2 ;;
         --all) ALL=true; shift ;;
         --force) FORCE=true; shift ;;
+        --escalate) ESCALATE=true; shift ;;
         --re-audit) RE_AUDIT=true; shift ;;
         --re-audit-pending) RE_AUDIT_PENDING=true; shift ;;
         --judge-model) JUDGE_MODEL="$2"; shift 2 ;;
@@ -599,6 +601,17 @@ main() {
         return 0
     fi
 
+    # --escalate: the operator's closer look at one package. A fresh audit by
+    # the escalation model (--audit-model), then a forced judge ruling over
+    # the enlarged report set -- so a package the judge already ruled on, and
+    # would otherwise never revisit, gets settled on stronger evidence.
+    if $ESCALATE; then
+        [[ -n "$PACKAGE" ]] || { echo "--escalate needs --package" >&2; exit 1; }
+        log "Escalating $PACKAGE: auditing with $AUDIT_MODEL, then judging with $JUDGE_MODEL"
+        do_reaudit "$PACKAGE"
+        FORCE=true
+    fi
+
     local packages=()
     if [[ -n "$PACKAGE" ]]; then
         packages=("$PACKAGE")
@@ -622,7 +635,9 @@ main() {
             done_before=$((done_before + 1))
             continue
         elif (( rc != 0 )); then
-            if $ALL; then
+            if $ESCALATE; then
+                trigger="escalation"
+            elif $ALL; then
                 trigger="routine-review"
             else
                 skipped=$((skipped + 1))

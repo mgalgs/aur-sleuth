@@ -260,6 +260,10 @@ collect_audit_env_flags() {
         "AUR_SLEUTH_AUDIT_MODELS:--audit-models:models"
         "AUR_SLEUTH_JUDGE_MODEL:--judge-model:model"
         "AUR_SLEUTH_REAUDIT_MODEL:--reaudit-model:model"
+        "AUR_SLEUTH_UPDATED_COUNT:--updated-count:int"
+        "AUR_SLEUTH_SEED_COUNT:--seed-count:int"
+        "AUR_SLEUTH_PACKAGES:--packages:packages"
+        "AUR_SLEUTH_ESCALATE:--escalate:packages"
     )
     local spec var flag kind value rest
 
@@ -294,6 +298,11 @@ collect_audit_env_flags() {
             models)
                 [[ "$value" =~ ^[A-Za-z0-9._/-]+(,[A-Za-z0-9._/-]+)*$ ]] \
                     || die "$var is not a comma-separated model list, got '$value'" ;;
+            packages)
+                # The AUR's package-name charset; a name may not start with a
+                # hyphen, or it reads as a flag downstream.
+                [[ "$value" =~ ^[A-Za-z0-9@._+][A-Za-z0-9@._+-]*(,[A-Za-z0-9@._+][A-Za-z0-9@._+-]*)*$ ]] \
+                    || die "$var is not a comma-separated package list, got '$value'" ;;
         esac
 
         AUDIT_ENV_FLAGS+=("$flag" "$value")
@@ -305,6 +314,19 @@ do_audit() {
     [[ -n "${OPENAI_API_KEY:-}" ]] || die "OPENAI_API_KEY is not set"
     [[ -d "$GIT_STORE" ]] || die "$GIT_STORE missing; run the prepare stage first"
     cd "$SRC_DIR"
+    # A copy of OpenRouter's model catalog, for the page's model pickers. The
+    # UI pods have no internet egress on purpose, so the audit stage -- which
+    # already reaches this host for pricing -- leaves the list on the volume.
+    # Best-effort: a failed fetch costs the picker its autocomplete, nothing
+    # else, and the stale copy stays.
+    if curl -sSfL --connect-timeout 10 --max-time 60 --max-filesize 33554432 \
+            "https://openrouter.ai/api/v1/models" -o "$DATA_DIR/models-catalog.json.tmp" 2>/dev/null; then
+        mv "$DATA_DIR/models-catalog.json.tmp" "$DATA_DIR/models-catalog.json"
+        log "Model catalog: $(stat -c%s "$DATA_DIR/models-catalog.json") bytes"
+    else
+        rm -f "$DATA_DIR/models-catalog.json.tmp"
+        log "WARNING: could not refresh the model catalog; the page keeps the old copy"
+    fi
     collect_audit_env_flags
     log "Starting pipeline: $*"
     exec bash bench/pipeline.sh --no-push "$@" \
