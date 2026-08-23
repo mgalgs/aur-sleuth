@@ -1,0 +1,37 @@
+{
+  "package": "dsh-tui-bin",
+  "correct_verdict": "safe",
+  "confidence": "medium",
+  "reasoning": "Both models found the PKGBUILD and core executable safe with standard npm packaging patterns. However, the critical binary tarball was skipped in both audits, limiting full verification.",
+  "disagreement_analysis": null,
+  "coverage_issues": [
+    "Both models skipped dsh-tui-0.9.0.tgz (binary tarball) which contains the actual prebuilt package and may include lifecycle scripts executed during npm install",
+    "deepseek-v4-flash only reviewed 2 files total, missing protocol handlers and utilities reviewed by qwen3"
+  ],
+  "false_positives": [],
+  "false_negatives": [
+    "Unverified risks in npm lifecycle scripts within the binary tarball",
+    "Potential network/filesystem access in un-reviewed protocol handlers (tui-channel-http.js)"
+  ],
+  "re_audit_recommended": true,
+  "re_audit_focus": [
+    "Extracted contents of dsh-tui-0.9.0.tgz (especially package.json for scripts)",
+    "src/package/dsh-ecosystem-spec/protocols/tui-channel-http.js"
+  ],
+  "learnings": [
+    "Improve binary archive handling: Extract common formats (.tgz) to audit contained scripts/package.json",
+    "Prioritize files referenced in PKGBUILD functions and executable entrypoints",
+    "Enforce minimum file coverage for critical package types (npm binaries)",
+    "Detect and flag npm lifecycle script execution risks during install"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 6183,
+    "completion_tokens": 2129,
+    "cost": 0.0096506
+  },
+  "audits_judged": [
+    "20260823-184325-qwen-qwen3-235b-a22b-2507.md",
+    "20260823-184351-deepseek-deepseek-v4-flash.md"
+  ]
+}
