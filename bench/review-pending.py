@@ -473,6 +473,16 @@ def review_batches(entries, model, base_url, api_key, batch_size, workers):
             "batches": len(batches), "batches_ok": ok, "read": read}
 
 
+def env_int(name, fallback):
+    """An integer from the environment, or the fallback. The settings
+    ConfigMap reaches this stage as environment variables; a value that is
+    not a number falls back rather than crashing an advisory read."""
+    try:
+        return int(os.environ.get(name, ""))
+    except ValueError:
+        return fallback
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--git-dir", required=True)
@@ -486,12 +496,18 @@ def main():
         "AUR_SLEUTH_REVIEW_MODEL", "deepseek/deepseek-v4-flash"))
     ap.add_argument("--max-reviews", type=int, default=DEFAULT_MAX_REVIEWS,
                     help="cap on generated texts to read; 0 (the default) reads all")
-    ap.add_argument("--batch-size", type=int, default=DEFAULT_BATCH,
+    ap.add_argument("--batch-size", type=int,
+                    default=env_int("AUR_SLEUTH_REVIEW_BATCH", DEFAULT_BATCH),
                     help="reports per request")
-    ap.add_argument("--workers", type=int, default=DEFAULT_WORKERS,
+    ap.add_argument("--workers", type=int,
+                    default=env_int("AUR_SLEUTH_REVIEW_WORKERS", DEFAULT_WORKERS),
                     help="batches in flight")
     ap.add_argument("--no-llm", action="store_true")
     args = ap.parse_args()
+    # Bounded whatever the source: a huge worker count is a rate-limit
+    # incident, and a zero would read nothing forever.
+    args.workers = max(1, min(64, args.workers))
+    args.batch_size = max(1, min(32, args.batch_size))
 
     internal = []
     if args.internal_file:

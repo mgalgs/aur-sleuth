@@ -139,6 +139,8 @@ Set as environment variables on the container.
 | `AUR_SLEUTH_FUNDING_URL` | publish | — | An https link for the public page's funding card ("Chip in"). Unset hides the button; the card's numbers still show |
 | `AUR_SLEUTH_INTERNAL_STRINGS` | review, quarantine, publish | `svc.cluster.local` | Fixed strings that name your own infrastructure; a report carrying one is never published |
 | `AUR_SLEUTH_REVIEW_MODEL` | review | `deepseek/deepseek-v4-flash` | The model for the advisory read |
+| `AUR_SLEUTH_REVIEW_WORKERS` | review | `16` | Read requests in flight; clamped to 1..64 |
+| `AUR_SLEUTH_REVIEW_BATCH` | review | `8` | Reports per read request; clamped to 1..32 |
 | `AUR_SLEUTH_BENCH_MODELS` | benchmark | — | Required; comma-separated candidate models |
 | `AUR_SLEUTH_BENCH_SAMPLE` / `_BUDGET` / `_JOBS` / `_SYNTHETICS` / `_PACKAGES` / `_RUN_ID` / `_ROLE` / `_TARGET` | benchmark | `20` / `2.00` / pipeline default / `true` / — / timestamp / `audit` / — | See above |
 | `AUR_SLEUTH_BUNDLE_PATH` | bundle | `/out/audit-reports.bundle` | Where the bundle is written; its directory must be writable |
