@@ -1,0 +1,33 @@
+{
+  "package": "sshd-lite-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The README's curl|bash command is documentation-only and not executed during makepkg. PKGBUILD uses verified checksums and safe installation patterns.",
+  "disagreement_analysis": "qwen incorrectly flagged README's installation example as executable risk, while deepseek correctly recognized it as non-executable documentation.",
+  "coverage_issues": [
+    "qwen failed to review LICENSE and .nvchecker.toml (though low-risk)",
+    "Neither audited prebuilt binaries (expected limitation for -bin packages)"
+  ],
+  "false_positives": [
+    "qwen: README curl|bash command (documentation-only, not referenced in PKGBUILD)"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Improve file prioritization: Focus on PKGBUILD/.install hooks first; deprioritize documentation",
+    "Enhance prompt clarity: Explicitly state non-executable files (READMEs, licenses) shouldn't trigger unsafe verdicts",
+    "Address false positive pattern: Train models to distinguish between documented examples vs actual build commands",
+    "Implement coverage checks: Require review of all non-binary files in source tree"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 4720,
+    "completion_tokens": 1623,
+    "cost": 0.0073615
+  },
+  "audits_judged": [
+    "20260823-185549-qwen-qwen3-235b-a22b-2507.md",
+    "20260823-185513-deepseek-deepseek-v4-flash.md"
+  ]
+}
