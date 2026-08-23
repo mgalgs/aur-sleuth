@@ -2,16 +2,17 @@
 # Judge audit reports: detect disagreements, shallow coverage, and quality issues.
 # A high-intelligence "judge" model reviews reports and optionally triggers re-audits.
 #
-# Usage: judge.sh [--package PKG | --all] [--re-audit] [--re-audit-pending] [--judge-model MODEL] [--audit-model MODEL] [--judge-dir DIR] [--no-archive] [--audit-timeout SECONDS]
+# Usage: judge.sh [--package PKG | --all] [--force] [--re-audit] [--re-audit-pending] [--judge-model MODEL] [--audit-model MODEL] [--judge-dir DIR] [--no-archive] [--audit-timeout SECONDS]
 #
-# Triggers (automatic):
+# Triggers (automatic), checked in this order:
+#   - Error reports (unknown result, zero cost): nothing to second-guess
 #   - Result disagreement between models (safe vs unsafe)
 #   - An agreed warning: every model called it unsafe or inconclusive. Agreement
 #     is not correctness, and this is the verdict that gets published.
 #   - Shallow coverage (< 3 files reviewed)
-#   - Error reports (unknown result, zero cost)
 # With --all, also reviews packages where models agree that a package is safe
-# (routine coverage check).
+# (routine coverage check). A package whose current reports were already
+# judged is skipped either way; --force judges it again.
 #
 # Judge reports are written to $AUR_SLEUTH_DATA_DIR/judge/<pkg>.json (default: ~/aur-sleuth-data/judge/)
 set -euo pipefail
@@ -27,6 +28,7 @@ REPORTS_DIR="$DATA_DIR/bulk-reports"
 JUDGE_DIR="$DATA_DIR/judge"
 PACKAGE=""
 ALL=false
+FORCE=false
 LOCK_FILE="$DATA_DIR/bulk-audit/archive.lock"
 NO_ARCHIVE=false
 
@@ -35,6 +37,7 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --package) PACKAGE="$2"; shift 2 ;;
         --all) ALL=true; shift ;;
+        --force) FORCE=true; shift ;;
         --re-audit) RE_AUDIT=true; shift ;;
         --re-audit-pending) RE_AUDIT_PENDING=true; shift ;;
         --judge-model) JUDGE_MODEL="$2"; shift 2 ;;
@@ -147,6 +150,10 @@ already_judged() {
 }
 
 # --- Check if a package needs judging, echo trigger reason ---
+# Returns 0 with the trigger on stdout, 1 when nothing triggers (which --all
+# turns into a routine review), and 2 when the package's current reports
+# were already judged -- which --all must not turn into anything, or every
+# run with budget re-judges and re-bills the whole corpus.
 check_triggers() {
     local pkg="$1"
     local reports=()
@@ -159,8 +166,8 @@ check_triggers() {
     # Already judged: the working copies outlive the judgment, so without this
     # a package with a standing disagreement is re-judged on every run that
     # has budget. A new audit gets a new date, so it is judged again.
-    if already_judged "$pkg" "${reports[@]}"; then
-        return 1
+    if ! $FORCE && already_judged "$pkg" "${reports[@]}"; then
+        return 2
     fi
 
     # Collect all results upfront
@@ -180,6 +187,22 @@ check_triggers() {
         return 1
     fi
 
+    # Error reports first (only reports that have frontmatter): a report with
+    # no verdict and no spend is a failed audit, not a ruling to second-guess,
+    # and the checks below would otherwise file one inconclusive, cost-0
+    # report under "agreed".
+    for r in "${reports[@]}"; do
+        # Skip reports without frontmatter (pre-frontmatter era)
+        head -1 "$r" | grep -q '^---$' || continue
+        local res cost
+        res=$(fm "$r" result)
+        cost=$(fm "$r" cost)
+        if [[ "$res" == "unknown" || "$res" == "skipped" || "$cost" == "0" ]]; then
+            echo "error ($(fm "$r" model): result=$res cost=$cost)"
+            return 0
+        fi
+    done
+
     # Disagreement: different result values across models
     if (( ${#results[@]} >= 2 )); then
         local unique
@@ -197,9 +220,14 @@ check_triggers() {
     # that gets published naming a package as dangerous, so it is the one worth
     # a second opinion. Only disagreement used to trigger, which meant a
     # confidently wrong "unsafe" was never checked at all.
+    # "Agreed" means more than one model said so; one report is one opinion.
     for res in "${results[@]}"; do
         if [[ "$res" == "unsafe" || "$res" == "inconclusive" ]]; then
-            echo "warned (agreed $res)"
+            if (( ${#results[@]} >= 2 )); then
+                echo "warned (agreed $res)"
+            else
+                echo "warned (single $res)"
+            fi
             return 0
         fi
     done
@@ -210,19 +238,6 @@ check_triggers() {
         fr=$(fm "$r" files_reviewed)
         if [[ -n "$fr" ]] && (( fr < 3 )); then
             echo "shallow ($(fm "$r" model) reviewed $fr files)"
-            return 0
-        fi
-    done
-
-    # Error reports (only check reports that have frontmatter)
-    for r in "${reports[@]}"; do
-        # Skip reports without frontmatter (pre-frontmatter era)
-        head -1 "$r" | grep -q '^---$' || continue
-        local res cost
-        res=$(fm "$r" result)
-        cost=$(fm "$r" cost)
-        if [[ "$res" == "unknown" || "$res" == "skipped" || "$cost" == "0" ]]; then
-            echo "error ($(fm "$r" model): result=$res cost=$cost)"
             return 0
         fi
     done
@@ -563,19 +578,25 @@ main() {
 
     log "Judge starting. Model: $JUDGE_MODEL, Candidates: ${#packages[@]}"
 
-    local judged=0 skipped=0 flagged=0
+    local judged=0 skipped=0 done_before=0 flagged=0
     local judged_pkgs=()
 
     for pkg in "${packages[@]}"; do
-        local trigger
-        trigger=$(check_triggers "$pkg") || {
+        local trigger rc=0
+        trigger=$(check_triggers "$pkg") || rc=$?
+        if (( rc == 2 )); then
+            # Judged already, on these very reports. Not even --all re-judges
+            # it: that is what made every run with budget re-bill the corpus.
+            done_before=$((done_before + 1))
+            continue
+        elif (( rc != 0 )); then
             if $ALL; then
                 trigger="routine-review"
             else
                 skipped=$((skipped + 1))
                 continue
             fi
-        }
+        fi
 
         judge_package "$pkg" "$trigger" || {
             log "  ERROR: Failed to judge $pkg"
@@ -594,7 +615,7 @@ main() {
     done
 
     log "=== Judge complete ==="
-    log "Judged: $judged | Skipped (no trigger): $skipped | Flagged for re-audit: $flagged"
+    log "Judged: $judged | Skipped (no trigger): $skipped | Already judged: $done_before | Flagged for re-audit: $flagged"
     log "Reports: $JUDGE_DIR/"
 
     # Print learnings only from packages judged this run
