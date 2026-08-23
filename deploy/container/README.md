@@ -22,7 +22,9 @@ The pipeline runs untrusted code by design. `makepkg --nobuild` sources arbitrar
 | `bundle` | none | **read-only** | no |
 | `benchmark` | LLM API key | read-write | **yes** |
 
-`prepare` creates or refreshes the git object store on the volume and prunes old state. `audit` runs the whole pipeline with `--no-push`, so every commit stays local. `publish` pushes the `audit-reports` branch.
+`prepare` creates or refreshes the git object store on the volume and prunes old state. `audit` runs the whole pipeline with `--no-push`, so every commit stays local. `publish` pushes two branches: the reviewed commit of `audit-reports`, exactly as the audit stage wrote it, and the public page on `site` (`AUR_SLEUTH_SITE_BRANCH`), which is that commit's tree plus `index.html` and `_dashboard/*` rebuilt by this image. Point GitHub Pages at `site`. The page is never committed to `audit-reports`, so `origin`'s copy of it is always an ancestor of the store's, and nothing ever has to be rebased.
+
+`publish` writes nothing to the store -- it reads a snapshot of the refs and borrows the objects read-only -- so it may run while an `audit` stage is committing. It publishes the commit the review saw (`AUR_SLEUTH_EXPECT_HEAD`); reports that landed since wait for the next review. What it refuses is a pin the branch no longer contains, which is what a quarantine rewrite leaves behind.
 
 `benchmark` is an on-demand stage, not part of the scheduled sequence: it re-audits a sample of packages whose verdict is already settled on the branch with candidate models, and scores each candidate (synthetic fixtures, agreement with the settled verdicts, the two kinds of disagreement, cost). It runs `makepkg` on real packages, so it needs every protection `audit` has and must never overlap with it. It writes only under `$DATA_DIR/bench/<run-id>/` — never to the branch — and records its spend in the same daily ledger. `AUR_SLEUTH_BENCH_MODELS` names the candidates; `AUR_SLEUTH_BENCH_ROLE` picks the task (`audit`, the default, which is what the audit and re-audit seats do, or `judge`, which hands each candidate the package's existing reports and scores its ruling); `AUR_SLEUTH_BENCH_TARGET` labels the seat the run is for; `AUR_SLEUTH_BENCH_SAMPLE`, `AUR_SLEUTH_BENCH_BUDGET`, `AUR_SLEUTH_BENCH_SYNTHETICS`, `AUR_SLEUTH_BENCH_PACKAGES` and `AUR_SLEUTH_BENCH_RUN_ID` are the knobs, each checked at the boundary. The result is `result.json` in the run directory and a `BENCH_JSON` line at the end of the log.
 
@@ -125,7 +127,8 @@ Set as environment variables on the container.
 | `AUR_SLEUTH_SSH_KEY` | publish | `/secrets/git/ssh-privatekey` | Mounted deploy key |
 | `AUR_SLEUTH_KNOWN_HOSTS` | publish | `/etc/ssh/ssh_known_hosts` | Baked in at build time |
 | `AUR_SLEUTH_PUBLISH_DRY_RUN` | publish | `false` | Report the ref instead of pushing |
-| `AUR_SLEUTH_EXPECT_HEAD` | publish | — | The commit a review approved; publish refuses if the branch has moved |
+| `AUR_SLEUTH_EXPECT_HEAD` | publish | — | The commit a review approved; publish pushes exactly that commit, and refuses if the branch no longer contains it |
+| `AUR_SLEUTH_SITE_BRANCH` | publish | `site` | The branch the public page is pushed to; point GitHub Pages at it |
 | `AUR_SLEUTH_REVIEW_JSON` | publish | — | The review's `REVIEW_JSON` object, written to the branch as `_dashboard/review.json` |
 | `AUR_SLEUTH_FUNDING_URL` | publish | — | An https link for the public page's funding card ("Chip in"). Unset hides the button; the card's numbers still show |
 | `AUR_SLEUTH_BENCH_MODELS` | benchmark | — | Required; comma-separated candidate models |

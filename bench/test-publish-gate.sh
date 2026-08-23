@@ -22,9 +22,12 @@ eval "$(sed -n '/^validate_reports_tree()/,/^}/p' "$ENTRYPOINT")"
 
 log() { $QUIET || echo "      $*"; }
 
-fails=0
+# Counted in a file, not a variable: several sections below run in a
+# subshell, where a variable increment would be lost and a failure would
+# still end in "all checks passed".
+FAILS="$(mktemp)"
 ok()   { $QUIET || printf '  ok    %s\n' "$1"; }
-bad()  { printf '  FAIL  %s\n' "$1"; fails=$(( fails + 1 )); }
+bad()  { printf '  FAIL  %s\n' "$1"; echo "$1" >> "$FAILS"; }
 
 allow() {
     if publish_path_allowed "$1"; then ok "allow  $1"; else bad "should allow: $1"; fi
@@ -72,7 +75,7 @@ deny "brave-bin/../../escape.md"
 
 echo "== the tree validator, against real git objects =="
 tmp="$(mktemp -d)"
-trap 'rm -rf "$tmp"' EXIT
+trap 'rm -rf "$tmp" "$FAILS"' EXIT
 repo="$tmp/reports.git"
 git init --bare --quiet "$repo"
 
@@ -122,6 +125,8 @@ eval "$(sed -n '/^rewrite_dashboard_html()/,/^}/p' "$ENTRYPOINT")"
 SRC_DIR="$PWD"
 # shellcheck disable=SC2034
 REPORTS_BRANCH="audit-reports"
+# shellcheck disable=SC2034
+SITE_BRANCH="site"
 # shellcheck disable=SC2034
 REVIEW_JSON_IN=""
 # shellcheck disable=SC2034
@@ -279,55 +284,106 @@ assert r["published_at"].endswith("Z"), r["published_at"]
     fi
 )
 
-echo "== a second publish builds on origin's page rebuild, never on its reports =="
-# In a subshell: the function fetches from FETCH_URL, which here is a local
+echo "== the page goes on the site branch, on top of the page before it =="
+# In a subshell: the functions fetch from FETCH_URL, which here is a local
 # bare repository standing in for GitHub.
 (
-    eval "$(sed -n '/^rebase_onto_origin()/,/^}/p' "$ENTRYPOINT")"
+    eval "$(sed -n '/^fetch_origin_branch()/,/^}/p' "$ENTRYPOINT")"
+    eval "$(sed -n '/^check_origin_reports()/,/^}/p' "$ENTRYPOINT")"
     origin="$tmp/origin.git"
     git init --bare --quiet "$origin"
-    # shellcheck disable=SC2030,SC2034  # read by rebase_onto_origin, via the eval
+    # shellcheck disable=SC2030,SC2034  # read by fetch_origin_branch, via the eval
     FETCH_URL="$origin"
-    base_commit="$(make_commit "brave-bin/20260821-1-m.md" "_dashboard/data.json" "index.html")"
-    # Origin at the same commit: build on it.
-    git --git-dir="$repo" push --quiet "$origin" "$base_commit:refs/heads/$REPORTS_BRANCH" 2>/dev/null
-    if [[ "$(rebase_onto_origin "$repo" "$base_commit")" == "$base_commit" ]]; then
-        ok "origin at the reviewed commit: build on it"
+    # shellcheck disable=SC2030,SC2034  # read by rewrite_dashboard_html, via the eval
+    SITE_BRANCH="site"
+    reviewed="$(make_commit "brave-bin/20260821-1-m.md" "_dashboard/data.json" "index.html")"
+
+    # Nothing on origin yet: no site to build on, and the reports push is fine.
+    if fetch_origin_branch "$repo" "site" \
+       && ! git --git-dir="$repo" rev-parse --verify --quiet refs/remotes/origin/site >/dev/null; then
+        ok "a branch origin does not have fetches as nothing, not as a failure"
     else
-        bad "origin at the reviewed commit should build on it"
+        bad "fetching a missing branch should succeed with nothing"
     fi
-    # Origin ahead by a page rebuild only: build on origin's head.
-    rm -f "$tmp/index"
-    GIT_INDEX_FILE="$tmp/index" git --git-dir="$repo" read-tree "$base_commit"
-    page="$(printf 'new page' | git --git-dir="$repo" hash-object -w --stdin)"
-    GIT_INDEX_FILE="$tmp/index" git --git-dir="$repo" update-index --add --cacheinfo "100644,${page},index.html"
-    GIT_INDEX_FILE="$tmp/index" git --git-dir="$repo" update-index --add --cacheinfo "100644,${page},_dashboard/review.json"
-    tree="$(GIT_INDEX_FILE="$tmp/index" git --git-dir="$repo" write-tree)"
-    rebuilt="$(GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t \
-        git --git-dir="$repo" commit-tree "$tree" -p "$base_commit" -m rebuild)"
-    git --git-dir="$repo" push --quiet -f "$origin" "$rebuilt:refs/heads/$REPORTS_BRANCH" 2>/dev/null
-    if [[ "$(rebase_onto_origin "$repo" "$base_commit")" == "$rebuilt" ]]; then
-        ok "origin ahead by a page rebuild: build on origin's head"
+    if check_origin_reports "$repo" "$reviewed"; then
+        ok "no reports on origin: the push may go"
     else
-        bad "origin ahead by a page rebuild should build on origin's head"
+        bad "no reports on origin should not refuse"
     fi
-    # Origin ahead by a report: refuse.
-    GIT_INDEX_FILE="$tmp/index" git --git-dir="$repo" update-index --add --cacheinfo "100644,${page},other-pkg/20260821-2-m.md"
-    tree="$(GIT_INDEX_FILE="$tmp/index" git --git-dir="$repo" write-tree)"
-    foreign="$(GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t \
-        git --git-dir="$repo" commit-tree "$tree" -p "$rebuilt" -m reports)"
+    first="$(GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t \
+        rewrite_dashboard_html "$repo" "$reviewed" "" "" 2>/dev/null)"
+    if [[ "$(git --git-dir="$repo" rev-list --count "$first")" == "1" ]]; then
+        ok "the first page is a root commit: the site branch carries pages, not reports"
+    else
+        bad "the first page should be a root commit"
+    fi
+    if [[ "$(git --git-dir="$repo" rev-parse "${first}:index.html")" == "$trusted" \
+          && "$(git --git-dir="$repo" rev-parse "${first}:brave-bin/20260821-1-m.md")" \
+             == "$(git --git-dir="$repo" rev-parse "${reviewed}:brave-bin/20260821-1-m.md")" ]]; then
+        ok "the page commit carries this image's page and the reviewed reports"
+    else
+        bad "the page commit is not the reviewed tree plus the page"
+    fi
+    if [[ "$(git --git-dir="$repo" rev-parse refs/heads/site)" == "$first" ]]; then
+        ok "the site ref in the throwaway repository points at the page"
+    else
+        bad "refs/heads/site was not updated"
+    fi
+    # Both pushed. The next publish builds on origin's page.
+    git --git-dir="$repo" push --quiet "$origin" "$reviewed:refs/heads/$REPORTS_BRANCH" "$first:refs/heads/site" 2>/dev/null
+    fetch_origin_branch "$repo" "site"
+    parent="$(git --git-dir="$repo" rev-parse refs/remotes/origin/site)"
+    if [[ "$parent" == "$first" ]]; then
+        ok "origin's page fetches as the parent for the next one"
+    else
+        bad "origin/site should be the first page, got $parent"
+    fi
+    again="$(GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t \
+        rewrite_dashboard_html "$repo" "$reviewed" "" "$parent" 2>/dev/null)"
+    if [[ "$again" == "$parent" ]]; then
+        ok "the same reports and the same image: nothing new on the site branch"
+    else
+        bad "an unchanged page should not make a commit (got $again, want $parent)"
+    fi
+    # A report landed after the reviewed commit, on top of it.
+    later="$(GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t \
+        git --git-dir="$repo" commit-tree \
+        "$(git --git-dir="$repo" rev-parse "$(make_commit "brave-bin/20260821-1-m.md" "other-bin/20260822-1-m.md")^{tree}")" \
+        -p "$reviewed" -m later)"
+    second="$(GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t \
+        rewrite_dashboard_html "$repo" "$later" "" "$parent" 2>/dev/null)"
+    if [[ "$(git --git-dir="$repo" rev-parse "${second}^")" == "$first" ]]; then
+        ok "new reports: the next page is a child of the page before it"
+    else
+        bad "the second page should have the first as its parent"
+    fi
+    if git --git-dir="$repo" cat-file -e "${second}:other-bin/20260822-1-m.md" 2>/dev/null; then
+        ok "the next page carries the new report"
+    else
+        bad "the new report is missing from the second page"
+    fi
+    # Origin at or behind the commit being published: fine. Ahead: refused.
+    fetch_origin_branch "$repo" "$REPORTS_BRANCH"
+    if check_origin_reports "$repo" "$reviewed" && check_origin_reports "$repo" "$later"; then
+        ok "origin at or behind the reviewed commit: the push may go"
+    else
+        bad "origin at or behind should not refuse"
+    fi
+    foreign="$(make_commit "brave-bin/20260821-1-m.md" "elsewhere-bin/20260822-1-m.md")"
     git --git-dir="$repo" push --quiet -f "$origin" "$foreign:refs/heads/$REPORTS_BRANCH" 2>/dev/null
-    if rebase_onto_origin "$repo" "$base_commit" >/dev/null; then
-        bad "origin ahead by a report should refuse"
+    fetch_origin_branch "$repo" "$REPORTS_BRANCH"
+    if check_origin_reports "$repo" "$later"; then
+        bad "origin holding reports this store lacks should refuse"
     else
-        ok "origin ahead by a report: refused"
+        ok "origin holding reports this store lacks: refused"
     fi
-    # Origin behind (we have more): build on ours.
-    git --git-dir="$repo" push --quiet -f "$origin" "$base_commit:refs/heads/$REPORTS_BRANCH" 2>/dev/null
-    if [[ "$(rebase_onto_origin "$repo" "$rebuilt")" == "$rebuilt" ]]; then
-        ok "origin behind: build on ours"
+    # Origin unreachable is a fetch failure, not a missing branch.
+    # shellcheck disable=SC2030,SC2034
+    FETCH_URL="$tmp/no-such-origin.git"
+    if fetch_origin_branch "$repo" "$REPORTS_BRANCH"; then
+        bad "an unreachable origin should fail the fetch"
     else
-        bad "origin behind should build on ours"
+        ok "an unreachable origin fails the fetch, for the caller to decide"
     fi
 )
 
@@ -340,20 +396,29 @@ pin_verdict() (
     log() { :; }
     # shellcheck disable=SC2034  # read by check_expected_head, via the eval
     EXPECT_HEAD="$1"
-    check_expected_head "$2" >/dev/null 2>&1 && echo allow || echo refuse
+    check_expected_head "$repo" "$2" >/dev/null 2>&1 && echo allow || echo refuse
 )
-reviewed="1111111111111111111111111111111111111111"
-moved="2222222222222222222222222222222222222222"
+reviewed="$(make_commit "brave-bin/20260821-1-m.md")"
+# The branch moved on: a report landed after the review.
+moved="$(GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t \
+    git --git-dir="$repo" commit-tree "$(git --git-dir="$repo" rev-parse "${reviewed}^{tree}")" -p "$reviewed" -m later)"
+# The unpublished history was rewritten: the reviewed commit is gone.
+rewritten="$(make_commit "brave-bin/20260821-1-m.md" "c-bin/1.md")"
 
 if [[ "$(pin_verdict "$reviewed" "$reviewed")" == allow ]]; then
     ok "the branch still at the reviewed commit publishes"
 else
     bad "an unchanged branch must publish"
 fi
-if [[ "$(pin_verdict "$reviewed" "$moved")" == refuse ]]; then
-    ok "a branch that moved after the review is refused"
+if [[ "$(pin_verdict "$reviewed" "$moved")" == allow ]]; then
+    ok "a branch that moved on after the review still publishes the reviewed commit"
 else
-    bad "a branch that moved after the review must NOT publish"
+    bad "a branch that moved on must still publish the reviewed commit"
+fi
+if [[ "$(pin_verdict "$reviewed" "$rewritten")" == refuse ]]; then
+    ok "a branch that no longer contains the reviewed commit is refused"
+else
+    bad "a rewritten branch must NOT publish"
 fi
 # The scheduled dry run passes no pin, and must stay able to report.
 if [[ "$(pin_verdict "" "$moved")" == allow ]]; then
@@ -602,7 +667,8 @@ echo "== publish applies the content check itself, dry run included =="
 # depend on it having run. Driven end to end in dry-run mode: no network
 # (origin is unreachable, the AUR dump is a missing file), no push.
 eval "$(sed -n '/^check_expected_head()/,/^}/p' "$ENTRYPOINT")"
-eval "$(sed -n '/^rebase_onto_origin()/,/^}/p' "$ENTRYPOINT")"
+eval "$(sed -n '/^fetch_origin_branch()/,/^}/p' "$ENTRYPOINT")"
+eval "$(sed -n '/^check_origin_reports()/,/^}/p' "$ENTRYPOINT")"
 eval "$(sed -n '/^do_publish()/,/^}/p' "$ENTRYPOINT")"
 
 publish_dry() (
@@ -611,7 +677,7 @@ publish_dry() (
     # shellcheck disable=SC2030,SC2031,SC2034
     GIT_STORE="$1" DATA_DIR="$tmp/data" SRC_DIR="$tmp/src" MODE=publish \
         FETCH_URL=https://example.invalid/r.git PUBLISH_DRY_RUN=true \
-        EXPECT_HEAD="" REVIEW_JSON_IN="" FUNDING_URL="" \
+        EXPECT_HEAD="${2:-}" REVIEW_JSON_IN="" FUNDING_URL="" SITE_BRANCH=site \
         AUR_METADATA_URL="file://$tmp/no-such-dump"
     # shellcheck disable=SC2329  # both called by do_publish
     die() { echo "die: $*"; exit 1; }
@@ -640,8 +706,25 @@ if grep -q 'exit=0' <<< "$out" && grep -q 'Dry run: would push' <<< "$out"; then
 else
     bad "publish refused the cleaned branch: $out"
 fi
+# Pinned to a commit the branch has moved past -- what a publish during an
+# audit run looks like: the reviewed commit goes out, not the tip.
+out="$(publish_dry "$qstore" "$published")"
+if grep -q 'exit=0' <<< "$out" && grep -q "would push $published to audit-reports" <<< "$out" \
+   && grep -q 'moved on by' <<< "$out"; then
+    ok "a pin behind the tip publishes the reviewed commit and says what waits"
+else
+    bad "a pin behind the tip should publish the reviewed commit: $out"
+fi
+# Pinned to a commit the branch does not contain: refused.
+out="$(publish_dry "$qstore" "$tampered")"
+if grep -q 'exit=1' <<< "$out" && grep -q 'not on audit-reports' <<< "$out"; then
+    ok "a pin the branch does not contain is refused"
+else
+    bad "a pin off the branch should refuse: $out"
+fi
 
 echo
+fails="$(wc -l < "$FAILS")"
 if (( fails > 0 )); then
     echo "FAILED: $fails check(s)"
     exit 1

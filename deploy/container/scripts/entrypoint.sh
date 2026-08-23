@@ -16,9 +16,12 @@
 #             infrastructure, which review reports as the reason it failed.
 #             Rewrites only the unpushed commits, keeps a backup ref, and
 #             needs the volume read-write. No credential.
-#   publish   Push the audit-reports branch. Needs the git write credential, and
-#             deliberately runs after the untrusted stage has finished. Refuses
-#             to push a branch carrying anything but inert report data.
+#   publish   Push the reviewed commit of the audit-reports branch, and the
+#             public page built from it to the site branch. Needs the git write
+#             credential. Refuses to push a branch carrying anything but inert
+#             report data. Writes nothing to the store, so it may run while an
+#             audit stage is writing to it: it publishes the commit the review
+#             saw, and whatever landed since waits for the next review.
 #   bundle    Write the audit-reports branch to a git bundle instead of pushing
 #             it. Needs no credential. Lets reports accumulate on the volume and
 #             be reviewed elsewhere, so no write credential need exist here.
@@ -37,6 +40,11 @@ DATA_DIR="${AUR_SLEUTH_DATA_DIR:-/data}"
 SRC_DIR="/opt/aur-sleuth"
 GIT_STORE="$DATA_DIR/git"
 REPORTS_BRANCH="audit-reports"
+# Where the public page lives: the reviewed reports tree plus index.html and
+# _dashboard/*, rebuilt by this image at every publish. A branch of its own,
+# so audit-reports carries only what the audit stage wrote and origin's copy
+# of it is always an ancestor of the store's -- nothing ever has to be rebased.
+SITE_BRANCH="${AUR_SLEUTH_SITE_BRANCH:-site}"
 
 FETCH_URL="${AUR_SLEUTH_FETCH_URL:-https://github.com/mgalgs/aur-sleuth.git}"
 PUSH_URL="${AUR_SLEUTH_PUSH_URL:-}"
@@ -44,10 +52,12 @@ SSH_KEY="${AUR_SLEUTH_SSH_KEY:-/secrets/git/ssh-privatekey}"
 KNOWN_HOSTS="${AUR_SLEUTH_KNOWN_HOSTS:-/etc/ssh/ssh_known_hosts}"
 SPEND_LOG_RETENTION_DAYS="${AUR_SLEUTH_SPEND_LOG_RETENTION_DAYS:-30}"
 PUBLISH_DRY_RUN="${AUR_SLEUTH_PUBLISH_DRY_RUN:-false}"
-# The commit a review approved. When set, publish refuses unless the branch is
-# still exactly there, which is what makes a review and its publish one
-# transaction rather than two events with a gap between them. Empty means
-# unpinned: the stage publishes whatever the branch holds.
+# The commit a review approved. When set, publish pushes exactly that commit,
+# which is what makes a review and its publish one transaction rather than
+# two events with a gap between them. The branch may have moved on since (an
+# audit stage commits every report as it goes); those commits wait for the
+# next review. Empty means unpinned: the stage publishes whatever the branch
+# holds.
 EXPECT_HEAD="${AUR_SLEUTH_EXPECT_HEAD:-}"
 # The REVIEW_JSON object the review stage printed for the commit being
 # published. Publish writes it to the branch as _dashboard/review.json, so the
@@ -402,8 +412,11 @@ publish_path_allowed() {
     local p="$1" pkg rest
 
     case "$p" in
-        # These two are rewritten from this image's own copy below, so whatever
-        # the branch currently holds for them does not matter.
+        # The page. On the site branch these are this image's own copy,
+        # written by rewrite_dashboard_html. On the reports branch they are
+        # whatever the audit stage's dashboard phase committed -- and that
+        # branch is not what GitHub Pages serves, so a planted page there is
+        # text in a repository, not a page under the publisher's domain.
         index.html|.nojekyll)
             return 0 ;;
         # The dashboard's own JSON. It is inert data, never executed by the
@@ -546,12 +559,17 @@ PY
 # when the fetch failed; the card's other inputs are gathered here. Each is
 # optional, and the card is left off the page rather than shown half-empty.
 #
+# The fourth is the site branch's previous head on origin, or empty on the
+# first publish. The page commit is made on top of it, so the push is a
+# fast-forward; the site branch's history is one commit per publish, and the
+# reports branch never carries a page commit at all.
+#
 # Writes only to the throwaway repository, and prints the resulting commit --
 # so it must never log to stdout.
 rewrite_dashboard_html() {
-    local repo="$1" head="$2" aur_metadata="${3:-}"
+    local repo="$1" head="$2" aur_metadata="${3:-}" parent="${4:-}"
     local html idx blob_html blob_empty tree commit built path blob
-    local -a funding=()
+    local -a funding=() parent_args=()
 
     [[ -n "$aur_metadata" ]] && funding+=(--aur-metadata "$aur_metadata")
     # The budget the last run resolved to. Written by the audit stage, so the
@@ -615,74 +633,84 @@ rewrite_dashboard_html() {
     tree="$(GIT_INDEX_FILE="$idx" git --git-dir="$repo" write-tree)"
     rm -f "$idx" "$html"
 
-    # Nothing to do when the branch already carries this image's page. The
-    # common case, and it keeps the history free of empty commits.
-    if [[ "$tree" == "$(git --git-dir="$repo" rev-parse "${head}^{tree}")" ]]; then
+    # Nothing to do when the site already carries exactly this: the same
+    # reports and this image's page. It keeps the history free of empty
+    # commits, and a second publish of the same review pushes nothing new.
+    if [[ -n "$parent" && "$tree" == "$(git --git-dir="$repo" rev-parse "${parent}^{tree}")" ]]; then
+        printf '%s\n' "$parent"
+        return 0
+    fi
+    if [[ -z "$parent" && "$tree" == "$(git --git-dir="$repo" rev-parse "${head}^{tree}")" ]]; then
         printf '%s\n' "$head"
         return 0
     fi
 
-    commit="$(git --git-dir="$repo" commit-tree "$tree" -p "$head" \
-        -m 'dashboard: rebuild index.html in the publish stage')"
-    git --git-dir="$repo" update-ref "refs/heads/$REPORTS_BRANCH" "$commit"
+    [[ -n "$parent" ]] && parent_args=(-p "$parent")
+    commit="$(git --git-dir="$repo" commit-tree "$tree" ${parent_args[@]+"${parent_args[@]}"} \
+        -m "site: the page for $REPORTS_BRANCH ${head:0:12}")"
+    git --git-dir="$repo" update-ref "refs/heads/$SITE_BRANCH" "$commit"
     printf '%s\n' "$commit"
 }
 
 # The pin that makes a review and its publish one transaction.
 #
-# A review reports on the commit it saw. Publish would otherwise push whatever
-# the branch holds when it runs, so an audit landing in between would publish
-# reports nobody reviewed. The caller that pressed the button passes the reviewed
-# commit in AUR_SLEUTH_EXPECT_HEAD, and this refuses anything else.
+# A review reports on the commit it saw. Publish pushes exactly that commit:
+# the caller that pressed the button passes it in AUR_SLEUTH_EXPECT_HEAD. The
+# branch may have moved on since -- the audit stage commits every report as it
+# goes, so during a run it moves every few minutes -- and that is fine: the
+# reviewed commit is still on the branch, and the commits after it wait for
+# the next review. What is refused is a reviewed commit the branch no longer
+# contains at all (a quarantine rewrote the unpublished history, or the pin
+# came from another store): then nobody knows what those bytes are.
 #
 # Unset means unpinned, which is what the scheduled dry run uses: it reports on
 # the branch as it stands and never pushes.
 check_expected_head() {
-    local sha="$1"
+    local repo="$1" tip="$2"
 
     if [[ -z "$EXPECT_HEAD" ]]; then
         return 0
     fi
-    if [[ "$EXPECT_HEAD" == "$sha" ]]; then
+    if [[ "$EXPECT_HEAD" == "$tip" ]]; then
         log "Pinned to the reviewed commit ${EXPECT_HEAD:0:12}"
         return 0
     fi
-    log "The review approved ${EXPECT_HEAD:0:12}, but $REPORTS_BRANCH is now ${sha:0:12}."
-    log "Something changed the branch after the review. Review again, then publish."
+    if git --git-dir="$repo" merge-base --is-ancestor "$EXPECT_HEAD" "$tip" 2>/dev/null; then
+        local behind
+        behind="$(git --git-dir="$repo" rev-list --count "$EXPECT_HEAD..$tip")"
+        log "Pinned to the reviewed commit ${EXPECT_HEAD:0:12}; $REPORTS_BRANCH has moved on by" \
+            "$behind commit(s) since, which wait for the next review"
+        return 0
+    fi
+    log "The review approved ${EXPECT_HEAD:0:12}, but $REPORTS_BRANCH at ${tip:0:12} does not contain it."
+    log "The unpublished history was rewritten after the review. Review again, then publish."
     return 1
 }
 
-# Fetch origin's branch into the throwaway repository and decide what to build
-# on. Prints the commit to build on: SHA itself when origin is at or behind
-# it, origin's head when origin is ahead only by commits that touch paths
-# this stage rewrites (index.html, .nojekyll, _dashboard/*). Fails when origin
-# holds anything else. Fetches over FETCH_URL, which needs no credential.
-# Stdout is the answer, so no logging here.
-rebase_onto_origin() {
-    local repo="$1" sha="$2" origin path
-    if ! git --git-dir="$repo" fetch --quiet "$FETCH_URL" \
-            "+refs/heads/$REPORTS_BRANCH:refs/remotes/origin/$REPORTS_BRANCH" 2>/dev/null; then
-        # No network, or no branch on origin yet: build on what we have and let
-        # the push say what it thinks.
-        printf '%s\n' "$sha"
-        return 0
-    fi
+# Fetch origin's copy of a branch into the throwaway repository, as
+# refs/remotes/origin/<branch>. Succeeds with nothing fetched when origin has
+# no such branch, and fails only when origin could not be reached at all.
+# Fetches over FETCH_URL, which needs no credential.
+fetch_origin_branch() {
+    local repo="$1" branch="$2" err
+    err="$(git --git-dir="$repo" fetch --quiet "$FETCH_URL" \
+        "+refs/heads/$branch:refs/remotes/origin/$branch" 2>&1)" && return 0
+    # A missing branch is "couldn't find remote ref"; anything else is the
+    # network, and the caller decides what that means.
+    [[ "$err" == *"find remote ref"* ]] && return 0
+    return 1
+}
+
+# Refuse to publish over reports this store has not seen. Origin's reports
+# branch must be at or behind the commit being published, so the push is a
+# fast-forward and nothing on origin is lost. Origin ahead means someone
+# pushed reports from elsewhere; that is for a prepare to reconcile, not for
+# this stage to guess at. Unreachable origin: the push will say.
+check_origin_reports() {
+    local repo="$1" sha="$2" origin
     origin="$(git --git-dir="$repo" rev-parse --verify --quiet "refs/remotes/origin/$REPORTS_BRANCH" || true)"
-    if [[ -z "$origin" || "$origin" == "$sha" ]] \
-            || git --git-dir="$repo" merge-base --is-ancestor "$origin" "$sha"; then
-        printf '%s\n' "$sha"
-        return 0
-    fi
-    if ! git --git-dir="$repo" merge-base --is-ancestor "$sha" "$origin"; then
-        return 1
-    fi
-    while IFS= read -r -d '' path; do
-        case "$path" in
-            index.html|.nojekyll|_dashboard/*) ;;
-            *) return 1 ;;
-        esac
-    done < <(git --git-dir="$repo" diff --name-only -z "$sha" "$origin")
-    printf '%s\n' "$origin"
+    [[ -z "$origin" || "$origin" == "$sha" ]] && return 0
+    git --git-dir="$repo" merge-base --is-ancestor "$origin" "$sha"
 }
 
 # --- publish ------------------------------------------------------------------
@@ -701,20 +729,21 @@ do_publish() {
     local pub
     pub="$(stage_reports_repo)"
 
-    local sha
-    sha="$(git --git-dir="$pub" rev-parse --verify --quiet "refs/heads/$REPORTS_BRANCH" || true)"
-    if [[ -z "$sha" ]]; then
+    local tip
+    tip="$(git --git-dir="$pub" rev-parse --verify --quiet "refs/heads/$REPORTS_BRANCH" || true)"
+    if [[ -z "$tip" ]]; then
         # First run against an empty origin, with nothing audited yet: no ref
         # exists anywhere. Not an error -- failing here would put a scheduler
         # into backoff for a normal condition.
         log "No $REPORTS_BRANCH ref exists yet; nothing to publish"
         return 0
     fi
-    log "$REPORTS_BRANCH is at $sha"
+    log "$REPORTS_BRANCH is at $tip"
 
-    # Checked before the dry-run branch, so a dry run reports a mismatch too, and
-    # before the dashboard rewrite below, which adds a commit of its own.
-    check_expected_head "$sha" || die "refusing to publish: $REPORTS_BRANCH moved since the review"
+    # Checked before the dry-run branch, so a dry run reports a bad pin too.
+    # What goes out is the reviewed commit when there is one, else the tip.
+    check_expected_head "$pub" "$tip" || die "refusing to publish: the reviewed commit is not on $REPORTS_BRANCH"
+    local sha="${EXPECT_HEAD:-$tip}"
 
     # Gate before anything else, dry run included: a dry run is how an operator
     # finds out whether the branch is publishable, so it has to answer the same
@@ -734,19 +763,24 @@ do_publish() {
         die "refusing to publish $REPORTS_BRANCH; run quarantine first"
     fi
 
-    # Where origin is now. Every publish adds a page-rebuild commit on top of
-    # the reviewed one, and the store only learns of it at the next prepare;
-    # a second publish before then would build on the old head and be
-    # rejected as non-fast-forward. So: if origin is ahead by commits that
-    # touch only the paths this stage rewrites anyway, build on origin's head
-    # (the reports are identical, so the review still covers it). If origin
-    # has anything else, someone pushed reports this store has not seen, and
-    # that is for a prepare to reconcile, not for this stage to guess at.
-    local base
-    base="$(rebase_onto_origin "$pub" "$sha")" \
+    # Where origin is now. The reports push must be a fast-forward: origin at
+    # or behind the reviewed commit. The store learns of the push at its next
+    # prepare, and since the page no longer goes on this branch, origin never
+    # holds a commit the store lacks unless someone pushed reports from
+    # elsewhere -- which is for a prepare to reconcile, not this stage.
+    local online=true
+    if ! fetch_origin_branch "$pub" "$REPORTS_BRANCH"; then
+        online=false
+        log "WARNING: could not reach $FETCH_URL; the push will decide whether origin agrees"
+    fi
+    check_origin_reports "$pub" "$sha" \
         || die "refusing to publish: origin holds reports this store has not seen; run a prepare (any run) and review again"
-    if [[ "$base" != "$sha" ]]; then
-        log "origin is ahead by a page rebuild only; building on ${base:0:12}"
+
+    # The page goes on its own branch, built on origin's current page so that
+    # push is a fast-forward too. No previous page means a root commit.
+    local site_parent=""
+    if $online && fetch_origin_branch "$pub" "$SITE_BRANCH"; then
+        site_parent="$(git --git-dir="$pub" rev-parse --verify --quiet "refs/remotes/origin/$SITE_BRANCH" || true)"
     fi
 
     # The day's AUR updates, for the funding card. Bounded like the pipeline's
@@ -762,18 +796,21 @@ do_publish() {
         log "WARNING: could not fetch $AUR_METADATA_URL; the page's funding card is left out"
     fi
 
-    local rewritten
-    rewritten="$(rewrite_dashboard_html "$pub" "$base" "$aur_metadata")"
+    local site
+    site="$(rewrite_dashboard_html "$pub" "$sha" "$aur_metadata" "$site_parent")"
     [[ -n "$aur_metadata" ]] && rm -f "$aur_metadata"
-    if [[ "$rewritten" != "$base" ]]; then
-        log "Rebuilt index.html from this image; $REPORTS_BRANCH is now $rewritten"
-        sha="$rewritten"
+    if [[ -n "$site_parent" && "$site" == "$site_parent" ]]; then
+        log "The page on $SITE_BRANCH already matches; nothing to rebuild"
     else
-        sha="$base"
+        log "Built the page from this image for ${sha:0:12}; $SITE_BRANCH is now $site"
     fi
+    # The site tree is the reviewed tree plus this image's page, so it passes
+    # the same gate. Checked anyway: it is what the browser loads.
+    validate_reports_tree "$pub" "$site" >/dev/null \
+        || die "refusing to publish: the rebuilt $SITE_BRANCH tree failed the gate"
 
     if [[ "$PUBLISH_DRY_RUN" == "true" ]]; then
-        log "Dry run: would push $sha to ${PUSH_URL:-<unset>}"
+        log "Dry run: would push $sha to $REPORTS_BRANCH and $site to $SITE_BRANCH at ${PUSH_URL:-<unset>}"
         return 0
     fi
 
@@ -790,10 +827,13 @@ do_publish() {
 -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$KNOWN_HOSTS -o BatchMode=yes"
 
     log "Pushing to $PUSH_URL"
-    # A rejection here means the branch diverged from origin, which needs a human.
-    git --git-dir="$pub" push "$PUSH_URL" \
-        "refs/heads/$REPORTS_BRANCH:refs/heads/$REPORTS_BRANCH"
-    log "Pushed $sha"
+    # Both refs or neither: a page without its reports, or reports without
+    # their page, is a state nobody reviewed. A rejection means a branch
+    # diverged from origin, which needs a human.
+    git --git-dir="$pub" push --atomic "$PUSH_URL" \
+        "$sha:refs/heads/$REPORTS_BRANCH" \
+        "$site:refs/heads/$SITE_BRANCH"
+    log "Pushed $sha to $REPORTS_BRANCH and $site to $SITE_BRANCH"
 }
 
 # --- review -------------------------------------------------------------------
