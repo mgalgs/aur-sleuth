@@ -6,9 +6,12 @@
 #
 # Triggers (automatic):
 #   - Result disagreement between models (safe vs unsafe)
+#   - An agreed warning: every model called it unsafe or inconclusive. Agreement
+#     is not correctness, and this is the verdict that gets published.
 #   - Shallow coverage (< 3 files reviewed)
 #   - Error reports (unknown result, zero cost)
-# With --all, also reviews packages where models agree (routine coverage check).
+# With --all, also reviews packages where models agree that a package is safe
+# (routine coverage check).
 #
 # Judge reports are written to $AUR_SLEUTH_DATA_DIR/judge/<pkg>.json (default: ~/aur-sleuth-data/judge/)
 set -euo pipefail
@@ -186,6 +189,20 @@ check_triggers() {
             return 0
         fi
     fi
+
+    # An agreed warning. Everything reaching this point agrees, and agreement is
+    # not correctness: two models reading the same PKGBUILD share their failure
+    # modes, so the likeliest kind of agreed verdict to be wrong is a false
+    # positive on a package that merely looks alarming. That is also the verdict
+    # that gets published naming a package as dangerous, so it is the one worth
+    # a second opinion. Only disagreement used to trigger, which meant a
+    # confidently wrong "unsafe" was never checked at all.
+    for res in "${results[@]}"; do
+        if [[ "$res" == "unsafe" || "$res" == "inconclusive" ]]; then
+            echo "warned (agreed $res)"
+            return 0
+        fi
+    done
 
     # Shallow coverage
     for r in "${reports[@]}"; do

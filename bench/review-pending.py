@@ -13,7 +13,8 @@ sweep, and reading several hundred reports is not how they will find out.
 Usage:
   review-pending.py --git-dir DIR --head REF [--base REF]
                     [--gate pass|fail] [--internal-file FILE]
-                    [--model MODEL] [--max-reviews N] [--no-llm]
+                    [--model MODEL] [--max-reviews N] [--batch-size N]
+                    [--workers N] [--no-llm]
 
 The last line printed is `REVIEW_JSON ` followed by one JSON object holding
 everything above in machine-readable form, for a caller that wants the answer
@@ -27,6 +28,7 @@ import os
 import subprocess
 import sys
 from collections import Counter, defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Verdicts worth a model's attention: a report that claims danger, or one that
 # could not make up its mind. Both have text a person would want read.
@@ -41,7 +43,16 @@ DEGRADED = {"skipped", "unknown"}
 # One report can be long, and a sweep can hold hundreds. Both bounds are here to
 # keep an advisory pass from costing more than the audit that produced it.
 MAX_REPORT_CHARS = 12000
-DEFAULT_MAX_REVIEWS = 10
+# 0 means every flagged report. The read is advisory, and a report nobody read
+# is the one a problem hides in, so the default is to read them all.
+DEFAULT_MAX_REVIEWS = 0
+# Reports per request. Batching is for the model's benefit, not the budget's: a
+# few reports at a time keeps each request inside a context the model can
+# actually attend to, and one weak batch cannot bury the rest.
+DEFAULT_BATCH = 8
+# Batches in flight. The review Job has a deadline, and a large sweep is many
+# batches; a few at a time keeps the wall clock down without hammering the API.
+DEFAULT_WORKERS = 4
 
 
 def git(gitdir, *args, check=True):
@@ -266,6 +277,52 @@ Respond in JSON, no markdown fencing:
     return parsed
 
 
+def review_batches(entries, model, base_url, api_key, batch_size, workers):
+    """Read every entry, a batch at a time, and gather what came back.
+
+    One weak or failed batch must not lose the others, so each is reported
+    separately and the caller is told how many succeeded. Batches run
+    concurrently but results are collected in order, so the same sweep reads the
+    same way twice.
+    """
+    batches = [entries[i:i + batch_size] for i in range(0, len(entries), batch_size)]
+    results = [None] * len(batches)
+
+    if len(batches) == 1 or workers <= 1:
+        for i, b in enumerate(batches):
+            results[i] = ask_model(b, model, base_url, api_key)
+    else:
+        with ThreadPoolExecutor(max_workers=min(workers, len(batches))) as pool:
+            futures = {pool.submit(ask_model, b, model, base_url, api_key): i
+                       for i, b in enumerate(batches)}
+            for f in as_completed(futures):
+                i = futures[f]
+                try:
+                    results[i] = f.result()
+                except Exception as exc:  # a crash here must not lose the rest
+                    results[i] = {"_error": str(exc)}
+
+    concerns, errors, ok = [], [], 0
+    for i, verdict in enumerate(results):
+        if not isinstance(verdict, dict) or "_error" in verdict:
+            detail = verdict.get("_error", "no answer") if isinstance(verdict, dict) else "no answer"
+            errors.append(f"batch {i + 1}: {detail}")
+            continue
+        ok += 1
+        for c in verdict.get("concerns") or []:
+            if isinstance(c, dict):
+                concerns.append({
+                    "package": str(c.get("package", "?"))[:100],
+                    "kind": str(c.get("kind", "?"))[:100],
+                    "detail": str(c.get("detail", ""))[:500],
+                })
+
+    read = sum(len(batches[i]) for i, v in enumerate(results)
+               if isinstance(v, dict) and "_error" not in v)
+    return {"concerns": concerns, "errors": errors,
+            "batches": len(batches), "batches_ok": ok, "read": read}
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--git-dir", required=True)
@@ -277,7 +334,12 @@ def main():
                     help="file listing paths that carry an internal string, one per line")
     ap.add_argument("--model", default=os.environ.get(
         "AUR_SLEUTH_REVIEW_MODEL", "deepseek/deepseek-v4-flash"))
-    ap.add_argument("--max-reviews", type=int, default=DEFAULT_MAX_REVIEWS)
+    ap.add_argument("--max-reviews", type=int, default=DEFAULT_MAX_REVIEWS,
+                    help="cap on flagged reports to read; 0 (the default) reads all")
+    ap.add_argument("--batch-size", type=int, default=DEFAULT_BATCH,
+                    help="reports per request")
+    ap.add_argument("--workers", type=int, default=DEFAULT_WORKERS,
+                    help="batches in flight")
     ap.add_argument("--no-llm", action="store_true")
     args = ap.parse_args()
 
@@ -350,46 +412,52 @@ def main():
         print("\nNo OPENAI_API_KEY: skipping the model's read.")
         return finish(0)
 
-    subset = flagged[:args.max_reviews]
+    subset = flagged if args.max_reviews <= 0 else flagged[:args.max_reviews]
+    nbatch = max(1, args.batch_size)
     if len(flagged) > len(subset):
         print(f"\nAsking {args.model} about the first {len(subset)}"
-              f" of {len(flagged)}...")
+              f" of {len(flagged)}, {nbatch} at a time...")
     else:
-        print(f"\nAsking {args.model} about {len(subset)}...")
+        print(f"\nAsking {args.model} about all {len(subset)},"
+              f" {nbatch} at a time...")
 
-    verdict = ask_model(
+    got = review_batches(
         subset, args.model,
         os.environ.get("OPENAI_BASE_URL", "https://openrouter.ai/api/v1"),
-        api_key,
+        api_key, nbatch, args.workers,
     )
-    out["llm"] = {"status": "ok", "model": args.model, "read": len(subset),
-                  "of": len(flagged), "concerns": [], "summary": ""}
+    out["llm"] = {"status": "ok", "model": args.model, "read": got["read"],
+                  "of": len(flagged), "concerns": got["concerns"],
+                  "summary": "", "batches": got["batches"],
+                  "batches_ok": got["batches_ok"]}
 
-    if "_error" in verdict:
-        # Advisory, so a failure here is reported and does not change the outcome.
-        # "_error" is ask_model's own sentinel, distinct from any "error" key the
-        # model's JSON might carry.
-        print(f"  the review did not complete: {verdict['_error']}")
+    concerns = got["concerns"]
+    # The summary is built here rather than taken from one batch: with several
+    # batches there is no single model sentence that describes the whole read,
+    # and a count that matches the list is more use than prose that might not.
+    if got["batches_ok"] == 0:
+        # Advisory, so a total failure is reported and changes no outcome.
         out["llm"]["status"] = "error"
-        out["llm"]["summary"] = str(verdict["_error"])[:300]
+        out["llm"]["summary"] = ("the review did not complete: "
+                                 + "; ".join(got["errors"])[:280])
+        print(f"  the review did not complete: {'; '.join(got['errors'])}")
         return finish(0)
 
-    concerns = verdict.get("concerns") or []
-    out["llm"]["concerns"] = [
-        {"package": str(c.get("package", "?"))[:100],
-         "kind": str(c.get("kind", "?"))[:100],
-         "detail": str(c.get("detail", ""))[:500]}
-        for c in concerns if isinstance(c, dict)
-    ]
-    out["llm"]["summary"] = str(verdict.get("summary", ""))[:500]
+    summary = f"{len(concerns)} concern(s) across {got['read']} report(s)"
+    if got["errors"]:
+        out["llm"]["status"] = "partial"
+        summary += f"; {len(got['errors'])} batch(es) failed"
+    out["llm"]["summary"] = summary[:500]
+    out["llm"]["errors"] = [e[:200] for e in got["errors"]]
+
     if not concerns:
-        print(f"  no concerns raised. {verdict.get('summary', '')}".rstrip())
+        print(f"  no concerns raised across {got['read']} report(s).")
     else:
         print(f"  {len(concerns)} concern(s) raised:")
         for c in concerns:
-            print(f"    [{c.get('kind', '?')}] {c.get('package', '?')}:"
-                  f" {c.get('detail', '')}")
-        print(f"  {verdict.get('summary', '')}".rstrip())
+            print(f"    [{c['kind']}] {c['package']}: {c['detail']}")
+    for e in got["errors"]:
+        print(f"  incomplete: {e}")
     print("\n  Advisory only. This model read text a hostile package can influence.")
     return finish(0)
 
