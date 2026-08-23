@@ -1,0 +1,33 @@
+{
+  "package": "linecast",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The 'get.sh' script flagged as unsafe is not executed during AUR package build/install. PKGBUILD uses verified source builds, and all runtime code shows legitimate functionality.",
+  "disagreement_analysis": "qwen incorrectly treated 'get.sh' (a user-install helper) as part of AUR build process. deepseek didn't review it due to path error.",
+  "coverage_issues": [
+    "deepseek failed to audit 'get.sh' due to incorrect path handling",
+    "qwen didn't review critical build files like '_radar_tiles.py'"
+  ],
+  "false_positives": [
+    "qwen: 'get.sh' (development script not used in PKGBUILD functions)"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Improve file selection logic to prioritize PKGBUILD-referenced scripts",
+    "Enforce path consistency during file offering",
+    "Train models to distinguish build-time vs development scripts per AUR guidelines",
+    "Add explicit checks for 'curl | sh' patterns in build hooks"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 12300,
+    "completion_tokens": 1919,
+    "cost": 0.0134075
+  },
+  "audits_judged": [
+    "20260823-184619-qwen-qwen3-235b-a22b-2507.md",
+    "20260823-184637-deepseek-deepseek-v4-flash.md"
+  ]
+}
