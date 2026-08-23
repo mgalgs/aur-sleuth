@@ -145,7 +145,12 @@ def package_state(ps):
     audit = ps.get("audit_majority")
     judge = ps.get("judge_majority")
 
-    if audit == "unsafe" and judge == "unsafe":
+    # "Audits agree" has to mean more than one audit. A single cheap audit plus
+    # a judge that went along with it once made rocketchat-desktop "confirmed"
+    # over upstream's own build fetching from upstream's own server. Two
+    # independent unsafe reports (a re-audit by the stronger model counts) or
+    # it is "look", not a finding.
+    if audit == "unsafe" and judge == "unsafe" and ps.get("unsafe_audits", 0) >= 2:
         return "confirmed"
     # The judge read the audits and disagreed with them. It is the better model
     # looking at the same evidence, so its answer stands: a package it cleared is
@@ -310,6 +315,8 @@ def build_index_data(audits, judges):
             "judges": [{"verdict": j["correct_verdict"], "model": j.get("model", "unknown")} for j in pkg_data["judges"]],
             "audit_majority": compute_majority(audit_results),
             "judge_majority": compute_majority(judge_verdicts),
+            # Reports that said unsafe, each counted once: what "agree" rests on.
+            "unsafe_audits": sum(1 for a in pkg_audits if a["result"] == "unsafe"),
         }
 
     # Aggregate stats
@@ -810,8 +817,10 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     // The four things the pre-publish read looks for, by the number the
     // reviewer's prompt gives them. Anything else is shown as the model wrote it.
     const REVIEW_KINDS = {
-        '1': 'wording aimed at the reader',
-        '2': 'a secret of the operator',
+        'leak': 'a private detail of the operator',
+        // Older records, from when the read had a wider brief.
+        '1': 'a message planted for whoever reads the report',
+        '2': 'a private detail of the operator',
         '3': 'a broken report',
         '4': 'abusive text',
     };
@@ -843,8 +852,8 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 
         if (llm.status === 'ok' || llm.status === 'partial') {
             let s = `${escapeHtml(shortModel(llm.model || 'a model'))} then read ${Number(llm.read) || 0} of the `
-                + `${Number(llm.of) || 0} report(s) that reached an unclear verdict, looking only at the reports' own `
-                + `wording: text aimed at the reader, a secret of the operator, a broken report, abusive text.`;
+                + `${Number(llm.of) || 0} report(s) that reached an unclear verdict, looking for one thing only: a leaked `
+                + `private detail of the operator (a credential, an internal hostname, a path on the machine that ran the audit).`;
             // A note about a package an audit flagged and a judge then cleared is,
             // on this corpus, the reviewer repeating the audit's overturned
             // accusation ("fictitious CVE patches ... likely injecting backdoors").
@@ -1101,7 +1110,8 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     function packageState(pkg) {
         const audit = pkg.audit_majority;
         const judge = pkg.judge_majority;
-        if (audit === 'unsafe' && judge === 'unsafe') return 'confirmed';
+        // Mirrors package_state() in Python: two unsafe reports or it is not confirmed.
+        if (audit === 'unsafe' && judge === 'unsafe' && (pkg.unsafe_audits || 0) >= 2) return 'confirmed';
         if (judge === 'safe') return 'clean';
         if (audit === 'unsafe' || audit === 'contested' || judge === 'unsafe') return 'look';
         if (audit === 'safe') return 'clean';
