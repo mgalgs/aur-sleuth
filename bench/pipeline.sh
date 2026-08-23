@@ -104,6 +104,29 @@ fi
 
 mkdir -p "$PIPELINE_DIR" "$DATA_DIR/bulk-reports" "$DATA_DIR/judge"
 
+# The configuration this run resolved to, for anything that wants to know
+# what is actually in use: the models come from defaults in this file unless
+# a flag overrode them, and nothing outside this process can see that
+# otherwise. The ops page reads this to name the models in each seat.
+PIPE_AUDIT_MODELS="$AUDIT_MODELS" PIPE_JUDGE_MODEL="$JUDGE_MODEL" PIPE_REAUDIT_MODEL="$REAUDIT_MODEL" \
+PIPE_DAILY_BUDGET="$DAILY_BUDGET" PIPE_JOBS="$JOBS" PIPE_OUT="$PIPELINE_DIR/effective.json" \
+python3 - <<'PY'
+import datetime, json, os
+e = os.environ
+out = {
+    "AUR_SLEUTH_AUDIT_MODELS": e["PIPE_AUDIT_MODELS"],
+    "AUR_SLEUTH_JUDGE_MODEL": e["PIPE_JUDGE_MODEL"],
+    "AUR_SLEUTH_REAUDIT_MODEL": e["PIPE_REAUDIT_MODEL"],
+    "AUR_SLEUTH_DAILY_BUDGET": e["PIPE_DAILY_BUDGET"],
+    "AUR_SLEUTH_JOBS": e["PIPE_JOBS"],
+    "written": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+}
+tmp = e["PIPE_OUT"] + ".tmp"
+with open(tmp, "w") as f:
+    json.dump(out, f, separators=(",", ":"), sort_keys=True)
+os.replace(tmp, e["PIPE_OUT"])
+PY
+
 log() { echo "[$(date '+%H:%M:%S')] $*"; }
 
 # --- Daily spend tracking ---
