@@ -91,7 +91,11 @@ for path in sys.argv[1:]:
         with open(path) as f:
             for line in f:
                 try:
-                    total += float(json.loads(line).get("cost") or 0)
+                    r = json.loads(line)
+                    # Rows copied from the branch are the incumbents' old
+                    # spend, not this run's.
+                    if not r.get("from_branch"):
+                        total += float(r.get("cost") or 0)
                 except (ValueError, AttributeError):
                     pass
     except OSError:
@@ -161,11 +165,13 @@ run_synthetics() {
 bench_package() {
     local model="$1" line="$2" slug="${1//\//-}"
     local pkg reference ref_pkgver overridden
-    IFS=$'\t' read -r pkg reference ref_pkgver overridden < <(printf '%s' "$line" | python3 -c '
+    local ref_source support
+    IFS=$'\t' read -r pkg reference ref_pkgver overridden ref_source support < <(printf '%s' "$line" | python3 -c '
 import json, sys
 r = json.load(sys.stdin)
 print("\t".join([r["package"], r.get("reference", "unknown"), r.get("pkgver", ""),
-                 "1" if r.get("overridden") else "0"]))')
+                 "1" if r.get("overridden") else "0", r.get("reference_source", ""),
+                 str(r.get("support", 0))]))')
 
     local report_dir="$RUN_DIR/reports/$slug"
     local report="$report_dir/aur-sleuth-report-${pkg}.txt"
@@ -178,7 +184,8 @@ print("\t".join([r["package"], r.get("reference", "unknown"), r.get("pkgver", ""
     [[ "$overridden" == 1 ]] && flag=(--overridden)
     local row
     row="$(python3 bench/benchmark-report.py row --report "$report" --model "$model" \
-        --package "$pkg" --reference "$reference" --ref-pkgver "$ref_pkgver" \
+        --package "$pkg" --reference "$reference" --reference-source "$ref_source" \
+        --support "$support" --ref-pkgver "$ref_pkgver" \
         --seconds "$seconds" --exit "$rc" "${flag[@]}")"
     printf '%s\n' "$row" | append_row "$ROWS"
     record_cost "$(printf '%s' "$row" | python3 -c 'import json,sys; print(json.load(sys.stdin)["cost"])')"
@@ -203,6 +210,27 @@ else
 fi
 nsample="$(wc -l < "$SAMPLE_FILE")"
 log "Sample: $nsample package(s)"
+
+# The current models' own latest report on each sampled package, from the
+# branch, as rows of their own. Costs nothing, and gives the table the
+# incumbents on the same packages: the delta a promotion has to beat.
+python3 - "$SAMPLE_FILE" <<'PYROWS' | append_row "$ROWS"
+import json, sys
+for line in open(sys.argv[1]):
+    line = line.strip()
+    if not line:
+        continue
+    r = json.loads(line)
+    for b in r.get("branch") or []:
+        print(json.dumps({
+            "model": b["model"], "package": r["package"], "reference": r["reference"],
+            "reference_source": r.get("reference_source", ""), "support": r.get("support", 0),
+            "ref_pkgver": r.get("pkgver", ""), "overridden": bool(r.get("overridden")),
+            "result": b["result"], "cost": b["cost"], "pkgver": b.get("pkgver", ""),
+            "seconds": None, "exit": 0, "summary": "", "from_branch": True,
+        }, separators=(",", ":"), sort_keys=True))
+PYROWS
+log "Incumbents: $(grep -c '"from_branch":true' "$ROWS" || true) row(s) from the branch"
 
 STARTED="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 stopped_early=false

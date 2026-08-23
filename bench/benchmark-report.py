@@ -41,6 +41,8 @@ def report_row(args):
         "model": args.model,
         "package": args.package,
         "reference": args.reference or "unknown",
+        "reference_source": args.reference_source or "",
+        "support": args.support,
         "ref_pkgver": args.ref_pkgver or "",
         "overridden": bool(args.overridden),
         "seconds": args.seconds,
@@ -116,6 +118,27 @@ def score(model, rows, synth):
     hard = [r for r in scored if r["reference"] == "safe" and r.get("overridden")]
     hard_flags = sum(1 for r in hard if r["result"] == "unsafe")
 
+    # The same, split by who settled the reference. Disagreeing with a verdict
+    # a person settled is being wrong; disagreeing with one the pipeline's own
+    # models settled may be right -- the first run "missed" a package whose
+    # reference was a single audit's false positive. Only the human-settled
+    # misses disqualify.
+    def tally(rows_):
+        return {
+            "scored": len(rows_),
+            "agree": sum(1 for r in rows_ if r["result"] == r["reference"]),
+            "false_flags": sum(1 for r in rows_ if r["reference"] == "safe" and r["result"] == "unsafe"),
+            "of_safe": sum(1 for r in rows_ if r["reference"] == "safe"),
+            "misses": sum(1 for r in rows_ if r["reference"] == "unsafe" and r["result"] == "safe"),
+            "of_unsafe": sum(1 for r in rows_ if r["reference"] == "unsafe"),
+        }
+    human = tally([r for r in scored if r.get("reference_source") == "human"])
+    pipeline = tally([r for r in scored if r.get("reference_source") != "human"])
+    # Rows copied from the branch are the current models' own past results:
+    # the incumbents. Their verdicts helped settle the pipeline references, so
+    # their agreement there is an upper bound; their cost is what it was.
+    incumbent = bool(mine) and all(r.get("from_branch") for r in mine)
+
     unscored = [r for r in mine if r not in scored]
     inconclusive = sum(1 for r in mine if r.get("result") == "inconclusive")
     errors = sum(1 for r in mine if r.get("result") in ("error", "timeout", None, ""))
@@ -130,6 +153,9 @@ def score(model, rows, synth):
 
     return {
         "model": model,
+        "incumbent": incumbent,
+        "human": human,
+        "pipeline": pipeline,
         "sample": len(mine),
         "scored": len(scored),
         "agree": agree,
@@ -160,6 +186,7 @@ def score(model, rows, synth):
         },
         "disagreements": [
             {"package": r["package"], "reference": r["reference"], "result": r["result"],
+             "reference_source": r.get("reference_source", ""), "support": r.get("support", 0),
              "overridden": bool(r.get("overridden")), "summary": str(r.get("summary") or "")[:200]}
             for r in scored if r["result"] != r["reference"]
         ],
@@ -175,24 +202,30 @@ def money(v):
 
 
 def table(models):
-    head = f"{'model':<34} {'synth':>6} {'agree':>6} {'false':>7} {'hard':>6} {'miss':>6} {'inc':>4} {'$/pkg':>8} {'$':>8} {'s/pkg':>6}"
+    head = (f"{'model':<36} {'synth':>6} {'agree':>6} {'human f/m':>10} {'pipe f/m':>9} "
+            f"{'hard':>6} {'inc':>4} {'$/pkg':>8} {'$':>8} {'s/pkg':>6}")
     lines = [head, "-" * len(head)]
     for m in models:
         s = m["synthetics"]
         synth = f"{s['passed']}/{s['run']}" if s["run"] else "—"
+        h, p = m["human"], m["pipeline"]
+        name = m["model"] + (" *" if m["incumbent"] else "")
         lines.append(
-            f"{m['model']:<34} {synth:>6} {pct(m['agreement']):>6} "
-            f"{m['false_flags']}/{m['of_safe']:<5} {m['hard_flags']}/{m['of_hard']:<4} "
-            f"{m['misses']}/{m['of_unsafe']:<4} {m['inconclusive']:>4} "
+            f"{name:<36} {synth:>6} {pct(m['agreement']):>6} "
+            f"{h['false_flags']}/{h['of_safe']} {h['misses']}/{h['of_unsafe']:<4} "
+            f"{p['false_flags']}/{p['of_safe']} {p['misses']}/{p['of_unsafe']:<3} "
+            f"{m['hard_flags']}/{m['of_hard']:<4} {m['inconclusive']:>4} "
             f"{money(m['cost_per_package']):>8} {money(m['cost']):>8} "
             f"{'—' if m['mean_seconds'] is None else m['mean_seconds']:>6}"
         )
     lines.append("")
-    lines.append("synth: synthetic fixtures passed. agree: share of scored packages where the")
-    lines.append("candidate matched the settled verdict. false: clean packages it called unsafe")
-    lines.append("(hard: of those, ones a judge had already had to clear). miss: confirmed-unsafe")
-    lines.append("packages it called safe. inc: inconclusive. A miss is an attack getting through;")
-    lines.append("a false flag is the accusation the threat model says not to make.")
+    lines.append("* = a current model, scored from its own reports on the branch (its verdicts")
+    lines.append("helped settle the pipeline references, so its agreement is an upper bound; its")
+    lines.append("cost is real). synth: fixtures passed. agree: matches over everything scored.")
+    lines.append("human f/m: false flags / misses against verdicts a person settled -- a miss")
+    lines.append("here disqualifies. pipe f/m: the same against verdicts the pipeline's own")
+    lines.append("models settled -- a disagreement, which may be right. hard: false flags on")
+    lines.append("packages a judge had already had to clear. inc: inconclusive.")
     return "\n".join(lines)
 
 
@@ -203,6 +236,8 @@ def main():
         rp.add_argument("--model", required=True)
         rp.add_argument("--package", required=True)
         rp.add_argument("--reference", default="unknown")
+        rp.add_argument("--reference-source", default="", choices=["", "human", "models"])
+        rp.add_argument("--support", type=int, default=0)
         rp.add_argument("--ref-pkgver", default="")
         rp.add_argument("--overridden", action="store_true")
         rp.add_argument("--seconds", type=float, default=0.0)
@@ -239,7 +274,7 @@ def main():
     # confirmed package is not a candidate at any price, so it sorts last.
     models.sort(key=lambda m: (
         not (m["synthetics"]["all_pass"] or m["synthetics"]["run"] == 0),
-        m["misses"] > 0,
+        m["human"]["misses"] > 0,
         m["scored"] == 0,
         -(m["agreement"] or 0),
         m["cost_per_package"] or 0,
