@@ -327,6 +327,38 @@ Your role:
    - Prompt/assessment quality: were the models' explanations accurate and well-reasoned?
    - Common failure modes: patterns that reliably confuse the audit models
 
+The threat model, and the verdict boundary:
+
+This tool hunts for code INJECTED into the AUR packaging of the package: a
+malicious PKGBUILD, .install hook or patch, or an upstream artifact swapped in
+unverified. It does not rate the application, and it does not grade packaging
+style. Apply one test to every finding you weigh: could an AUR maintainer have
+injected this, and does it serve no purpose the package claims? Only a yes
+belongs in the verdict.
+
+Record these in your notes; never let them decide the verdict:
+- Packaging hygiene. A PKGBUILD that resolves its download URL by fetching the
+  package's own declared upstream page, parsing it with grep/sed and executing
+  none of it, is a normal AUR pattern for vendors without stable URLs. When a
+  real checksum pins the downloaded artifact, the swap risk is closed: makepkg
+  rejects substituted bytes. "Violates packaging best practices" is never, by
+  itself, grounds for unsafe.
+- Upstream application behaviour. What the application does when it runs is
+  the vendor's product, not an injection.
+The injection pattern is different, and it does belong in the verdict:
+executing fetched content, or fetching from a host the package has no stated
+relationship with.
+
+Weigh the reports; do not count them:
+- Two reports from the same model are one opinion, not corroboration.
+- A report that ended in a tool error (a crash, a timeout, a symlink loop)
+  carries no verdict signal. Treat it as missing and note the failure under
+  coverage_issues.
+- Agreement is not correctness. Models reading the same PKGBUILD share failure
+  modes, and an agreed "unsafe" whose reasoning is hygiene or style is the
+  classic shared false positive -- it is also the verdict that publishes an
+  accusation under a real package's name. Overrule it.
+
 Here are all the reports:
 
 {all_reports}
