@@ -1,0 +1,39 @@
+{
+  "package": "t3code-nightly-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Both models agree the PKGBUILD uses secure practices: pinned HTTPS sources with checksums, standard AppImage handling, and no malicious code in build/install functions. LICENSE file is benign.",
+  "disagreement_analysis": null,
+  "coverage_issues": [
+    "Both models skipped auditing the AppImage binary (T3-Code-*.AppImage) which contains executable code",
+    "No review of potential .install hooks or other package scripts if present"
+  ],
+  "false_positives": [
+    "Both models correctly dismissed chmod 4755 on chrome-sandbox as standard Chromium sandbox setup"
+  ],
+  "false_negatives": [
+    "AppImage binary remains unaudited - potential risk vector for malicious payloads",
+    "No verification that extracted files match checksummed AppImage contents"
+  ],
+  "re_audit_recommended": true,
+  "re_audit_focus": [
+    "AppImage binary analysis via sandboxed execution or decompilation",
+    "Verify extraction logic in prepare() matches checksummed source"
+  ],
+  "learnings": [
+    "File selection: Prioritize hooks (.install) and checksum verification logic over LICENSE files",
+    "Prompt improvement: Explicitly require analysis of binary payload risks for -bin packages",
+    "Failure mode: Models overlook build-time extraction integrity checks",
+    "Tool enhancement: Flag unaudited binaries more prominently in reports"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 3453,
+    "completion_tokens": 995,
+    "cost": 0.0049046
+  },
+  "audits_judged": [
+    "20260823-030255-qwen-qwen3-235b-a22b-2507.md",
+    "20260823-030303-deepseek-deepseek-v4-flash.md"
+  ]
+}
