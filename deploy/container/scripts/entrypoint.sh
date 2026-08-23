@@ -11,6 +11,11 @@
 #             is the answer. Optionally asks a model to read the reports that
 #             reached an unclear verdict, which is advice for a person and
 #             never a gate.
+#   dashboard Rebuild the dashboard JSON from the branch as it stands and commit
+#             it. Calls no model and costs nothing. The page ships in the image
+#             but its data does not, so this is how a change to the page takes
+#             effect without waiting for a paid audit run. Needs the volume
+#             read-write. No credential.
 #   quarantine
 #             Drop every unpublished report that names this deployment's own
 #             infrastructure, which review reports as the reason it failed.
@@ -610,6 +615,34 @@ do_review() {
 # store is non-bare with an index the audit stage leaves dirty, which
 # filter-branch refuses to work beside. The result is fetched back, which
 # moves only the objects the rewrite made.
+# --- dashboard ------------------------------------------------------------------
+
+# Rebuild the dashboard JSON from the branch as it stands, and commit it.
+#
+# The page ships in this image but the data it reads does not: data.json is
+# written by the audit stage's dashboard phase. So a change to how the page
+# summarises things has no effect until a run happens, and a run cannot happen
+# once the day's budget is spent -- bench/pipeline.sh exits before the dashboard
+# phase. This verb is the missing piece: it calls no model, costs nothing, and
+# only rewrites the derived JSON, so it is safe to run at any time.
+#
+# Needs the volume writable, like quarantine, because it commits to the store.
+do_dashboard() {
+    [[ -d "$GIT_STORE" ]] || die "$GIT_STORE missing; run the prepare stage first"
+    cd "$SRC_DIR"
+
+    local before after
+    before="$(git rev-parse --verify --quiet "refs/heads/$REPORTS_BRANCH" || true)"
+    python3 bench/generate-dashboard.py >/dev/null
+    after="$(git rev-parse --verify --quiet "refs/heads/$REPORTS_BRANCH" || true)"
+
+    if [[ "$before" == "$after" ]]; then
+        log "Dashboard already matches the branch at ${after:0:12}; nothing to do"
+    else
+        log "Rebuilt the dashboard: ${before:0:12} -> ${after:0:12}"
+    fi
+}
+
 do_quarantine() {
     [[ -d "$GIT_STORE" ]] || die "$GIT_STORE missing; run the prepare stage first"
 
@@ -754,9 +787,11 @@ case "$MODE" in
     prepare) do_prepare ;;
     audit)   do_audit "$@" ;;
     review)     do_review "$@" ;;
+    dashboard)  do_dashboard ;;
     quarantine) do_quarantine ;;
     publish)    do_publish ;;
     bundle)     do_bundle ;;
     *)          die "unknown stage '$MODE'" \
-                    "(want prepare, audit, review, quarantine, publish or bundle)" ;;
+                    "(want prepare, audit, review, dashboard, quarantine," \
+                    "publish or bundle)" ;;
 esac
