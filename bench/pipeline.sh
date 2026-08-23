@@ -29,14 +29,19 @@ JOBS=8
 # hung mirror or a wedged API call costs one audit instead of the whole run.
 # Without it a single stalled download can consume the entire job deadline.
 AUDIT_TIMEOUT=900
-# Share of the day's budget the audit phase may spend, leaving the rest for the
-# phases after it.
+# Share of the day's budget the audit phase may spend. The audit loop is the
+# only phase this budget caps. Judge and re-audit work has top priority: a
+# flagged package must not sit in "worth a closer look" because new audits
+# spent the money first. So those two phases run to completion even when they
+# push the day past --daily-budget. The overrun is recorded in the spend
+# ledger, logged, and written as overrun= in runs.log. When the overrun
+# trends up, tune this share down; never gate the judge.
 #
-# Without a reserve the judge never runs at all. It is gated on the same budget
-# as the audit loop, and the audit loop runs until that budget is gone, so by
-# the time the judge is reached there is nothing left. This is measured, not
-# predicted: a run that completed normally went audit -> "Daily budget
-# exhausted" -> dashboard, with no judge phase in between.
+# History, both measured: first the judge shared the audit loop's gate and
+# never ran (the audit loop spent everything). Then this reserve existed but
+# judge and re-audit still checked the total budget, and one run had the
+# judge spend past it and starve the re-audit phase -- the flagged packages
+# waited a day. Hence: cap the audits, never the settling.
 AUDIT_BUDGET_SHARE=0.8
 DRY_RUN=false
 SKIP_JUDGE=false
@@ -156,6 +161,13 @@ report_cost() {
 
 budget_remaining() {
     python3 -c "print(max(0, $DAILY_BUDGET - $(get_daily_spent)))"
+}
+
+# How far past the daily budget the day's spend is. Nonzero is expected, not
+# an error: the judge and re-audit phases are allowed to overrun. This is the
+# number to watch when tuning AUDIT_BUDGET_SHARE.
+budget_overrun() {
+    python3 -c "print(max(0, round($(get_daily_spent) - $DAILY_BUDGET, 6)))"
 }
 
 # True when the day's spend has reached a ceiling. With no argument the ceiling
@@ -460,7 +472,7 @@ print(d.get('_judge_usage', {}).get('cost') or 0)
 main() {
     log "=== AUR Sleuth Pipeline ==="
     log "Config: min-votes=$MIN_VOTES, lookback=${LOOKBACK_HOURS}h, budget=\$$DAILY_BUDGET/day, jobs=$JOBS"
-    log "Audit phase stops at \$$AUDIT_BUDGET, leaving the rest for judge and re-audit"
+    log "Audit phase stops at \$$AUDIT_BUDGET; judge and re-audit run to completion even past the daily budget"
     if [[ "$SEED_TOP" -gt 0 ]]; then
         log "Candidates: updated + top $SEED_TOP by popularity, interleaved at updated-share=$UPDATED_SHARE"
     fi
@@ -552,8 +564,10 @@ main() {
         push_reports
     fi
 
-    # Step 5: Judge triggered packages
-    if ! $SKIP_JUDGE && ! is_over_budget; then
+    # Step 5: Judge triggered packages. No budget gate: judge work has top
+    # priority, and the audit phase above is already capped to leave room.
+    # See the AUDIT_BUDGET_SHARE comment for why this may overrun the budget.
+    if ! $SKIP_JUDGE; then
         log ""
         log "=== Judge Phase ==="
         local judge_marker="$PIPELINE_DIR/.judge-start-marker"
@@ -566,24 +580,25 @@ main() {
         record_cost "$judge_cost"
         log "Judge phase cost: \$$judge_cost"
 
-        # Step 6: Re-audit flagged packages
-        if ! is_over_budget; then
-            log ""
-            log "=== Re-audit Phase ==="
-            local reaudit_marker="$PIPELINE_DIR/.reaudit-start-marker"
-            touch "$reaudit_marker"
+        # Step 6: Re-audit flagged packages. Same rule as the judge: no
+        # budget gate. This phase is what settles a flag, so skipping it is
+        # the most expensive saving there is -- one run did exactly that and
+        # left every flagged package in limbo for a day.
+        log ""
+        log "=== Re-audit Phase ==="
+        local reaudit_marker="$PIPELINE_DIR/.reaudit-start-marker"
+        touch "$reaudit_marker"
 
-            bash bench/judge.sh --re-audit-pending --audit-model "$REAUDIT_MODEL" \
-                --audit-timeout "$AUDIT_TIMEOUT" 2>&1
+        bash bench/judge.sh --re-audit-pending --audit-model "$REAUDIT_MODEL" \
+            --audit-timeout "$AUDIT_TIMEOUT" 2>&1
 
-            # Re-audit costs are in audit reports, not judge reports —
-            # track via judge report updates (re-audit metadata gets added)
-            local reaudit_cost
-            reaudit_cost=$(sum_judge_costs_since "$reaudit_marker")
-            if python3 -c "import sys; sys.exit(0 if float('$reaudit_cost') > 0 else 1)" 2>/dev/null; then
-                record_cost "$reaudit_cost"
-                log "Re-audit phase cost: \$$reaudit_cost"
-            fi
+        # Re-audit costs are in audit reports, not judge reports —
+        # track via judge report updates (re-audit metadata gets added)
+        local reaudit_cost
+        reaudit_cost=$(sum_judge_costs_since "$reaudit_marker")
+        if python3 -c "import sys; sys.exit(0 if float('$reaudit_cost') > 0 else 1)" 2>/dev/null; then
+            record_cost "$reaudit_cost"
+            log "Re-audit phase cost: \$$reaudit_cost"
         fi
 
         push_reports
@@ -602,12 +617,17 @@ main() {
     log "=== Pipeline Complete ==="
     log "Daily spend: \$$(get_daily_spent) / \$$DAILY_BUDGET"
     log "Budget remaining: \$$(budget_remaining)"
+    local overrun
+    overrun=$(budget_overrun)
+    if python3 -c "import sys; sys.exit(0 if float('$overrun') > 0 else 1)" 2>/dev/null; then
+        log "Budget overrun: \$$overrun (judge and re-audit run past the cap by design; tune --audit-budget-share when this trends up)"
+    fi
     if $NO_PUSH && ! $DRY_RUN; then
         log "--no-push: $REPORTS_BRANCH left unpushed for a separate publish step"
     fi
 
     # Append to run log
-    echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) spent=\$$(get_daily_spent) budget=\$$DAILY_BUDGET candidates=$candidate_count" \
+    echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) spent=\$$(get_daily_spent) budget=\$$DAILY_BUDGET overrun=\$$overrun candidates=$candidate_count" \
         >> "$PIPELINE_DIR/runs.log"
 }
 

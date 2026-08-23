@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
-# Test that the audit phase leaves budget for the phases after it.
+# Test that the audit phase leaves budget for the phases after it, and that
+# the phases after it are never gated on the budget at all.
 #
-# The judge is gated on the same daily budget as the audit loop. When the audit
-# loop is allowed to spend all of it, the judge never runs -- not rarely, never.
-# This reserves a share, and the test proves the reserve both stops the audit
-# early and lets the judge through.
+# The audit loop is the only phase the daily budget caps. Judge and re-audit
+# work has top priority: both phases run to completion even when they push
+# the day past --daily-budget, and the overrun is logged and written to
+# runs.log for trend-watching. The test proves the reserve stops the audit
+# early, the judge runs, the re-audit runs past an exhausted budget, and the
+# overrun is reported.
 #
 # Costs nothing to run: the audit loop is made to stop before its first package,
 # and the judge finds no reports to judge, so no completion is ever requested.
@@ -92,6 +95,45 @@ if grep -q 'Daily budget already exhausted' <<< "$out"; then
     bad "the run exited early; the reserve must not look like exhaustion"
 else
     ok "the run did not mistake the reserve for an exhausted budget"
+fi
+
+echo "== the judge may overrun the budget, and the re-audit still runs =="
+# The judge phase itself can push the day's spend past --daily-budget. That
+# must not gate the re-audit phase: the re-audit is what settles a flag, and
+# skipping it once left every flagged package in limbo for a day. A fake
+# judge report with a future mtime makes sum_judge_costs_since bill a judge
+# cost without any API call: the pipeline records it, goes over budget, and
+# must run the re-audit phase anyway and report the overrun.
+data="$tmp/d4"
+mkdir -p "$data/pipeline" "$data/bulk-reports" "$data/judge"
+echo "1.70" > "$data/pipeline/spend-$(date +%Y-%m-%d).log"
+printf '{"_judge_usage": {"cost": 0.50}}\n' > "$data/judge/fake.json"
+touch -d "@$(( $(date +%s) + 3600 ))" "$data/judge/fake.json"
+
+out="$(AUR_SLEUTH_DATA_DIR="$data" OPENAI_API_KEY="unused-no-completion-is-made" \
+        bash bench/pipeline.sh --daily-budget 2.00 \
+        --packages-file /dev/null \
+        --skip-dashboard --no-push 2>&1 || true)"
+
+if grep -q '=== Re-audit Phase ===' <<< "$out"; then
+    ok "the re-audit phase ran past the exhausted budget"
+else
+    bad "the re-audit phase was gated on the spent budget"
+fi
+# The fake file's future mtime makes both phase markers count it, so the
+# exact amount is an artifact of the trick. The contract under test is that
+# a positive overrun is reported, not its value.
+# shellcheck disable=SC2016  # literal dollar sign in the log line
+if grep -Eq 'Budget overrun: \$0\.[0-9]+' <<< "$out"; then
+    ok "the overrun is reported in the log"
+else
+    bad "expected a reported overrun; got: $(grep -m1 -i 'overrun' <<< "$out" || echo 'nothing')"
+fi
+# shellcheck disable=SC2016  # literal dollar sign in the runs.log field
+if grep -Eq 'overrun=\$0\.[1-9]' "$data/pipeline/runs.log"; then
+    ok "runs.log carries the overrun for trend-watching"
+else
+    bad "runs.log should carry overrun=; got: $(cat "$data/pipeline/runs.log" 2>/dev/null || echo 'no runs.log')"
 fi
 
 echo "== a genuinely exhausted budget still ends the run =="

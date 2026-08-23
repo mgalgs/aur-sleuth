@@ -8,6 +8,8 @@ It ships the **image**, not a deployment. Scheduling is almost entirely site-spe
 
 One run is one `pipeline.sh` invocation. The pipeline throttles itself: it accumulates spend in `$DATA_DIR/pipeline/spend-YYYY-MM-DD.log` and exits when the day's total reaches `--daily-budget`. Run it several times a day and each run re-reads the same day's ledger, so the cap holds across runs — provided the ledger survives, which is what a persistent volume is for.
 
+The cap binds the audit phase only (it stops at `--audit-budget-share` of the budget). Judge and re-audit work has top priority: those phases run to completion even when they push the day past the budget, so a flagged package never waits a day for its second opinion. Expect the day's total to end somewhat over `--daily-budget`; each run logs the overrun and appends `overrun=` to `$DATA_DIR/pipeline/runs.log`. When that number trends up, lower `--audit-budget-share` — the audit phase is the knob, not the judge.
+
 Runs must not overlap, or two of them race on the archive and the push.
 
 ## The stages, and why
