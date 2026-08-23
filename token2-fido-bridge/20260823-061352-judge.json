@@ -1,0 +1,31 @@
+{
+  "package": "token2-fido-bridge",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The 'install.sh' script flagged as unsafe by qwen is not executed during AUR build/install. PKGBUILD uses standard CMake build without invoking this script, making it irrelevant for AUR safety assessment.",
+  "disagreement_analysis": "qwen incorrectly flagged install.sh as a supply-chain risk without verifying if it's executed during AUR operations. deepseek correctly recognized it as unused in the build process.",
+  "coverage_issues": [
+    "qwen skipped binary tarball without content analysis"
+  ],
+  "false_positives": [
+    "qwen: install.sh (script not referenced in PKGBUILD or .install)"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Improve file prioritization: Focus on build/install hooks referenced in PKGBUILD first",
+    "Enhance context awareness: Ignore unused scripts like install.sh unless invoked by build functions",
+    "Implement binary analysis: Extract tarballs to audit contained scripts"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 14202,
+    "completion_tokens": 1366,
+    "cost": 0.0133564
+  },
+  "audits_judged": [
+    "20260823-033105-qwen-qwen3-235b-a22b-2507.md",
+    "20260823-033139-deepseek-deepseek-v4-flash.md"
+  ]
+}
