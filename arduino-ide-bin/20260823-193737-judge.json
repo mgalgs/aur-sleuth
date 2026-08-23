@@ -1,0 +1,31 @@
+{
+  "package": "arduino-ide-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Both audits confirm PKGBUILD and wrapper script are safe. Unaudited JavaScript files are part of upstream IDE runtime code, not executed during Arch package build/install. No evidence of malicious behavior in packaging.",
+  "disagreement_analysis": null,
+  "coverage_issues": [
+    "Both models failed to audit critical backend JavaScript files (electron-main.js, plugin-host.js, etc.) due to HTTP 413 errors from oversized context",
+    "Models prioritized IDE runtime files over build-time scripts despite AUR scope"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Improve file prioritization: Focus exclusively on PKGBUILD hooks, install scripts, and build-time executables for binary packages",
+    "Implement size-based filtering: Automatically skip files >50KB unless referenced in PKGBUILD",
+    "Enhance error handling: Retry failed audits with chunking for large files",
+    "Clarify scope in prompts: Emphasize that runtime application code is out-of-scope unless executed during makepkg"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 15932,
+    "completion_tokens": 1536,
+    "cost": 0.0149924
+  },
+  "audits_judged": [
+    "20260823-190641-qwen-qwen3-235b-a22b-2507.md",
+    "20260823-190624-deepseek-deepseek-v4-flash.md"
+  ]
+}
