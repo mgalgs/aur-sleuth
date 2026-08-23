@@ -1,0 +1,35 @@
+{
+  "package": "portprotonqt",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "All flagged issues occur during application runtime, not during makepkg build/install. PKGBUILD and build process are clean. Runtime telemetry/installer behaviors are upstream design choices, not supply-chain attacks.",
+  "disagreement_analysis": "qwen over-prioritized application runtime behaviors (telemetry, AppImage execution) as supply-chain risks. deepseek correctly focused on build-time safety.",
+  "coverage_issues": [
+    "deepseek missed Install_PortProtonQt.desktop (flagged by qwen)"
+  ],
+  "false_positives": [
+    "install.sh: Not executed during makepkg (user-facing installer)",
+    "portprotonqt-appimage.sh: Build helper not used in PKGBUILD",
+    "app.py HTTP call: Runtime telemetry, not build-time risk",
+    "Install_PortProtonQt.desktop: User-triggered action, not executed during build"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Improve scope enforcement: Train models to strictly differentiate build-time vs runtime risks",
+    "Prioritize PKGBUILD/.install hooks over application code",
+    "Flag desktop files for review when containing remote-exec patterns",
+    "Clarify telemetry assessment: Note privacy concerns but don't flag as supply-chain risk"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 13520,
+    "completion_tokens": 2528,
+    "cost": 0.015784
+  },
+  "audits_judged": [
+    "20260823-190718-qwen-qwen3-235b-a22b-2507.md",
+    "20260823-190739-deepseek-deepseek-v4-flash.md"
+  ]
+}
