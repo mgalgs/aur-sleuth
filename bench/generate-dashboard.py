@@ -652,6 +652,23 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             <div id="activity-recent" class="mt-4 flex flex-wrap gap-2"></div>
         </div>
 
+        <!-- What was read before these reports were published. Filled from
+             _dashboard/review.json, which the publish stage writes; hidden when
+             there is none. This is about the wording of the reports, never
+             about a package, so it stays away from the table and the states. -->
+        <div id="review" class="hidden bg-slate-800/60 rounded-lg px-5 py-4 border border-slate-700 mb-6 text-sm">
+            <div class="text-slate-400 text-xs uppercase tracking-wide mb-1">Before publishing</div>
+            <p id="review-read" class="text-slate-300"></p>
+            <p id="review-found" class="text-slate-400 mt-1"></p>
+            <details id="review-details" class="hidden mt-2">
+                <summary class="text-xs text-blue-400 hover:text-blue-300 cursor-pointer">Show the notes</summary>
+                <p class="text-xs text-slate-500 mt-2">Each note is about the wording of a report,
+                    not about the package it names. They are here so the reader can see what
+                    was raised, not because the package did anything.</p>
+                <ul id="review-list" class="mt-2 space-y-1 text-xs text-slate-400"></ul>
+            </details>
+        </div>
+
         <!-- Summary Cards -->
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
             <div class="bg-slate-800 rounded-lg p-4 border border-slate-700">
@@ -778,6 +795,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         renderCharts();
         renderTable();
         setupEventListeners();
+        loadReview();
         // A shareable link to one package: #pkg=<name>.
         const m = /^#pkg=(.+)$/.exec(location.hash);
         if (m) {
@@ -787,6 +805,68 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 
     function shortModel(m) {
         return String(m).split('/').pop();
+    }
+
+    // The four things the pre-publish read looks for, by the number the
+    // reviewer's prompt gives them. Anything else is shown as the model wrote it.
+    const REVIEW_KINDS = {
+        '1': 'wording aimed at the reader',
+        '2': 'a secret of the operator',
+        '3': 'a broken report',
+        '4': 'abusive text',
+    };
+
+    // What was read before these reports were published. Advisory text from a
+    // model that read attacker-influenced reports, so every field is escaped and
+    // nothing here feeds a package's state.
+    async function loadReview() {
+        let r;
+        try {
+            const resp = await fetch('_dashboard/review.json');
+            if (!resp.ok) return;
+            r = await resp.json();
+        } catch (e) {
+            return;
+        }
+        if (!r || typeof r !== 'object') return;
+        const llm = r.llm || {};
+        const when = String(r.published_at || '').split('T')[0];
+        const head = String(r.head || '').slice(0, 10);
+        const box = document.getElementById('review');
+        const read = document.getElementById('review-read');
+        const found = document.getElementById('review-found');
+
+        let intro = `Published ${escapeHtml(when)} from commit <code class="text-slate-400">${escapeHtml(head)}</code>: `
+            + `${Number(r.audit_reports) || 0} audit report(s) and ${Number(r.judge_reports) || 0} judge report(s) `
+            + `across ${Number(r.packages) || 0} package(s). A code check confirmed every published file is inert data.`;
+        read.innerHTML = intro;
+
+        if (llm.status === 'ok' || llm.status === 'partial') {
+            let s = `${escapeHtml(shortModel(llm.model || 'a model'))} then read ${Number(llm.read) || 0} of the `
+                + `${Number(llm.of) || 0} report(s) that reached an unclear verdict, looking only at the reports' own `
+                + `wording: text aimed at the reader, a secret of the operator, a broken report, abusive text.`;
+            const n = (llm.concerns || []).length;
+            s += n === 0 ? ' It raised nothing.' : ` It raised ${n} note(s).`;
+            if (Number(llm.dismissed) > 0) {
+                s += ` ${Number(llm.dismissed)} more, about the reviewer’s own trimming of long reports, were set aside.`;
+            }
+            if (llm.status === 'partial') s += ' Part of the read did not complete.';
+            found.textContent = s;
+            if (n > 0) {
+                const list = document.getElementById('review-list');
+                list.innerHTML = (llm.concerns || []).map(c => {
+                    const kind = REVIEW_KINDS[String(c.kind || '').trim()] || String(c.kind || '');
+                    return `<li><span class="text-slate-300">${escapeHtml(c.package || '?')}</span>`
+                        + ` <span class="text-slate-500">(${escapeHtml(kind)})</span> &mdash; ${escapeHtml(c.detail || '')}</li>`;
+                }).join('');
+                document.getElementById('review-details').classList.remove('hidden');
+            }
+        } else if (llm.status === 'error') {
+            found.textContent = 'The model’s read of the flagged reports did not complete; the code check alone stood.';
+        } else {
+            found.textContent = 'No model read the reports this time; the code check alone stood.';
+        }
+        box.classList.remove('hidden');
     }
 
     // A headline count that filters the table to exactly the packages it counts.
