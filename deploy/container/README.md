@@ -127,6 +127,7 @@ Set as environment variables on the container.
 | `AUR_SLEUTH_PUBLISH_DRY_RUN` | publish | `false` | Report the ref instead of pushing |
 | `AUR_SLEUTH_EXPECT_HEAD` | publish | — | The commit a review approved; publish refuses if the branch has moved |
 | `AUR_SLEUTH_REVIEW_JSON` | publish | — | The review's `REVIEW_JSON` object, written to the branch as `_dashboard/review.json` |
+| `AUR_SLEUTH_FUNDING_URL` | publish | — | An https link for the public page's funding card ("Chip in"). Unset hides the button; the card's numbers still show |
 | `AUR_SLEUTH_BENCH_MODELS` | benchmark | — | Required; comma-separated candidate models |
 | `AUR_SLEUTH_BENCH_SAMPLE` / `_BUDGET` / `_SYNTHETICS` / `_PACKAGES` / `_RUN_ID` | benchmark | `20` / `2.00` / `true` / — / timestamp | See above |
 | `AUR_SLEUTH_BUNDLE_PATH` | bundle | `/out/audit-reports.bundle` | Where the bundle is written; its directory must be writable |

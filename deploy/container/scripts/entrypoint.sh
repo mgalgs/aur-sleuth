@@ -61,6 +61,16 @@ EXPECT_HEAD="${AUR_SLEUTH_EXPECT_HEAD:-}"
 # is gone in a day. Empty means no review to record, and the path is removed
 # from the published tree rather than left to whatever the branch holds.
 REVIEW_JSON_IN="${AUR_SLEUTH_REVIEW_JSON:-}"
+# The published page's funding card: where a reader can chip in. An operator
+# setting; an https URL or nothing. Checked at the boundary below, so a bad
+# value stops the stage rather than reaching the page.
+FUNDING_URL="${AUR_SLEUTH_FUNDING_URL:-}"
+# The AUR's own package dump, the file the pipeline discovers candidates from.
+# The publish stage fetches it fresh to count the day's updates for the
+# funding card. Fresh, not the copy the audit stage cached on the volume: that
+# copy was written by a container running hostile code, and a gzip is an easy
+# place to plant a bomb for whoever parses it next.
+AUR_METADATA_URL="https://aur.archlinux.org/packages-meta-v1.json.gz"
 
 log() { echo "[$(date -u '+%H:%M:%S')] [$MODE] $*"; }
 die() { echo "[$MODE] ERROR: $*" >&2; exit 1; }
@@ -537,11 +547,23 @@ PY
 # always matches the branch as published: no separate rebuild step, no stale
 # data.json from a run that stopped before its dashboard phase.
 #
+# The third argument is the AUR metadata dump for the funding card, or empty
+# when the fetch failed; the card's other inputs are gathered here. Each is
+# optional, and the card is left off the page rather than shown half-empty.
+#
 # Writes only to the throwaway repository, and prints the resulting commit --
 # so it must never log to stdout.
 rewrite_dashboard_html() {
-    local repo="$1" head="$2"
+    local repo="$1" head="$2" aur_metadata="${3:-}"
     local html idx blob_html blob_empty tree commit built path blob
+    local -a funding=()
+
+    [[ -n "$aur_metadata" ]] && funding+=(--aur-metadata "$aur_metadata")
+    # The budget the last run resolved to. Written by the audit stage, so the
+    # generator reads one field out of it as a number and nothing else.
+    [[ -r "$DATA_DIR/pipeline/effective.json" ]] \
+        && funding+=(--effective "$DATA_DIR/pipeline/effective.json")
+    [[ -n "$FUNDING_URL" ]] && funding+=(--funding-url "$FUNDING_URL")
 
     html="$(mktemp)"
     python3 "$SRC_DIR/bench/generate-dashboard.py" --print-html > "$html"
@@ -558,7 +580,10 @@ rewrite_dashboard_html() {
             printf '0 %s\t%s\n' "$(printf '0%.0s' {1..40})" "$path"
         done | GIT_INDEX_FILE="$idx" git --git-dir="$repo" update-index --index-info
     built="$(mktemp -d)"
-    python3 "$SRC_DIR/bench/generate-dashboard.py" --git-dir "$repo" --ref "$head" --emit "$built" >/dev/null 2>&1 \
+    # stdout is this function's return value; the generator's one-line summary
+    # goes to stderr and stays in the log.
+    python3 "$SRC_DIR/bench/generate-dashboard.py" --git-dir "$repo" --ref "$head" --emit "$built" \
+            ${funding[@]+"${funding[@]}"} >/dev/null \
         || { rm -rf "$built" "$idx" "$html"; echo "refusing to publish: could not build the dashboard data" >&2; return 1; }
     while IFS= read -r -d '' path; do
         blob="$(git --git-dir="$repo" hash-object -w "$built/$path")"
@@ -670,6 +695,14 @@ rebase_onto_origin() {
 do_publish() {
     [[ -d "$GIT_STORE" ]] || die "$GIT_STORE missing; run the prepare stage first"
 
+    # The one operator string that reaches the public page. An https URL made
+    # of URL characters only: no quote, no space, no angle bracket. The page
+    # checks it again before it becomes a link.
+    local url_re="^https://[A-Za-z0-9._~:/?#@!\$&()*+,;=%-]+\$"
+    if [[ -n "$FUNDING_URL" && ! "$FUNDING_URL" =~ $url_re ]]; then
+        die "AUR_SLEUTH_FUNDING_URL is not an https URL"
+    fi
+
     local pub
     pub="$(stage_reports_repo)"
 
@@ -709,8 +742,22 @@ do_publish() {
         log "origin is ahead by a page rebuild only; building on ${base:0:12}"
     fi
 
+    # The day's AUR updates, for the funding card. Bounded like the pipeline's
+    # own download, and optional: a failed fetch costs the card, not the publish.
+    local aur_metadata
+    aur_metadata="$(mktemp)"
+    if curl -sSfL --connect-timeout 15 --max-time 120 --max-filesize 104857600 \
+            "$AUR_METADATA_URL" -o "$aur_metadata"; then
+        log "AUR metadata: $(stat -c%s "$aur_metadata") bytes"
+    else
+        rm -f "$aur_metadata"
+        aur_metadata=""
+        log "WARNING: could not fetch $AUR_METADATA_URL; the page's funding card is left out"
+    fi
+
     local rewritten
-    rewritten="$(rewrite_dashboard_html "$pub" "$base")"
+    rewritten="$(rewrite_dashboard_html "$pub" "$base" "$aur_metadata")"
+    [[ -n "$aur_metadata" ]] && rm -f "$aur_metadata"
     if [[ "$rewritten" != "$base" ]]; then
         log "Rebuilt index.html from this image; $REPORTS_BRANCH is now $rewritten"
         sha="$rewritten"

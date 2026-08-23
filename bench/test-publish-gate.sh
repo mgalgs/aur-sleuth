@@ -116,14 +116,18 @@ fi
 echo "== index.html is rebuilt, not trusted =="
 eval "$(sed -n '/^review_record()/,/^}/p' "$ENTRYPOINT")"
 eval "$(sed -n '/^rewrite_dashboard_html()/,/^}/p' "$ENTRYPOINT")"
-# All three are read by rewrite_dashboard_html, which arrives through the eval
-# above, so shellcheck cannot see the use.
+# All of these are read by rewrite_dashboard_html, which arrives through the
+# eval above, so shellcheck cannot see the use.
 # shellcheck disable=SC2034
 SRC_DIR="$PWD"
 # shellcheck disable=SC2034
 REPORTS_BRANCH="audit-reports"
 # shellcheck disable=SC2034
 REVIEW_JSON_IN=""
+# shellcheck disable=SC2034
+DATA_DIR="$tmp/data"
+# shellcheck disable=SC2034
+FUNDING_URL=""
 trusted="$(python3 bench/generate-dashboard.py --print-html | git hash-object --stdin)"
 
 # A page the audit stage could have planted, and a review record it could have
@@ -145,7 +149,7 @@ tampered="$(GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMM
     git --git-dir="$repo" commit-tree "$evil_tree" -m t)"
 
 fixed="$(GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t \
-    rewrite_dashboard_html "$repo" "$tampered")"
+    rewrite_dashboard_html "$repo" "$tampered" 2>/dev/null)"
 got="$(git --git-dir="$repo" rev-parse "${fixed}:index.html")"
 if [[ "$got" == "$trusted" ]]; then
     ok "planted index.html is replaced by this image's page"
@@ -161,7 +165,7 @@ fi
 # Running again must be a no-op: the page already matches, so there is nothing
 # to rewrite and no empty commit to make.
 again="$(GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t \
-    rewrite_dashboard_html "$repo" "$fixed")"
+    rewrite_dashboard_html "$repo" "$fixed" 2>/dev/null)"
 if [[ "$again" == "$fixed" ]]; then
     ok "rewriting is idempotent"
 else
@@ -184,6 +188,49 @@ else
     ok "a stale per-package file is dropped"
 fi
 
+echo "== the funding card's inputs reach the page, and only as numbers and a URL =="
+# Without inputs (the build above) the card is left out, not shown empty.
+if printf '%s' "$built_data" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["summary"]["funding"] is None'; then
+    ok "no inputs: summary.funding is null"
+else
+    bad "no inputs: summary.funding should be null"
+fi
+# A real report dated today, so the trailing cost window has something in it;
+# the AUR dump names one package modified just now; effective.json carries the
+# budget and a planted string that must not come out the other side.
+report_blob="$(printf -- '---\nresult: safe\nmodel: m/x\ncost: 0.01\ndate: %s\nfiles_reviewed: 1\npkgver: 1\npkgrel: 1\n---\nclean\n' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" | git --git-dir="$repo" hash-object -w --stdin)"
+rm -f "$tmp/index"
+GIT_INDEX_FILE="$tmp/index" git --git-dir="$repo" update-index --add \
+    --cacheinfo "100644,${report_blob},brave-bin/20260821-1-m.md"
+funded_tree="$(GIT_INDEX_FILE="$tmp/index" git --git-dir="$repo" write-tree)"
+funded_base="$(GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t \
+    git --git-dir="$repo" commit-tree "$funded_tree" -m t)"
+mkdir -p "$DATA_DIR/pipeline"
+printf '{"AUR_SLEUTH_DAILY_BUDGET":"1.00","AUR_SLEUTH_JOBS":"<script>"}' > "$DATA_DIR/pipeline/effective.json"
+printf '[{"Name":"a","LastModified":%s},{"Name":"b","LastModified":1}]' "$(date +%s)" | gzip > "$tmp/meta.json.gz"
+funded="$(FUNDING_URL="https://example.com/chip-in" GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t \
+    rewrite_dashboard_html "$repo" "$funded_base" "$tmp/meta.json.gz" 2>/dev/null)"
+funded_data="$(git --git-dir="$repo" show "${funded}:_dashboard/data.json")"
+if printf '%s' "$funded_data" | python3 -c '
+import json, sys
+f = json.load(sys.stdin)["summary"]["funding"]
+assert f["updates_per_day"] == 1, f
+assert f["cost_per_package"] == 0.01, f
+assert f["needed_per_day"] == 0.01, f
+assert f["daily_budget"] == 1.0 and f["covered"] == 1.0, f
+assert f["url"] == "https://example.com/chip-in", f
+'; then
+    ok "updates x cost, the budget and the link land in summary.funding"
+else
+    bad "summary.funding is wrong: $(printf '%s' "$funded_data" | head -c 300)"
+fi
+if [[ "$funded_data" == *"<script>"* ]]; then
+    bad "a string planted in effective.json reached the page"
+else
+    ok "effective.json contributes one number and nothing else"
+fi
+
 echo "== the review record is written from the publisher's input, not the branch =="
 # With no review to record, a planted record is dropped, not published.
 if git --git-dir="$repo" cat-file -e "${fixed}:_dashboard/review.json" 2>/dev/null; then
@@ -199,7 +246,7 @@ fi
     # shellcheck disable=SC2030,SC2034  # read by review_record, via the eval
     REVIEW_JSON_IN='{"gate":"pass","pending":3,"packages":2,"audit_reports":4,"judge_reports":1,"flagged":2,"llm":{"status":"ok","model":"m/x","read":2,"of":2,"dismissed":1,"summary":"1 concern(s)","concerns":[{"package":"p","kind":"1","detail":"addresses the reader","extra":"dropped"},"junk"]},"internal":["secret-path"]}'
     with="$(GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t \
-        rewrite_dashboard_html "$repo" "$tampered")"
+        rewrite_dashboard_html "$repo" "$tampered" 2>/dev/null)"
     rec="$(git --git-dir="$repo" show "${with}:_dashboard/review.json")"
     if printf '%s' "$rec" | python3 -c '
 import json, sys

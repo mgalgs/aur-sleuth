@@ -195,6 +195,102 @@ def safe_int(v, default=0):
         return default
 
 
+# --- Funding: what auditing every AUR update would cost ------------------------
+#
+# Three inputs, each decidable in code, none from a model:
+#   - how many packages the AUR updates in a day, from the AUR's own metadata
+#     dump (the file bench/pipeline.sh discovers candidates from);
+#   - what one package costs this pipeline, from the branch's recent reports;
+#   - the budget the pipeline actually runs with, from pipeline/effective.json.
+# The page multiplies the first two and compares with the third.
+
+# The trailing window the per-package cost is averaged over. Long enough to
+# smooth a quiet day, short enough that a cheaper re-audit model shows up
+# within two weeks rather than being buried under months of the old one.
+COST_WINDOW_DAYS = 14
+
+# A funding link must be https and carry nothing that could break out of an
+# attribute. The page escapes it again on render; this is the outer bound.
+FUNDING_URL_RE = re.compile(r"^https://[A-Za-z0-9._~:/?#@!$&()*+,;=%-]+$")
+
+
+def count_aur_updates(path, now=None):
+    """Packages the AUR modified in the 24 hours before `now`, or None.
+
+    `path` is the AUR's packages-meta-v1.json.gz. A package's LastModified is
+    its latest change only, so a window older than a day undercounts (a package
+    touched twice in a week shows once, on the later day). The last 24 hours
+    is the one window that does not: nothing has been modified "after" it yet.
+    That makes it noisier than a weekly mean, and honest, which matters more
+    for a number that sets a funding target.
+    """
+    import gzip
+    try:
+        with gzip.open(path, "rt", encoding="utf-8") as f:
+            packages = json.load(f)
+    except (OSError, ValueError, EOFError):
+        return None
+    if not isinstance(packages, list):
+        return None
+    cutoff = (now or datetime.now(timezone.utc)).timestamp() - 86400
+    count = 0
+    for p in packages:
+        if isinstance(p, dict) and safe_float(p.get("LastModified"), 0) >= cutoff:
+            count += 1
+    return count
+
+
+def read_daily_budget(path):
+    """The budget the last pipeline run resolved to, as a float, or None.
+
+    pipeline/effective.json is written by the audit stage, which runs hostile
+    code, so nothing in it is trusted as text: one field is read, and only a
+    number comes out of it.
+    """
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    value = safe_float(data.get("AUR_SLEUTH_DAILY_BUDGET"), -1.0)
+    return value if value >= 0 else None
+
+
+def build_funding(pkg_summaries, by_date, now, updates_per_day=None,
+                  daily_budget=None, url=None):
+    """The funding block of data.json, or None when a number it needs is missing.
+
+    The per-package cost is everything the pipeline spent in the trailing
+    window (audits, judges, re-audits) over the packages it audited in that
+    window, so it is the marginal cost of one more package under the current
+    models, not an all-time mean that remembers a retired judge.
+    """
+    window_start = (now - timedelta(days=COST_WINDOW_DAYS)).strftime("%Y-%m-%d")
+    cost = sum(v["cost"] for d, v in by_date.items() if d >= window_start)
+    packages = sum(1 for ps in pkg_summaries.values()
+                   if (ps["latest_date"] or "")[:10] >= window_start)
+    if not packages or cost <= 0 or not updates_per_day:
+        return None
+    per_package = cost / packages
+    needed = updates_per_day * per_package
+    funding = {
+        "updates_per_day": int(updates_per_day),
+        "cost_per_package": round(per_package, 4),
+        "cost_window_days": COST_WINDOW_DAYS,
+        "cost_window_packages": packages,
+        "needed_per_day": round(needed, 2),
+        "daily_budget": None,
+        "covered": None,
+        "url": url if url and FUNDING_URL_RE.match(url) else None,
+    }
+    if daily_budget is not None:
+        funding["daily_budget"] = round(daily_budget, 2)
+        funding["covered"] = round(min(1.0, daily_budget / needed), 4) if needed > 0 else None
+    return funding
+
+
 def load_reports():
     """Read all reports from the audit-reports branch."""
     file_list = git("ls-tree", "-r", REPORTS_BRANCH, "--name-only").strip().split("\n")
@@ -231,8 +327,13 @@ def load_reports():
     return audits, judges
 
 
-def build_index_data(audits, judges):
-    """Build the index JSON structure for the dashboard."""
+def build_index_data(audits, judges, now=None, funding_inputs=None):
+    """Build the index JSON structure for the dashboard.
+
+    `funding_inputs` is {updates_per_day, daily_budget, url}, each optional;
+    see build_funding for what becomes of them.
+    """
+    now = now or datetime.now(timezone.utc)
     packages = defaultdict(lambda: {"audits": [], "judges": []})
 
     for a in audits:
@@ -370,7 +471,7 @@ def build_index_data(audits, judges):
     # lexical compare against the cutoff is enough -- no per-row date parsing.
     # These count what aur-sleuth AUDITED this week, not every AUR update: the
     # audit set is drawn from recently-updated and top-popular packages.
-    week_start = (datetime.now(timezone.utc) - timedelta(days=7)).strftime("%Y-%m-%d")
+    week_start = (now - timedelta(days=7)).strftime("%Y-%m-%d")
 
     wk_updated = wk_new = wk_confirmed = wk_look = wk_green = wk_unknown = 0
     for ps in pkg_summaries.values():
@@ -449,6 +550,10 @@ def build_index_data(audits, judges):
                                     key=lambda x: -x[1])),
         },
         "recent": recent,
+        # What auditing every AUR update would cost, against the budget the
+        # pipeline runs with. None until every input is known; the page then
+        # leaves the card out rather than showing a confident zero.
+        "funding": build_funding(pkg_summaries, by_date, now, **(funding_inputs or {})),
     }
 
     return {"summary": summary, "packages": pkg_summaries}
@@ -695,6 +800,29 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             </div>
         </div>
 
+        <!-- The ask: what auditing every AUR update costs, against what this
+             runs on. Hidden until data.json carries every number it needs. -->
+        <div id="funding" class="bg-slate-800 rounded-lg p-4 border border-slate-700 mb-6 hidden">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div class="min-w-0 flex-1">
+                    <h2 class="text-sm font-semibold text-slate-300 mb-2 uppercase tracking-wide">Audit every update</h2>
+                    <p class="text-slate-200">
+                        <span id="funding-needed" class="text-2xl font-bold text-white"></span>
+                        <span> a day to audit every AUR update.</span>
+                    </p>
+                    <p id="funding-inputs" class="text-slate-400 text-sm mt-1"></p>
+                    <p id="funding-budget" class="text-slate-300 text-sm mt-3"></p>
+                    <div id="funding-track" class="mt-1.5 h-2 max-w-md bg-slate-900 rounded overflow-hidden" title="Share of the AUR's daily updates the current budget can audit">
+                        <div id="funding-bar" class="h-2 bg-blue-500" style="width:0"></div>
+                    </div>
+                </div>
+                <!-- Under the text on a phone, beside it where there is room. A
+                     flex item, so no display class is needed (and ".block" is
+                     the legend dot in this page's own styles, not Tailwind's). -->
+                <a id="funding-link" class="hidden shrink-0 w-full sm:w-auto text-center bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded px-4 py-2" href="#" rel="noopener" target="_blank">Chip in</a>
+            </div>
+        </div>
+
         <!-- Filters -->
         <div class="bg-slate-800 rounded-lg p-4 border border-slate-700 mb-4">
             <div class="flex flex-wrap items-center gap-3">
@@ -807,6 +935,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         }
         renderSummary();
         renderActivity();
+        renderFunding();
         renderCharts();
         renderTable();
         setupEventListeners();
@@ -931,6 +1060,43 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                 '<span class="text-slate-500">' + escapeHtml(d) + '</span>' +
                 '</span>';
         }).join('');
+    }
+
+    // Every number here is computed in code at publish time (see
+    // build_funding); nothing a model wrote reaches this card. The link is
+    // set as a property, never markup, and only when it is an https URL.
+    function renderFunding() {
+        const f = (DATA.summary && DATA.summary.funding) || null;
+        const card = document.getElementById('funding');
+        if (!f || !(Number(f.needed_per_day) > 0)) { card.classList.add('hidden'); return; }
+        card.classList.remove('hidden');
+        const money = (v, digits) => '$' + Number(v).toFixed(digits);
+
+        document.getElementById('funding-needed').textContent = money(f.needed_per_day, 2);
+        document.getElementById('funding-inputs').textContent =
+            Number(f.updates_per_day).toLocaleString() + ' packages updated in the last 24 hours, at about '
+            + money(f.cost_per_package, 3) + ' per package.';
+
+        const budget = document.getElementById('funding-budget');
+        const track = document.getElementById('funding-track');
+        if (f.daily_budget != null && f.covered != null) {
+            const pct = Math.round(Number(f.covered) * 100);
+            budget.textContent = 'The current budget is ' + money(f.daily_budget, 2) + ' a day. That covers '
+                + (pct < 1 ? 'under 1%' : pct + '%') + '.';
+            document.getElementById('funding-bar').style.width = Math.max(1, Math.min(100, pct)) + '%';
+            track.classList.remove('hidden');
+        } else {
+            budget.textContent = '';
+            track.classList.add('hidden');
+        }
+
+        const link = document.getElementById('funding-link');
+        if (typeof f.url === 'string' && /^https:\/\/[^\s"'<>]+$/.test(f.url)) {
+            link.href = f.url;
+            link.classList.remove('hidden');
+        } else {
+            link.classList.add('hidden');
+        }
     }
 
     function renderSummary() {
@@ -1419,10 +1585,11 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 """
 
 
-def build_files(audits, judges, now=None):
+def build_files(audits, judges, now=None, funding_inputs=None):
     """Everything the page reads, as {path: content}, from loaded reports."""
-    index_data = build_index_data(audits, judges)
-    index_data["generated_at"] = (now or datetime.now(timezone.utc)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    now = now or datetime.now(timezone.utc)
+    index_data = build_index_data(audits, judges, now, funding_inputs)
+    index_data["generated_at"] = now.strftime("%Y-%m-%dT%H:%M:%SZ")
     files = {"_dashboard/data.json": json.dumps(index_data, separators=(",", ":"))}
     for pkg_name, detail in build_package_details(audits, judges).items():
         files[f"_dashboard/pkg/{pkg_name}.json"] = json.dumps(detail, separators=(",", ":"))
@@ -1445,13 +1612,26 @@ def main():
     # trusted code from the branch as it stands -- the audit stage's copy on
     # the branch never goes out.
     args = sys.argv[1:]
+
+    def opt(flag):
+        return args[args.index(flag) + 1] if flag in args else None
+
+    # The funding card's inputs. Each is optional; without one the card is
+    # left out. --aur-metadata is the AUR's packages-meta-v1.json.gz, counted
+    # against the clock, not the commit: the dump is as fresh as its download.
+    funding_inputs = {
+        "updates_per_day": count_aur_updates(opt("--aur-metadata")) if opt("--aur-metadata") else None,
+        "daily_budget": read_daily_budget(opt("--effective")) if opt("--effective") else None,
+        "url": opt("--funding-url"),
+    }
+
     if "--emit" in args:
         global REPORTS_BRANCH
-        out_dir = args[args.index("--emit") + 1]
-        if "--git-dir" in args:
-            GIT_DIR = args[args.index("--git-dir") + 1]
-        if "--ref" in args:
-            REPORTS_BRANCH = args[args.index("--ref") + 1]
+        out_dir = opt("--emit")
+        if opt("--git-dir"):
+            GIT_DIR = opt("--git-dir")
+        if opt("--ref"):
+            REPORTS_BRANCH = opt("--ref")
         audits, judges = load_reports()
         # Stamped with the commit's own time, not the clock: the same commit
         # must build the same files, or every publish would make a new commit
@@ -1461,7 +1641,7 @@ def main():
             now = datetime.fromisoformat(stamp).astimezone(timezone.utc)
         except ValueError:
             now = None
-        files = build_files(audits, judges, now)
+        files = build_files(audits, judges, now, funding_inputs)
         for path, content in files.items():
             full = os.path.join(out_dir, path)
             os.makedirs(os.path.dirname(full), exist_ok=True)
@@ -1485,7 +1665,7 @@ def main():
     print(f"  {len(audits)} audit reports, {len(judges)} judge reports")
 
     print("Building the page's data...")
-    files = build_files(audits, judges)
+    files = build_files(audits, judges, funding_inputs=funding_inputs)
     files["index.html"] = generate_html()
     files[".nojekyll"] = ""
 
