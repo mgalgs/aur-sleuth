@@ -316,8 +316,10 @@ people or machines that RAN these audits. Nothing else.
 A leak is text that belongs to the operator, not to the package:
 - an API key, token, password, or anything that looks like a credential
 - an internal hostname, a cluster-internal service name, a private IP address
-- a filesystem path on the operator's machine (a home directory, a scratch
-  directory, a path that names the operator's own setup)
+- a filesystem path that names the operator's own setup: a home directory
+  with a user name in it, a path on a named host. A path inside the audit
+  container itself (/data/..., /tmp/..., /opt/aur-sleuth/...) names nothing
+  private and is NOT a leak.
 - the operator's own email address or account name
 
 NOT a leak, and not your business:
@@ -341,10 +343,12 @@ Respond in JSON, no markdown fencing:
 }}"""
 
     try:
+        # A reasoning model spends output tokens thinking before it answers;
+        # at 2048 it often spent them all and returned no content at all.
         resp = client.chat.completions.create(
             model=model,
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.2, max_tokens=2048,
+            temperature=0.2, max_tokens=8192,
         )
         content = resp.choices[0].message.content or ""
     except Exception as exc:
@@ -386,18 +390,49 @@ def review_batches(entries, model, base_url, api_key, batch_size, workers):
     batches = [entries[i:i + batch_size] for i in range(0, len(entries), batch_size)]
     results = [None] * len(batches)
 
+    # A batch that fails is retried as two halves, down to one text per
+    # request. The usual failure is the model returning nothing for a large
+    # batch; half the batch usually gets an answer, and a single text always
+    # gets a fair try. The halves' answers are merged into one.
+    def ask_split(batch, depth=0):
+        try:
+            got = ask_model(batch, model, base_url, api_key)
+        except Exception as exc:  # a crash here must not lose the rest
+            got = {"_error": str(exc)}
+        if "_error" not in got or len(batch) <= 1 or depth >= 3:
+            if "_error" in got:
+                # What was lost, so the caller can count it and say so.
+                got["_unread"] = len(batch)
+            return got
+        mid = len(batch) // 2
+        left, right = ask_split(batch[:mid], depth + 1), ask_split(batch[mid:], depth + 1)
+        if "_error" in left and "_error" in right:
+            return {"_error": f"{left['_error']}; {right['_error']}", "_unread": len(batch)}
+        merged = {"concerns": [], "summary": "", "_cut": [], "_texts": {},
+                  "_unread": 0, "_errors": []}
+        for part in (left, right):
+            if "_error" in part:
+                merged["_unread"] += part.get("_unread", 0)
+                merged["_errors"].append(part["_error"])
+                continue
+            merged["concerns"] += part.get("concerns") or []
+            merged["_cut"] += part.get("_cut") or []
+            merged["_texts"].update(part.get("_texts") or {})
+            merged["_unread"] += part.get("_unread", 0)
+            merged["_errors"] += part.get("_errors") or []
+        return merged
+
     if len(batches) == 1 or workers <= 1:
         for i, b in enumerate(batches):
-            results[i] = ask_model(b, model, base_url, api_key)
+            results[i] = ask_split(b)
     else:
         with ThreadPoolExecutor(max_workers=min(workers, len(batches))) as pool:
-            futures = {pool.submit(ask_model, b, model, base_url, api_key): i
-                       for i, b in enumerate(batches)}
+            futures = {pool.submit(ask_split, b): i for i, b in enumerate(batches)}
             for f in as_completed(futures):
                 i = futures[f]
                 try:
                     results[i] = f.result()
-                except Exception as exc:  # a crash here must not lose the rest
+                except Exception as exc:
                     results[i] = {"_error": str(exc)}
 
     concerns, dismissed, errors, ok = [], [], [], 0
@@ -407,6 +442,9 @@ def review_batches(entries, model, base_url, api_key, batch_size, workers):
             errors.append(f"batch {i + 1}: {detail}")
             continue
         ok += 1
+        # A batch that came back in pieces: some texts were never read.
+        for e in verdict.get("_errors") or []:
+            errors.append(f"batch {i + 1}, part: {e}")
         cut_packages = set(verdict.get("_cut") or [])
         texts = verdict.get("_texts") or {}
         for c in verdict.get("concerns") or []:
@@ -429,7 +467,7 @@ def review_batches(entries, model, base_url, api_key, batch_size, workers):
             else:
                 concerns.append(entry)
 
-    read = sum(len(batches[i]) for i, v in enumerate(results)
+    read = sum(len(batches[i]) - int(v.get("_unread") or 0) for i, v in enumerate(results)
                if isinstance(v, dict) and "_error" not in v)
     return {"concerns": concerns, "dismissed": dismissed, "errors": errors,
             "batches": len(batches), "batches_ok": ok, "read": read}

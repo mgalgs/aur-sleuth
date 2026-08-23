@@ -454,7 +454,15 @@ class AuditResult(NamedTuple):
 
     def __str__(self):
         deets = f" / {self.details}" if self.details else ""
-        fpath = f"{self.file_path}: " if self.file_path else ""
+        # Relative to the package: the absolute path names the machine's
+        # layout (a container volume, a home directory), and this line is
+        # written into the published report.
+        fpath = ""
+        if self.file_path:
+            try:
+                fpath = f"{self.file_path.relative_to(self.pkgdir)}: "
+            except ValueError:
+                fpath = f"{self.file_path.name}: "
         return f"{fpath}[{self.status.name}] {self.summary}{deets}"
 
     def report_text(self, use_color=True) -> str:

@@ -12,10 +12,19 @@ from datetime import datetime, timedelta, timezone
 
 REPORTS_BRANCH = "audit-reports"
 
+# Set by --git-dir: read the branch from this repository instead of the one
+# in the working directory. The publish stage uses it to build the page's
+# JSON from its own throwaway repository, never running git in the shared
+# store (see deploy/container/README.md for why that matters).
+GIT_DIR = None
+
 
 def git(*args, **kwargs):
+    cmd = ["git"]
+    if GIT_DIR:
+        cmd += ["--git-dir", GIT_DIR]
     result = subprocess.run(
-        ["git"] + list(args),
+        cmd + list(args),
         capture_output=True, text=True, timeout=30, **kwargs,
     )
     if result.returncode != 0:
@@ -1442,13 +1451,56 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 """
 
 
+def build_files(audits, judges, now=None):
+    """Everything the page reads, as {path: content}, from loaded reports."""
+    index_data = build_index_data(audits, judges)
+    index_data["generated_at"] = (now or datetime.now(timezone.utc)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    files = {"_dashboard/data.json": json.dumps(index_data, separators=(",", ":"))}
+    for pkg_name, detail in build_package_details(audits, judges).items():
+        files[f"_dashboard/pkg/{pkg_name}.json"] = json.dumps(detail, separators=(",", ":"))
+    return files
+
+
 def main():
+    global GIT_DIR
     # The publish stage rewrites index.html from this template instead of
     # trusting the copy on the branch, which the audit stage can write. That
     # rewrite happens before any repository is staged, so printing the template
     # must not touch git.
     if "--print-html" in sys.argv[1:]:
         sys.stdout.write(generate_html())
+        return
+
+    # The publish stage's other use: build the JSON from a given repository
+    # and write it under a directory, committing nothing. The stage then adds
+    # the files to the commit it makes, so the published data is built by
+    # trusted code from the branch as it stands -- the audit stage's copy on
+    # the branch never goes out.
+    args = sys.argv[1:]
+    if "--emit" in args:
+        global REPORTS_BRANCH
+        out_dir = args[args.index("--emit") + 1]
+        if "--git-dir" in args:
+            GIT_DIR = args[args.index("--git-dir") + 1]
+        if "--ref" in args:
+            REPORTS_BRANCH = args[args.index("--ref") + 1]
+        audits, judges = load_reports()
+        # Stamped with the commit's own time, not the clock: the same commit
+        # must build the same files, or every publish would make a new commit
+        # for a page whose data did not change.
+        stamp = git("log", "-1", "--format=%cI", REPORTS_BRANCH).strip()
+        try:
+            now = datetime.fromisoformat(stamp).astimezone(timezone.utc)
+        except ValueError:
+            now = None
+        files = build_files(audits, judges, now)
+        for path, content in files.items():
+            full = os.path.join(out_dir, path)
+            os.makedirs(os.path.dirname(full), exist_ok=True)
+            with open(full, "w", encoding="utf-8") as f:
+                f.write(content)
+        print(f"{len(files)} file(s) from {len(audits)} audit and {len(judges)} judge report(s)",
+              file=sys.stderr)
         return
 
     os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
@@ -1464,24 +1516,10 @@ def main():
     audits, judges = load_reports()
     print(f"  {len(audits)} audit reports, {len(judges)} judge reports")
 
-    print("Building index data...")
-    index_data = build_index_data(audits, judges)
-
-    index_data["generated_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-    print("Building per-package details...")
-    package_details = build_package_details(audits, judges)
-
-    print("Generating HTML...")
-    html = generate_html()
-
-    files = {
-        "index.html": html,
-        ".nojekyll": "",
-        "_dashboard/data.json": json.dumps(index_data, separators=(",", ":")),
-    }
-    for pkg_name, detail in package_details.items():
-        files[f"_dashboard/pkg/{pkg_name}.json"] = json.dumps(detail, separators=(",", ":"))
+    print("Building the page's data...")
+    files = build_files(audits, judges)
+    files["index.html"] = generate_html()
+    files[".nojekyll"] = ""
 
     print(f"Committing {len(files)} files to {REPORTS_BRANCH}...")
     commit_to_branch(files)

@@ -135,6 +135,10 @@ GIT_INDEX_FILE="$tmp/index" git --git-dir="$repo" update-index --add \
 GIT_INDEX_FILE="$tmp/index" git --git-dir="$repo" update-index --add \
     --cacheinfo "100644,${evil_blob},_dashboard/review.json"
 GIT_INDEX_FILE="$tmp/index" git --git-dir="$repo" update-index --add \
+    --cacheinfo "100644,${evil_blob},_dashboard/data.json"
+GIT_INDEX_FILE="$tmp/index" git --git-dir="$repo" update-index --add \
+    --cacheinfo "100644,${evil_blob},_dashboard/pkg/gone-bin.json"
+GIT_INDEX_FILE="$tmp/index" git --git-dir="$repo" update-index --add \
     --cacheinfo "100644,${evil_blob},brave-bin/20260821-1-m.md"
 evil_tree="$(GIT_INDEX_FILE="$tmp/index" git --git-dir="$repo" write-tree)"
 tampered="$(GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t \
@@ -162,6 +166,22 @@ if [[ "$again" == "$fixed" ]]; then
     ok "rewriting is idempotent"
 else
     bad "rewriting twice should be a no-op (got $again, want $fixed)"
+fi
+
+# The page's data is built here, from the branch, by this image: a planted
+# data.json is replaced and a per-package file for a package not on the branch
+# is gone.
+built_data="$(git --git-dir="$repo" show "${fixed}:_dashboard/data.json" 2>/dev/null || true)"
+if [[ -n "$built_data" && "$built_data" != *"evil"* ]] \
+   && printf '%s' "$built_data" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert "summary" in d and "packages" in d'; then
+    ok "planted data.json is replaced by data built from the branch"
+else
+    bad "data.json was not rebuilt: ${built_data:0:80}"
+fi
+if git --git-dir="$repo" cat-file -e "${fixed}:_dashboard/pkg/gone-bin.json" 2>/dev/null; then
+    bad "a per-package file for a package not on the branch survived"
+else
+    ok "a stale per-package file is dropped"
 fi
 
 echo "== the review record is written from the publisher's input, not the branch =="

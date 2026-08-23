@@ -69,12 +69,23 @@ def middle_fails(batch, model, base_url, api_key):
         return {"_error": "boom"}
     return all_ok(batch, model, base_url, api_key)
 
+# A failed batch is retried in halves, down to one text: with this stub only
+# the request that starts with pkg8 ever fails, so pkg8 alone is lost and
+# every other text in that batch is read in a smaller request.
 rp.ask_model = middle_fails
 got = rp.review_batches(entries(20), "m", "u", "k", 8, 4)
-check("a failed batch does not lose the others", len(got["concerns"]) == 2)
-check("the failure is counted", got["batches_ok"] == 2)
-check("the failure is reported", len(got["errors"]) == 1 and "boom" in got["errors"][0])
-check("read counts only what was read", got["read"] == 12)
+check("a failed batch is retried in halves, and the rest are read",
+      [c["package"] for c in got["concerns"]] == ["pkg0", "pkg9", "pkg10", "pkg12", "pkg16"])
+check("every batch ends up counted as answered", got["batches_ok"] == 3)
+check("the text that kept failing is reported", len(got["errors"]) == 1 and "boom" in got["errors"][0])
+check("read counts only what was read", got["read"] == 19)
+
+# A batch that fails whole, at every size, is a failed batch.
+def always_fails(batch, model, base_url, api_key):
+    return {"_error": "down"}
+rp.ask_model = always_fails
+got = rp.review_batches(entries(8), "m", "u", "k", 8, 4)
+check("a batch that fails at every size is reported as failed", got["batches_ok"] == 0 and got["read"] == 0)
 
 # A batch that raises, rather than returning an error.
 def raises(batch, model, base_url, api_key):
@@ -84,7 +95,7 @@ rp.ask_model = raises
 got = rp.review_batches(entries(20), "m", "u", "k", 8, 4)
 check("a raising batch is caught, not fatal", got["batches_ok"] == 0)
 check("nothing read when every batch fails", got["read"] == 0)
-check("each failure is reported", len(got["errors"]) == 3)
+check("each failed batch is reported", len(got["errors"]) == 3)
 
 # One batch: the single-request path, still the common small case.
 rp.ask_model = all_ok
