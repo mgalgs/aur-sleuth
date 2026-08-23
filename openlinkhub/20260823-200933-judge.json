@@ -1,0 +1,34 @@
+{
+  "package": "openlinkhub",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The flagged scripts (install-user-space.sh, upgrade.sh, remote-install.sh) are not executed during makepkg/build/install. They appear to be standalone utilities not referenced in PKGBUILD or .install scripts. Core packaging files (PKGBUILD, .install) show no malicious behavior.",
+  "disagreement_analysis": "qwen incorrectly treated standalone scripts as build/install risks. deepseek correctly contextualized them as non-executed during packaging.",
+  "coverage_issues": [
+    "Both models missed contextual analysis of script execution paths"
+  ],
+  "false_positives": [
+    "install-user-space.sh: Privilege escalation claim ignores script isn't called by PKGBUILD/.install",
+    "upgrade.sh: Untrusted copy claim irrelevant to AUR build process",
+    "remote-install.sh: Remote download risk doesn't affect package installation"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Prioritize files referenced in PKGBUILD functions (build(), package()) and .install scripts",
+    "Improve context awareness: Distinguish between build-time scripts vs unused source files",
+    "Add execution path validation to reduce false positives on non-invoked scripts",
+    "Enhance variable expansion analysis to avoid overflagging heredocs"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 11075,
+    "completion_tokens": 1676,
+    "cost": 0.0119425
+  },
+  "audits_judged": [
+    "20260823-183826-qwen-qwen3-235b-a22b-2507.md",
+    "20260823-183756-deepseek-deepseek-v4-flash.md"
+  ]
+}
