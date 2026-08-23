@@ -10,6 +10,7 @@ Usage:
   benchmark-report.py --rows FILE --synthetics FILE [--meta JSON] [--json OUT]
   benchmark-report.py row --report FILE --model M --package P [--reference R]
                           [--ref-pkgver V] [--overridden] [--seconds S] [--exit RC]
+  benchmark-report.py judgerow --judge-file FILE --model M --package P [...same]
 
 The table goes to stdout. With --json the full object is also written there,
 and the last line printed is `BENCH_JSON ` followed by the same object, so a
@@ -70,6 +71,46 @@ def report_row(args):
             if v.get("status") == "unsafe":
                 row["summary"] = f"{v.get('file', '?')}: {v.get('summary', '')}"[:200]
                 break
+    print(json.dumps(row, separators=(",", ":"), sort_keys=True))
+    return 0
+
+
+def judge_row(args):
+    """The row for one candidate judge's ruling, read from the judge file
+    bench/judge.sh wrote. The verdict is correct_verdict; the cost is what the
+    judge's own usage block says."""
+    row = {
+        "model": args.model,
+        "package": args.package,
+        "reference": args.reference or "unknown",
+        "reference_source": args.reference_source or "",
+        "support": args.support,
+        "ref_pkgver": args.ref_pkgver or "",
+        "pkgver": args.ref_pkgver or "",
+        "overridden": bool(args.overridden),
+        "seconds": args.seconds,
+        "exit": args.exit,
+        "result": "error",
+        "cost": 0.0,
+        "summary": "",
+    }
+    if args.exit in (124, 137):
+        row["result"] = "timeout"
+    try:
+        with open(args.judge_file, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        data = None
+    if isinstance(data, dict):
+        usage = data.get("_judge_usage") or {}
+        try:
+            row["cost"] = float(usage.get("cost") or 0)
+        except (TypeError, ValueError):
+            pass
+        if row["result"] != "timeout":
+            verdict = data.get("correct_verdict")
+            row["result"] = verdict if verdict in ("safe", "unsafe") else "inconclusive"
+        row["summary"] = str(data.get("reasoning") or "")[:200]
     print(json.dumps(row, separators=(",", ":"), sort_keys=True))
     return 0
 
@@ -243,6 +284,20 @@ def main():
         rp.add_argument("--seconds", type=float, default=0.0)
         rp.add_argument("--exit", type=int, default=0)
         return report_row(rp.parse_args(sys.argv[2:]))
+
+    if len(sys.argv) > 1 and sys.argv[1] == "judgerow":
+        rp = argparse.ArgumentParser(prog="benchmark-report.py judgerow")
+        rp.add_argument("--judge-file", required=True)
+        rp.add_argument("--model", required=True)
+        rp.add_argument("--package", required=True)
+        rp.add_argument("--reference", default="unknown")
+        rp.add_argument("--reference-source", default="", choices=["", "human", "models"])
+        rp.add_argument("--support", type=int, default=0)
+        rp.add_argument("--ref-pkgver", default="")
+        rp.add_argument("--overridden", action="store_true")
+        rp.add_argument("--seconds", type=float, default=0.0)
+        rp.add_argument("--exit", type=int, default=0)
+        return judge_row(rp.parse_args(sys.argv[2:]))
 
     ap = argparse.ArgumentParser()
     ap.add_argument("--rows", required=True)

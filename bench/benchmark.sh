@@ -11,9 +11,16 @@
 # $DATA_DIR/bench/<run-id>/ and stays there. Spend is recorded in the same
 # daily ledger the pipeline keeps, so the day's budget sees it.
 #
-# Usage: benchmark.sh --models a,b[,c] [--sample N] [--packages p,q,...]
-#                     [--budget USD] [--jobs N] [--audit-timeout SECONDS]
-#                     [--no-synthetics] [--run-id ID]
+# Usage: benchmark.sh --models a,b[,c] [--role audit|judge] [--target NAME]
+#                     [--sample N] [--packages p,q,...] [--budget USD] [--jobs N]
+#                     [--audit-timeout SECONDS] [--no-synthetics] [--run-id ID]
+#
+# --role picks the task. "audit" (the default) re-audits the sampled packages,
+# which is what both the audit seat and the re-audit seat do. "judge" hands
+# each candidate the package's existing audit reports from the branch and
+# scores its ruling, which is the judge seat's task; it has no synthetic
+# fixtures. --target is a free label recorded in the result (which seat the
+# run is for), so the page can show the right promote button.
 #
 # The last line printed is BENCH_JSON followed by one JSON object: the table
 # in machine-readable form, for a caller reading the log.
@@ -23,6 +30,8 @@ cd "$(dirname "$0")/.."
 
 DATA_DIR="${AUR_SLEUTH_DATA_DIR:-$HOME/aur-sleuth-data}"
 MODELS=""
+ROLE="audit"
+TARGET=""
 SAMPLE=20
 PACKAGES=""
 BUDGET="2.00"
@@ -34,6 +43,8 @@ RUN_ID="$(date -u +%Y%m%d-%H%M%S)"
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --models) MODELS="$2"; shift 2 ;;
+        --role) ROLE="$2"; shift 2 ;;
+        --target) TARGET="$2"; shift 2 ;;
         --sample) SAMPLE="$2"; shift 2 ;;
         --packages) PACKAGES="$2"; shift 2 ;;
         --budget) BUDGET="$2"; shift 2 ;;
@@ -48,6 +59,8 @@ done
 [[ -n "$MODELS" ]] || { echo "--models is required" >&2; exit 1; }
 [[ "$MODELS" =~ ^[A-Za-z0-9._/-]+(,[A-Za-z0-9._/-]+)*$ ]] \
     || { echo "--models is not a comma-separated model list: '$MODELS'" >&2; exit 1; }
+[[ "$ROLE" =~ ^(audit|judge)$ ]] || { echo "--role must be audit or judge" >&2; exit 1; }
+[[ -z "$TARGET" || "$TARGET" =~ ^[a-z-]+$ ]] || { echo "--target must be a short lowercase word" >&2; exit 1; }
 [[ "$SAMPLE" =~ ^[0-9]+$ ]] || { echo "--sample must be a whole number" >&2; exit 1; }
 [[ "$JOBS" =~ ^[1-9][0-9]*$ ]] || { echo "--jobs must be a positive number" >&2; exit 1; }
 [[ "$AUDIT_TIMEOUT" =~ ^[1-9][0-9]*$ ]] || { echo "--audit-timeout must be a positive number" >&2; exit 1; }
@@ -56,6 +69,7 @@ done
 [[ -n "${OPENAI_API_KEY:-}" ]] || { echo "OPENAI_API_KEY is not set" >&2; exit 1; }
 
 IFS=',' read -ra MODEL_LIST <<< "$MODELS"
+[[ "$ROLE" == "judge" ]] && SYNTHETICS=false
 
 RUN_DIR="$DATA_DIR/bench/$RUN_ID"
 PIPELINE_DIR="$DATA_DIR/pipeline"
@@ -199,8 +213,67 @@ print("\t".join([r["package"], r.get("reference", "unknown"), r.get("pkgver", ""
     log "  [$model] $mark $pkg: $result (reference $reference, ${seconds}s)"
 }
 
+# --- one package, as a judge -------------------------------------------------------
+# The candidate judge gets the package's audit reports as they are on the
+# branch -- the same reports the incumbent judge ruled on -- materialised into
+# this run's own reports directory, and writes its ruling into this run's own
+# judge directory. bench/judge.sh does the judging; --no-archive keeps the
+# ruling off the branch.
+judge_package() {
+    local model="$1" line="$2" slug="${1//\//-}"
+    local pkg reference ref_pkgver overridden ref_source support paths
+    IFS=$'\t' read -r pkg reference ref_pkgver overridden ref_source support paths < <(printf '%s' "$line" | python3 -c '
+import json, sys
+r = json.load(sys.stdin)
+print("\t".join([r["package"], r.get("reference", "unknown"), r.get("pkgver", ""),
+                 "1" if r.get("overridden") else "0", r.get("reference_source", ""),
+                 str(r.get("support", 0)),
+                 " ".join(b["path"] for b in r.get("branch") or [] if b.get("path"))]))')
+
+    local reports_dir="$RUN_DIR/reports/$slug/judge-input/$pkg"
+    local judge_dir="$RUN_DIR/reports/$slug/judge"
+    local n=0 path
+    for path in $paths; do
+        # One directory per report, as the pipeline lays them out: judge.sh
+        # finds reports by name under any subdirectory of --reports-dir.
+        mkdir -p "$reports_dir/$n"
+        git show "audit-reports:$path" > "$reports_dir/$n/aur-sleuth-report-${pkg}.txt" 2>/dev/null || rm -rf "${reports_dir:?}/$n"
+        n=$(( n + 1 ))
+    done
+    mkdir -p "$judge_dir"
+
+    local start rc=0 seconds
+    start=$(date +%s)
+    if [[ -n "$(find "$reports_dir" -name 'aur-sleuth-report-*.txt' 2>/dev/null)" ]]; then
+        timeout --kill-after=30s "$AUDIT_TIMEOUT" \
+            bash bench/judge.sh --package "$pkg" --all --no-archive --judge-model "$model" \
+            --reports-dir "$reports_dir" --judge-dir "$judge_dir" \
+            >"$RUN_DIR/reports/$slug/log-judge-$pkg.txt" 2>&1 </dev/null || rc=$?
+    else
+        rc=2
+    fi
+    seconds=$(( $(date +%s) - start ))
+
+    local flag=()
+    [[ "$overridden" == 1 ]] && flag=(--overridden)
+    local row
+    row="$(python3 bench/benchmark-report.py judgerow --judge-file "$judge_dir/$pkg.json" \
+        --model "$model" --package "$pkg" --reference "$reference" --reference-source "$ref_source" \
+        --support "$support" --ref-pkgver "$ref_pkgver" --seconds "$seconds" --exit "$rc" "${flag[@]}")"
+    printf '%s\n' "$row" | append_row "$ROWS"
+    record_cost "$(printf '%s' "$row" | python3 -c 'import json,sys; print(json.load(sys.stdin)["cost"])')"
+
+    local result
+    result="$(printf '%s' "$row" | python3 -c 'import json,sys; print(json.load(sys.stdin)["result"])')"
+    local mark="  "
+    if [[ "$reference" == "safe" || "$reference" == "unsafe" ]]; then
+        [[ "$result" == "$reference" ]] && mark="ok" || mark="!!"
+    fi
+    log "  [$model] $mark $pkg: judged $result (reference $reference, ${seconds}s)"
+}
+
 # --- main -------------------------------------------------------------------------
-log "Benchmark $RUN_ID: models ${MODEL_LIST[*]} | sample $SAMPLE | budget \$$BUDGET | jobs $JOBS"
+log "Benchmark $RUN_ID: role $ROLE${TARGET:+ for $TARGET} | models ${MODEL_LIST[*]} | sample $SAMPLE | budget \$$BUDGET | jobs $JOBS"
 log "Reports under $RUN_DIR (never archived)"
 
 if [[ -n "$PACKAGES" ]]; then
@@ -214,14 +287,15 @@ log "Sample: $nsample package(s)"
 # The current models' own latest report on each sampled package, from the
 # branch, as rows of their own. Costs nothing, and gives the table the
 # incumbents on the same packages: the delta a promotion has to beat.
-python3 - "$SAMPLE_FILE" <<'PYROWS' | append_row "$ROWS"
-import json, sys
+BENCH_ROLE="$ROLE" python3 - "$SAMPLE_FILE" <<'PYROWS' | append_row "$ROWS"
+import json, os, sys
 for line in open(sys.argv[1]):
     line = line.strip()
     if not line:
         continue
     r = json.loads(line)
-    for b in r.get("branch") or []:
+    key = "branch_judges" if os.environ.get("BENCH_ROLE") == "judge" else "branch"
+    for b in r.get(key) or []:
         print(json.dumps({
             "model": b["model"], "package": r["package"], "reference": r["reference"],
             "reference_source": r.get("reference_source", ""), "support": r.get("support", 0),
@@ -251,7 +325,11 @@ for model in "${MODEL_LIST[@]}"; do
             wait -n || true
         done
         # stdin closed: a background audit must not eat the sample file.
-        bench_package "$model" "$line" </dev/null &
+        if [[ "$ROLE" == "judge" ]]; then
+            judge_package "$model" "$line" </dev/null &
+        else
+            bench_package "$model" "$line" </dev/null &
+        fi
     done < "$SAMPLE_FILE"
     wait
     $stopped_early && break
@@ -259,11 +337,13 @@ done
 
 meta="$(BENCH_RUN_ID="$RUN_ID" BENCH_STARTED="$STARTED" BENCH_MODELS="$MODELS" \
     BENCH_SAMPLE="$nsample" BENCH_BUDGET="$BUDGET" BENCH_STOPPED="$stopped_early" \
-    BENCH_SYNTHETICS="$SYNTHETICS" python3 - <<'PY'
+    BENCH_SYNTHETICS="$SYNTHETICS" BENCH_ROLE="$ROLE" BENCH_TARGET="$TARGET" python3 - <<'PY'
 import datetime, json, os
 e = os.environ
 print(json.dumps({
     "run_id": e["BENCH_RUN_ID"],
+    "role": e["BENCH_ROLE"],
+    "target": e["BENCH_TARGET"],
     "started": e["BENCH_STARTED"],
     "finished": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     "models": e["BENCH_MODELS"].split(","),

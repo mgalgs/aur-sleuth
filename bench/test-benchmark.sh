@@ -182,6 +182,25 @@ p = subprocess.run([sys.executable, os.path.join(bench, "benchmark-report.py"), 
                    capture_output=True, text=True)
 check("a missing report is an error row, not a crash", p.returncode == 0 and json.loads(p.stdout)["result"] == "error")
 
+# --- the judge row ----------------------------------------------------------------
+jf = os.path.join(tmp, "pkg.json")
+with open(jf, "w") as f:
+    json.dump({"package": "foo", "correct_verdict": "unsafe", "reasoning": "because",
+               "_judge_usage": {"model": "j/x", "cost": 0.0123}}, f)
+def read_judge(*extra):
+    p = subprocess.run([sys.executable, os.path.join(bench, "benchmark-report.py"), "judgerow",
+                        "--judge-file", jf, "--model", "j/x", "--package", "foo", *extra],
+                       capture_output=True, text=True)
+    return json.loads(p.stdout)
+r = read_judge("--reference", "unsafe", "--reference-source", "human")
+check("judgerow reads the ruling and the cost", r["result"] == "unsafe" and r["cost"] == 0.0123 and r["summary"] == "because")
+r = read_judge("--exit", "124")
+check("a judge timeout is a timeout", r["result"] == "timeout")
+p = subprocess.run([sys.executable, os.path.join(bench, "benchmark-report.py"), "judgerow",
+                    "--judge-file", os.path.join(tmp, "none.json"), "--model", "j/x", "--package", "x"],
+                   capture_output=True, text=True)
+check("a missing judge file is an error row", p.returncode == 0 and json.loads(p.stdout)["result"] == "error")
+
 # --- the sample -------------------------------------------------------------------
 sample = load("benchmark-sample.py")
 def pkg(name, state, date, overridden=False, source="models"):

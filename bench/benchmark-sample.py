@@ -25,7 +25,8 @@ Two kinds of reference, and the report keeps them apart:
             reference was a single audit's false positive.
 "support" is how many unsafe reports a model-settled unsafe rests on.
 
-"branch" carries the current models' own latest report on the package, so the
+"branch" carries the current models' own latest report on the package (with
+its path on the branch), and "branch_judges" what the judge ruled, so the
 benchmark can score the incumbents on the same sample at no cost. Their
 verdicts helped settle the model references, so their agreement is an upper
 bound; their cost is real.
@@ -79,7 +80,9 @@ def load_human_verdicts():
 
 
 def latest_by_model(audits):
-    """package -> [{model, result, cost, pkgver}], the newest report per model."""
+    """package -> [{model, result, cost, pkgver, path}], the newest report per
+    model. path is the report's place on the branch, which a judge benchmark
+    materialises to hand the candidate judge the same reports the incumbent saw."""
     newest = {}
     for a in audits:
         fm = a["frontmatter"]
@@ -91,10 +94,28 @@ def latest_by_model(audits):
                 "cost": float(fm.get("cost") or 0) if str(fm.get("cost", "")).replace(".", "", 1).isdigit() else 0.0,
                 "pkgver": fm.get("pkgver", ""),
                 "date": fm.get("date", ""),
+                "path": f"{a['package']}/{a['filename']}",
             }
     out = {}
     for (pkg, _), entry in newest.items():
         out.setdefault(pkg, []).append({k: v for k, v in entry.items() if k != "date"})
+    return out
+
+
+def judges_by_package(judges):
+    """package -> [{model, result, cost}]: what the judge(s) on the branch ruled.
+    The incumbent judge's row in a judge benchmark, at no cost."""
+    out = {}
+    for j in judges:
+        d = j["data"]
+        usage = d.get("_judge_usage") or {}
+        if d.get("correct_verdict") not in ("safe", "unsafe"):
+            continue
+        out.setdefault(j["package"], []).append({
+            "model": usage.get("model", "unknown"),
+            "result": d["correct_verdict"],
+            "cost": float(usage.get("cost") or 0),
+        })
     return out
 
 
@@ -103,6 +124,7 @@ def rows(gd, human=None):
     index = gd.build_index_data(audits, judges)
     human = load_human_verdicts() if human is None else human
     branch = latest_by_model(audits)
+    judged = judges_by_package(judges)
     out = []
     for name, ps in index["packages"].items():
         state = gd.package_state(ps)
@@ -124,6 +146,7 @@ def rows(gd, human=None):
             # A clean package that something once called unsafe.
             "overridden": state == "clean" and ps.get("audit_majority") in ("unsafe", "contested"),
             "branch": sorted(branch.get(name, []), key=lambda b: b["model"]),
+            "branch_judges": judged.get(name, []),
         })
     return out
 
@@ -169,7 +192,7 @@ def main():
             picked.append(by_name.get(name) or {
                 "package": name, "reference": "unknown", "reference_source": "",
                 "support": 0, "state": "unknown", "pkgver": "", "date": "",
-                "overridden": False, "branch": [],
+                "overridden": False, "branch": [], "branch_judges": [],
             })
     else:
         picked = select(all_rows, max(0, args.size))

@@ -316,6 +316,8 @@ do_benchmark() {
         "AUR_SLEUTH_BENCH_JOBS:--jobs:int"
         "AUR_SLEUTH_BENCH_RUN_ID:--run-id:id"
         "AUR_SLEUTH_BENCH_PACKAGES:--packages:packages"
+        "AUR_SLEUTH_BENCH_ROLE:--role:role"
+        "AUR_SLEUTH_BENCH_TARGET:--target:word"
         "AUR_SLEUTH_AUDIT_TIMEOUT:--audit-timeout:int"
     )
     for spec in "${specs[@]}"; do
@@ -329,6 +331,8 @@ do_benchmark() {
             int) [[ "$value" =~ ^[0-9]+$ ]] || die "$var must be a whole number, got '$value'" ;;
             num) [[ "$value" =~ ^[0-9]+(\.[0-9]+)?$ ]] || die "$var must be a number, got '$value'" ;;
             id)  [[ "$value" =~ ^[A-Za-z0-9._-]+$ ]] || die "$var is not a run id, got '$value'" ;;
+            role) [[ "$value" =~ ^(audit|judge)$ ]] || die "$var must be audit or judge, got '$value'" ;;
+            word) [[ "$value" =~ ^[a-z-]+$ ]] || die "$var must be a short lowercase word, got '$value'" ;;
             packages)
                 # AUR package names: lowercase letters, digits, @ . _ + -
                 [[ "$value" =~ ^[a-z0-9@._+-]+(,[a-z0-9@._+-]+)*$ ]] \
