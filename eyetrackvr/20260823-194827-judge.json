@@ -1,0 +1,37 @@
+{
+  "package": "eyetrackvr",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Both models agree the critical files (PKGBUILD and .desktop) are safe. Qwen's deeper audit of source files found no risks. The world-writable logs directory is a minor hygiene issue but not malicious.",
+  "disagreement_analysis": "No verdict disagreement, but deepseek failed to review actual source files due to hallucinated paths while qwen successfully audited key components.",
+  "coverage_issues": [
+    "deepseek failed to review any source files due to selecting 10 non-existent paths",
+    "Neither model reviewed .install scripts or build hooks (none exist in package)",
+    "165 prebuilt binaries were unauditable (expected limitation)"
+  ],
+  "false_positives": [
+    "Qwen's 'exec' flag in load_config_py3.py: Normal OpenCV bootstrapping, safely constrained"
+  ],
+  "false_negatives": [
+    "deepseek missed install.sh: Could have contained user-targeted malware (audited safe by qwen)",
+    "Both ignored world-writable logs dir: Minor local privilege escalation risk if app runs as root"
+  ],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Improve path hallucination: Validate model-selected paths against filesystem",
+    "Prioritize executable scripts over library code: Both models under-prioritized install.sh initially",
+    "Flag permission issues: Automated checks for world-writable dirs in PKGBUILDs",
+    "Clarify binary limitations: Explicitly state in reports that payload isn't audited"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 8460,
+    "completion_tokens": 2075,
+    "cost": 0.0111095
+  },
+  "audits_judged": [
+    "20260823-192220-qwen-qwen3-235b-a22b-2507.md",
+    "20260823-192216-deepseek-deepseek-v4-flash.md"
+  ]
+}
