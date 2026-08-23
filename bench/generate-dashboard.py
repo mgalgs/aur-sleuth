@@ -139,6 +139,11 @@ def compute_majority(results):
 def package_state(ps):
     """How settled a package's verdict is: confirmed, look, clean, or other.
 
+    A verdict a person settled (bench/verdicts.json, attached to the summary
+    as "human") outranks every model: a human "safe" makes the package clean,
+    a human "unsafe" makes it confirmed. The models can be re-run; the human
+    read the evidence and decided.
+
     "confirmed" is deliberately narrow -- the audits agreed on unsafe AND the
     judge agreed with them. Only that may be presented as a finding.
 
@@ -151,6 +156,12 @@ def package_state(ps):
     same harm the publish review is told to watch for. So the page counts them
     separately and says plainly what they are.
     """
+    human = (ps.get("human") or {}).get("verdict")
+    if human == "safe":
+        return "clean"
+    if human == "unsafe":
+        return "confirmed"
+
     audit = ps.get("audit_majority")
     judge = ps.get("judge_majority")
 
@@ -327,13 +338,39 @@ def load_reports():
     return audits, judges
 
 
-def build_index_data(audits, judges, now=None, funding_inputs=None):
+def load_human_verdicts():
+    """bench/verdicts.json: verdicts a person settled after reading the
+    evidence. Ships with the image, so the page rebuilt at publish time
+    carries them. Only the fields the page needs go through; "by" stays
+    out of the public output. The benchmark reads the same file through
+    its own loader in benchmark-sample.py."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "verdicts.json")
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    out = {}
+    for name, entry in (data.get("packages") or {}).items():
+        if isinstance(entry, dict) and entry.get("verdict") in ("safe", "unsafe"):
+            out[name] = {
+                "verdict": entry["verdict"],
+                "since": str(entry.get("since", "")),
+                "note": str(entry.get("note", "")),
+            }
+    return out
+
+
+def build_index_data(audits, judges, now=None, funding_inputs=None, human=None):
     """Build the index JSON structure for the dashboard.
 
     `funding_inputs` is {updates_per_day, daily_budget, url}, each optional;
-    see build_funding for what becomes of them.
+    see build_funding for what becomes of them. `human` is the verdicts a
+    person settled ({package: {verdict, since, note}}); None loads them from
+    bench/verdicts.json.
     """
     now = now or datetime.now(timezone.utc)
+    human = load_human_verdicts() if human is None else human
     packages = defaultdict(lambda: {"audits": [], "judges": []})
 
     for a in audits:
@@ -428,6 +465,10 @@ def build_index_data(audits, judges, now=None, funding_inputs=None):
             # Reports that said unsafe, each counted once: what "agree" rests on.
             "unsafe_audits": sum(1 for a in pkg_audits if a["result"] == "unsafe"),
         }
+        # A human-settled verdict rides on the summary so package_state()
+        # and the drill-down both see it.
+        if pkg_name in human:
+            pkg_summaries[pkg_name]["human"] = human[pkg_name]
         # The state is decided here, once, and the page reads it. The page
         # used to carry its own copy of package_state() in JavaScript, and
         # nothing checked that the two copies agreed.
@@ -563,9 +604,10 @@ def build_index_data(audits, judges, now=None, funding_inputs=None):
     return {"summary": summary, "packages": pkg_summaries}
 
 
-def build_package_details(audits, judges):
+def build_package_details(audits, judges, human=None):
     """Build per-package detail JSON with full report bodies."""
     packages = defaultdict(lambda: {"audits": [], "judges": []})
+    human = load_human_verdicts() if human is None else human
 
     for a in audits:
         packages[a["package"]]["audits"].append({
@@ -579,6 +621,10 @@ def build_package_details(audits, judges):
             "filename": j["filename"],
             "data": j["data"],
         })
+
+    for name, entry in human.items():
+        if name in packages:
+            packages[name]["human"] = entry
 
     return dict(packages)
 
@@ -688,10 +734,11 @@ def commit_to_branch(files):
 def build_files(audits, judges, now=None, funding_inputs=None):
     """Everything the page reads, as {path: content}, from loaded reports."""
     now = now or datetime.now(timezone.utc)
-    index_data = build_index_data(audits, judges, now, funding_inputs)
+    human = load_human_verdicts()
+    index_data = build_index_data(audits, judges, now, funding_inputs, human=human)
     index_data["generated_at"] = now.strftime("%Y-%m-%dT%H:%M:%SZ")
     files = {"_dashboard/data.json": json.dumps(index_data, separators=(",", ":"))}
-    for pkg_name, detail in build_package_details(audits, judges).items():
+    for pkg_name, detail in build_package_details(audits, judges, human=human).items():
         files[f"_dashboard/pkg/{pkg_name}.json"] = json.dumps(detail, separators=(",", ":"))
     return files
 

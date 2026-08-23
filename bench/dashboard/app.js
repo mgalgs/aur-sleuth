@@ -420,6 +420,11 @@ async function toggleDetail(name) {
 // from the counts the state rule used. Nothing a model wrote goes in here.
 function explainState(pkg) {
     const state = packageState(pkg);
+    if (pkg.human) {
+        return 'A person reviewed the evidence'
+            + (pkg.human.since ? ' on ' + pkg.human.since : '')
+            + (pkg.human.verdict === 'safe' ? ' and cleared it.' : ' and confirmed it.');
+    }
     const audits = pkg.audits || [];
     const judges = pkg.judges || [];
     const unsafe = audits.filter(a => a.result === 'unsafe').length;
@@ -454,6 +459,7 @@ function renderDetail(name, data) {
         String((b.frontmatter || {}).date || '').localeCompare(String((a.frontmatter || {}).date || '')));
     const judges = data.judges || [];
     const judgeSafe = pkg.judge_majority === 'safe';
+    const humanSafe = !!(pkg.human && pkg.human.verdict === 'safe');
     const confirmedCls = state === 'confirmed' ? ' confirmed' : '';
 
     let html = '<div class="detail-state">'
@@ -461,6 +467,15 @@ function renderDetail(name, data) {
         + '<span class="why">' + escapeHtml(explainState(pkg)) + '</span>'
         + '<a class="detail-link" href="#pkg=' + escapeAttr(encodeURIComponent(name)) + '">#pkg=' + escapeHtml(name) + '</a>'
         + '</div>';
+
+    // A verdict a person settled, and why. This outranks everything below it.
+    if (pkg.human && pkg.human.note) {
+        html += '<div class="detail-section"><div class="finding"><div class="head">'
+            + '<span class="file">Reviewed by a person</span>'
+            + (pkg.human.since ? '<span class="where">' + escapeHtml(pkg.human.since) + '</span>' : '')
+            + '<span class="summary">' + escapeHtml(pkg.human.note) + '</span>'
+            + '</div></div></div>';
+    }
 
     // What was flagged, first. Every file a report called unsafe, with the
     // lines the auditor quoted when it quoted any. Newest report first. Two
@@ -486,7 +501,7 @@ function renderDetail(name, data) {
             return '<div class="finding"><div class="head">'
                 + '<span class="file">' + escapeHtml(v.file || '') + '</span>'
                 + (start ? '<span class="where">line ' + start + '</span>' : '')
-                + '<span class="tag">flagged by ' + escapeHtml(joinNicely(f.models)) + (judgeSafe ? ', overturned by the judge' : '') + '</span>'
+                + '<span class="tag">flagged by ' + escapeHtml(joinNicely(f.models)) + (humanSafe ? ', overturned by human review' : judgeSafe ? ', overturned by the judge' : '') + '</span>'
                 + f.summaries.map(s => '<span class="summary">' + escapeHtml(s) + '</span>').join('')
                 + '</div>'
                 + (v.evidence ? renderEvidence(v, state) : '')
