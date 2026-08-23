@@ -88,6 +88,37 @@ def compute_majority(results):
     return 'inconclusive'
 
 
+def package_state(ps):
+    """How settled a package's verdict is: confirmed, look, clean, or other.
+
+    "confirmed" is deliberately narrow -- the audits agreed on unsafe AND the
+    judge agreed with them. Only that may be presented as a finding.
+
+    Everything else carrying a flag is "look": one model said unsafe and another
+    did not, or a report was inconclusive. On this corpus that is usually a false
+    positive on a package that is merely doing something that looks alarming, and
+    the threat model says risky-but-legitimate is not a finding (CLAUDE.md,
+    "The test to apply"). Publishing those under a real package's name, in red,
+    as "suspicious" would be an accusation the evidence does not support -- the
+    same harm the publish review is told to watch for. So the page counts them
+    separately and says plainly what they are.
+    """
+    if ps.get("audit_majority") == "unsafe" and ps.get("judge_majority") == "unsafe":
+        return "confirmed"
+    # The judge read the audits and disagreed with them. It is the better model
+    # looking at the same evidence, so its answer stands: a package it cleared is
+    # clean, not "worth a look". Leaving it flagged would keep a package that did
+    # nothing wrong on a public list of ones that might have.
+    if ps.get("judge_majority") == "safe":
+        return "clean"
+    if (ps.get("audit_majority") in ("unsafe", "contested", "inconclusive")
+            or ps.get("judge_majority") == "unsafe"):
+        return "look"
+    if ps.get("audit_majority") == "safe":
+        return "clean"
+    return "other"
+
+
 def safe_float(v, default=0.0):
     try:
         return float(v)
@@ -277,17 +308,19 @@ def build_index_data(audits, judges):
     # audit set is drawn from recently-updated and top-popular packages.
     week_start = (datetime.now(timezone.utc) - timedelta(days=7)).strftime("%Y-%m-%d")
 
-    flagged_majorities = {"unsafe", "contested"}
-    wk_updated = wk_new = wk_suspicious = wk_green = 0
+    wk_updated = wk_new = wk_confirmed = wk_look = wk_green = 0
     for ps in pkg_summaries.values():
         if (ps["latest_date"] or "")[:10] < week_start:
             continue
         wk_updated += 1
         if (ps["first_date"] or "")[:10] >= week_start:
             wk_new += 1
-        if ps["audit_majority"] in flagged_majorities or ps["judge_majority"] == "unsafe":
-            wk_suspicious += 1
-        elif ps["audit_majority"] == "safe":
+        state = package_state(ps)
+        if state == "confirmed":
+            wk_confirmed += 1
+        elif state == "look":
+            wk_look += 1
+        elif state == "clean":
             wk_green += 1
 
     wk_by_model = defaultdict(int)
@@ -297,18 +330,15 @@ def build_index_data(audits, judges):
             wk_audits_total += 1
             wk_by_model[a["frontmatter"].get("model", "unknown")] += 1
 
-    # Most recent audits for the activity strip. Built from the tagged per-package
-    # audits so the re-audit flag matches the table's.
-    recent = []
-    for pkg_name, pkg_data in packages.items():
-        for a in pkg_data["audits"]:
-            recent.append({
-                "package": pkg_name,
-                "model": a["model"],
-                "result": a["result"],
-                "date": a["date"],
-                "reaudit": bool(a.get("triggered_by")),
-            })
+    # The activity strip: one entry per PACKAGE, not per audit. Per audit, a
+    # package the two models disagreed about appeared twice, once green and once
+    # red, which reads as an alarming finding when it is only a disagreement.
+    # The package's settled state is the honest summary of it.
+    recent = [
+        {"package": name, "state": package_state(ps), "date": ps["latest_date"],
+         "audits": len(ps["audits"])}
+        for name, ps in pkg_summaries.items()
+    ]
     recent.sort(key=lambda r: r["date"] or "", reverse=True)
     recent = recent[:24]
 
@@ -331,7 +361,8 @@ def build_index_data(audits, judges):
         "week": {
             "start": week_start,
             "packages": {"updated": wk_updated, "new": wk_new,
-                         "suspicious": wk_suspicious, "green": wk_green},
+                         "confirmed": wk_confirmed, "look": wk_look,
+                         "green": wk_green},
             "audits_total": wk_audits_total,
             # "unknown" is not worth naming on the public headline; audits_total
             # still counts it, so the named models need not sum to the total.
@@ -458,6 +489,14 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         .block-skipped { background: #4b5563; }
         .block-unknown { background: #4b5563; }
         .block-reaudit { width: 16px; height: 16px; border: 2px solid #eab308; margin-right: 3px; }
+        /* An audit verdict the judge overturned. Struck through and faded, so a
+           square that stays red for the record does not read as a live finding. */
+        .block-overridden { position: relative; opacity: 0.45; }
+        .block-overridden::after {
+            content: ''; position: absolute; left: -1px; right: -1px; top: 50%;
+            height: 2px; background: #e2e8f0; transform: rotate(-45deg);
+            transform-origin: center;
+        }
         .detail-row { display: none; }
         .detail-row.open { display: table-row; }
         .report-body { display: none; }
@@ -500,6 +539,14 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         <div id="activity" class="bg-slate-800 rounded-lg p-5 border border-slate-700 mb-6">
             <p id="activity-packages" class="text-slate-200"></p>
             <p id="activity-audits" class="text-slate-400 text-sm mt-1"></p>
+            <p class="text-slate-500 text-xs mt-3 leading-relaxed">
+                These audits look for one thing: code injected into the AUR packaging of a
+                package &mdash; in the <code>PKGBUILD</code>, an <code>.install</code> hook, or a patch.
+                &ldquo;Worth a closer look&rdquo; means a model wanted a second opinion, most often
+                about something the application legitimately does; it is not a claim that
+                the package is malicious, and on this corpus most such flags are false
+                positives. Only &ldquo;confirmed&rdquo; means the audits and the judge agreed.
+            </p>
             <div id="activity-recent" class="mt-4 flex flex-wrap gap-2"></div>
         </div>
 
@@ -635,14 +682,31 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         // Older data.json (before this field existed) has no week block.
         if (!wk) { activity.style.display = 'none'; return; }
 
+        // Only "confirmed" -- audits agreed unsafe AND the judge agreed -- is
+        // shown in red. A single model's "unsafe" is usually a false positive on
+        // a package that merely looks alarming, so it is counted plainly as
+        // something to look at, never coloured as an accusation.
         const p = wk.packages || {};
+        const confirmed = Number(p.confirmed || 0);
+        // data.json is written by the audit stage and the page by the publish
+        // stage, so a page can be newer than the data it reads. Without the new
+        // keys every count would render as a confident zero, which is worse than
+        // saying nothing: show the totals and leave the breakdown out.
+        const counted = Object.prototype.hasOwnProperty.call(p, 'confirmed');
         document.getElementById('activity-packages').innerHTML =
             '<span class="text-2xl font-bold text-white">' + Number(p.updated || 0).toLocaleString() + '</span>' +
             ' packages audited in the past week ' +
-            '<span class="text-slate-400 text-base">(' +
-            Number(p.new || 0) + ' new, ' +
-            '<span class="result-unsafe font-semibold">' + Number(p.suspicious || 0) + ' suspicious</span>, ' +
-            '<span class="result-safe font-semibold">' + Number(p.green || 0) + ' green</span>)</span>';
+            '<span class="text-slate-400 text-base">(' + Number(p.new || 0) + ' new)</span>' +
+            (!counted ? '' :
+            '<br><span class="text-base">' +
+            '<span class="result-safe font-semibold">' + Number(p.green || 0) + ' clean</span>' +
+            '<span class="text-slate-500"> &middot; </span>' +
+            '<span class="text-slate-300">' + Number(p.look || 0) + ' worth a closer look</span>' +
+            '<span class="text-slate-500"> &middot; </span>' +
+            (confirmed
+                ? '<span class="result-unsafe font-semibold">' + confirmed + ' confirmed</span>'
+                : '<span class="result-safe font-semibold">none confirmed malicious</span>') +
+            '</span>');
 
         const parts = Object.entries(wk.by_model || {}).slice(0, 6)
             .map(([m, c]) => escapeHtml(shortModel(m)) + ' (' + Number(c) + ')');
@@ -650,15 +714,21 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             Number(wk.audits_total || 0).toLocaleString() + ' security audits' +
             (parts.length ? ' by ' + joinNicely(parts) : '');
 
+        // One chip per package, coloured by its settled state. Per audit, a
+        // package the models disagreed about showed twice -- green and red --
+        // which reads as a finding when it is only a disagreement.
+        const DOT = {confirmed: 'block-unsafe', look: 'block-inconclusive',
+                     clean: 'block-safe', other: 'block-skipped'};
+        const WHAT = {confirmed: 'audits and judge agree: unsafe',
+                      look: 'flagged by a model; not confirmed',
+                      clean: 'no findings', other: 'no verdict'};
         document.getElementById('activity-recent').innerHTML = rec.map(r => {
             const d = String(r.date || '').split('T')[0];
-            const reaudit = r.reaudit
-                ? '<span class="text-yellow-400" title="re-audit">&#8635;</span>' : '';
+            const st = DOT[r.state] ? r.state : 'other';
             return '<span class="inline-flex items-center gap-1.5 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs" ' +
-                'title="' + escapeAttr(shortModel(r.model || '') + ' • ' + (r.date || '')) + '">' +
-                '<span class="block block-' + escapeAttr(r.result || 'unknown') + '" style="margin-right:0"></span>' +
+                'title="' + escapeAttr((WHAT[st] || '') + ' • ' + (r.date || '')) + '">' +
+                '<span class="block ' + DOT[st] + '" style="margin-right:0"></span>' +
                 '<span class="text-blue-300">' + escapeHtml(r.package || '') + '</span>' +
-                reaudit +
                 '<span class="text-slate-500">' + escapeHtml(d) + '</span>' +
                 '</span>';
         }).join('');
@@ -804,7 +874,11 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         return entries;
     }
 
-    function renderBlocks(items, type) {
+    // judgeVerdict is the judge's majority for this package, when there is one.
+    // An audit the judge overturned is struck through rather than left standing:
+    // a red square next to a judgement that cleared the package says the package
+    // is dangerous, when what happened is that a model was wrong about it.
+    function renderBlocks(items, type, judgeVerdict) {
         if (!items || items.length === 0) {
             return '<span class="text-slate-600">—</span>';
         }
@@ -813,7 +887,11 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             const model = (item.model || 'unknown').split('/').pop();
             const reaudit = item.reaudit ? ' block-reaudit' : '';
             const label = item.reaudit ? 're-audit' : type;
-            return `<span class="block block-${escapeAttr(value || 'unknown')}${reaudit}" title="${escapeAttr(model)}: ${escapeAttr(value || 'unknown')} (${label})"></span>`;
+            const overridden = type === 'audit' && judgeVerdict === 'safe'
+                && (value === 'unsafe' || value === 'inconclusive');
+            const cls = overridden ? ' block-overridden' : '';
+            const note = overridden ? ' — the judge did not agree; overridden' : '';
+            return `<span class="block block-${escapeAttr(value || 'unknown')}${reaudit}${cls}" title="${escapeAttr(model)}: ${escapeAttr(value || 'unknown')} (${label})${escapeAttr(note)}"></span>`;
         }).join('');
     }
 
@@ -830,7 +908,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             return `<tr class="border-b border-slate-700/50 hover:bg-slate-750 cursor-pointer pkg-row" data-pkg="${safeId}">
                 <td class="px-4 py-2.5 font-medium text-blue-400">${escapeHtml(name)}</td>
                 <td class="px-4 py-2.5 text-slate-400">${escapeHtml(pkg.pkgver || '—')}</td>
-                <td class="px-4 py-2.5"><span class="inline-flex items-center gap-0.5">${renderBlocks(pkg.audits, 'audit')}</span></td>
+                <td class="px-4 py-2.5"><span class="inline-flex items-center gap-0.5">${renderBlocks(pkg.audits, 'audit', pkg.judge_majority)}</span></td>
                 <td class="px-4 py-2.5"><span class="inline-flex items-center gap-0.5">${renderBlocks(pkg.judges, 'judge')}</span></td>
                 <td class="px-4 py-2.5 text-right text-slate-400">${pkg.files_reviewed === 0 && pkg.audits && pkg.audits.every(a => a.result === 'skipped' || a.result === 'inconclusive') ? '—' : escapeHtml(pkg.files_reviewed)}</td>
                 <td class="px-4 py-2.5 text-right text-slate-400">$${pkg.total_cost.toFixed(4)}</td>
