@@ -1,0 +1,34 @@
+{
+  "package": "kytyps5-nightly-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Both audits correctly identified the PKGBUILD and .desktop file as safe. The PKGBUILD uses verified GitHub sources with pinned checksums and contains no executable code during sourcing. Installation routines are standard and transparent.",
+  "disagreement_analysis": null,
+  "coverage_issues": [
+    "Both models failed to audit the wrapper script generated in PKGBUILD's package() function (creates /usr/bin/kytyps5)",
+    "Neither reviewed the prebuilt binary payload (emulator/launcher) which executes at runtime"
+  ],
+  "false_positives": [],
+  "false_negatives": [
+    "Prebuilt binaries (emulator/launcher) were not audited - potential risk if upstream compromised",
+    "Wrapper script behavior (user directory setup/symlinks) wasn't fully analyzed for privilege escalation risks"
+  ],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Prioritize generated scripts in PKGBUILD (e.g., wrapper scripts in package()) over passive configs like .desktop files",
+    "Improve file selection logic to avoid suggesting non-existent files",
+    "Add explicit warnings for binary packages about unaudited payload risks",
+    "Enhance wrapper script analysis for filesystem/sandbox escape patterns"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 3491,
+    "completion_tokens": 1625,
+    "cost": 0.0065062
+  },
+  "audits_judged": [
+    "20260823-185707-qwen-qwen3-235b-a22b-2507.md",
+    "20260823-185715-deepseek-deepseek-v4-flash.md"
+  ]
+}
