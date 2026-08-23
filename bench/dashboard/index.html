@@ -3,152 +3,101 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AUR Sleuth Dashboard</title>
+    <meta name="color-scheme" content="dark">
+    <title>AUR Sleuth</title>
     <link rel="stylesheet" href="app.css">
 </head>
 <body>
     <div class="page">
-        <!-- Header -->
         <header class="masthead">
-            <div>
+            <div class="brand">
                 <h1>AUR Sleuth</h1>
-                <p class="tagline">Supply-chain audits of AUR packages</p>
+                <span class="tagline">Supply-chain audits of AUR packages</span>
             </div>
             <div class="masthead-meta">
                 <span id="generated-at"></span>
-                <br>
                 <a href="https://github.com/mgalgs/aur-sleuth">GitHub</a>
             </div>
         </header>
 
-        <!-- The answer first: how many packages, and how many are actually a
-             finding. Each number filters the table. -->
-        <div class="stats">
-            <div class="card stat">
-                <div class="stat-label">Packages audited</div>
-                <div id="stat-packages" class="stat-value">—</div>
-            </div>
-            <div class="card stat">
-                <div class="stat-label">Confirmed malicious</div>
-                <div id="stat-confirmed" class="stat-value">—</div>
-            </div>
-            <div class="card stat">
-                <div class="stat-label">Worth a closer look</div>
-                <div id="stat-look" class="stat-value">—</div>
-            </div>
-            <div class="card stat">
-                <div class="stat-label">Audit reports</div>
-                <div id="stat-reports" class="stat-value">—</div>
-            </div>
-        </div>
-
-        <!-- Verdicts, and this week -->
-        <div class="two-col">
-            <div class="card">
-                <h2 class="card-title">Verdicts</h2>
-                <div id="results-chart" class="chart"></div>
-            </div>
-            <div id="activity" class="card">
-                <h2 class="card-title">This week</h2>
-                <p id="activity-packages"></p>
-                <p id="activity-audits" class="fine"></p>
-                <div id="activity-recent-label" class="small muted hidden"></div>
-                <div id="activity-recent" class="chips"></div>
-            </div>
-        </div>
+        <!-- The answer first. Each number filters the table; the bar is the
+             same four counts as one line. Then what this week added. -->
+        <section class="answer">
+            <div id="headline" class="headline"></div>
+            <div id="state-bar" class="state-bar" role="img"></div>
+            <div id="activity" class="week"></div>
+        </section>
 
         <!-- The ask: what auditing every AUR update costs, against what this
              runs on. Hidden until data.json carries every number it needs. -->
-        <div id="funding" class="card funding hidden">
-            <div class="funding-row">
-                <div class="funding-text">
-                    <h2 class="card-title">Audit every update</h2>
-                    <p>
-                        <span id="funding-needed" class="num-big"></span>
-                        <span> a day to audit every AUR update.</span>
-                    </p>
-                    <p id="funding-inputs" class="small muted"></p>
-                    <p id="funding-budget" class="small funding-budget"></p>
-                    <div id="funding-track" class="track" title="Share of the AUR's daily updates the current budget can audit">
-                        <div id="funding-bar" class="track-fill" style="width:0"></div>
-                    </div>
-                </div>
-                <!-- Under the text on a phone, beside it where there is room. A
-                     flex item, so no display class is needed (and ".block" is
-                     the legend dot in this page's own styles). -->
-                <a id="funding-link" class="btn-primary hidden" href="#" rel="noopener" target="_blank">Chip in</a>
+        <section id="funding" class="funding hidden">
+            <div class="funding-text">
+                <p class="funding-lead"><span id="funding-needed" class="n"></span> <span>a day would audit every AUR update.</span> <span id="funding-inputs" class="funding-inputs"></span></p>
+                <p class="funding-budget-row"><span id="funding-budget"></span><span id="funding-track" class="meter" title="Share of the AUR's daily updates the current budget can audit"><span id="funding-bar" class="meter-fill" style="width:0"></span></span></p>
             </div>
-        </div>
+            <a id="funding-link" class="btn btn-strong hidden" href="#" rel="noopener" target="_blank">Chip in</a>
+        </section>
 
-        <!-- Filters -->
-        <div class="card filters">
-            <div class="toolbar">
-                <input id="search" type="text" placeholder="Search packages..." class="search">
-                <div class="filter-group" id="filter-buttons">
-                    <button class="filter-btn active" data-filter="all">All</button>
-                    <button class="filter-btn" data-filter="clean">Clean</button>
-                    <button class="filter-btn" data-filter="unknown">No verdict</button>
-                    <button class="filter-btn" data-filter="look">Worth a closer look</button>
-                    <button class="filter-btn danger" data-filter="confirmed">Confirmed</button>
-                    <span class="divider"></span>
-                    <button class="filter-btn" data-filter="overridden">Overridden by a judge</button>
-                    <button class="filter-btn" data-filter="unjudged">Unjudged</button>
-                </div>
-                <span id="result-count" class="result-count"></span>
+        <section class="toolbar">
+            <input id="search" type="search" class="search" placeholder="Search packages" autocomplete="off" spellcheck="false">
+            <div id="filter-buttons" class="filters">
+                <button class="btn filter-btn active" data-filter="all">All</button>
+                <button class="btn filter-btn" data-filter="clean">Clean</button>
+                <button class="btn filter-btn" data-filter="unknown">No verdict</button>
+                <button class="btn filter-btn" data-filter="look">Worth a closer look</button>
+                <button class="btn filter-btn danger" data-filter="confirmed">Confirmed</button>
+                <span class="divider"></span>
+                <button class="btn filter-btn" data-filter="overridden">Overridden by a judge</button>
+                <button class="btn filter-btn" data-filter="unjudged">Not yet judged</button>
             </div>
             <div class="legend">
-                <span><span class="block block-safe"></span>clean</span>
-                <span><span class="block block-flagged"></span>flagged, unconfirmed</span>
-                <span><span class="block block-unsafe"></span>confirmed by a judge</span>
-                <span><span class="block block-inconclusive"></span>no verdict</span>
-                <span><span class="block block-unsafe block-overridden"></span>overridden by a judge</span>
-                <span><span class="block block-safe block-reaudit"></span>re-audit</span>
+                <span><span class="sq sq-clean"></span>clean</span>
+                <span><span class="sq sq-flagged"></span>flagged</span>
+                <span><span class="sq sq-unsafe"></span>confirmed</span>
+                <span><span class="sq sq-none"></span>no verdict</span>
+                <span><span class="sq sq-flagged sq-overridden"></span>overridden</span>
+                <span><span class="sq sq-clean sq-reaudit"></span>second audit</span>
+                <span id="result-count" class="result-count"></span>
             </div>
-        </div>
+        </section>
 
-        <!-- Package Table -->
-        <!-- The narrow columns drop out on a phone rather than pushing the page
-             sideways: package, its verdicts and when it was read are the point,
-             and the rest is detail that fits on a wider screen. -->
-        <div class="card table-wrap">
+        <!-- The table is the page. On a phone it keeps three columns; the
+             version and date ride under the name. -->
+        <div class="table-wrap">
             <table class="packages">
                 <thead>
                     <tr>
-                        <th data-sort="name">Package</th>
-                        <th class="col-md" data-sort="version">Version</th>
-                        <th data-sort="audits">Audits</th>
-                        <th class="col-sm" data-sort="judges">Judgements</th>
-                        <th class="col-lg num" data-sort="files">Files</th>
-                        <th class="col-lg num" data-sort="cost">Cost</th>
-                        <th data-sort="date">Date</th>
+                        <th class="col-name" data-sort="name">Package</th>
+                        <th class="col-version" data-sort="version">Version</th>
+                        <th class="col-audits" data-sort="audits">Audits</th>
+                        <th class="col-judge" data-sort="judges">Judge</th>
+                        <th class="col-files num" data-sort="files">Files</th>
+                        <th class="col-cost num" data-sort="cost">Cost</th>
+                        <th class="col-date num" data-sort="date">Date</th>
                     </tr>
                 </thead>
                 <tbody id="package-table"></tbody>
             </table>
         </div>
 
-        <!-- For the curious: what the labels mean, and what this costs. -->
-        <div class="two-col footer">
-            <div class="card">
-                <h2 class="card-title">How to read this page</h2>
-                <p class="small muted prose">
-                    These audits look for one thing: code injected into the AUR packaging of a
-                    package &mdash; in the <code>PKGBUILD</code>, an <code>.install</code> hook, or a patch.
-                    They do not rate the application itself.
-                </p>
-                <ul class="small muted prose key">
-                    <li><span class="result-safe strong">Clean</span> &mdash; nothing found, or a flag a judge overturned.</li>
-                    <li><span class="text strong">No verdict</span> &mdash; no model reached an answer either way. Missing information, not a suspicion.</li>
-                    <li><span class="warn strong">Worth a closer look</span> &mdash; something flagged it and nothing has settled it. Usually a false positive about behaviour the application is supposed to have; not a claim that it is malicious.</li>
-                    <li><span class="result-unsafe strong">Confirmed malicious</span> &mdash; two independent audits said unsafe and a judge agreed.</li>
-                </ul>
-                <p class="fine">Open a package to see every report, the files each one flagged, and the lines it quoted.</p>
+        <!-- Once, at the bottom: what the labels mean, and what this costs. -->
+        <footer class="footer">
+            <div>
+                <div class="head"><h2>How to read this page</h2></div>
+                <p class="prose">These audits look for one thing: code injected into the AUR packaging of a package &mdash; the <code>PKGBUILD</code>, an <code>.install</code> hook, or a patch. They do not rate the application itself. Each square is one report: two cheap models audit every package, and a judge &mdash; a stronger model &mdash; reads the reports when they disagree or flag something.</p>
+                <dl class="key">
+                    <dt class="st-clean">Clean</dt><dd>nothing found, or a flag a judge overturned.</dd>
+                    <dt class="st-unknown">No verdict</dt><dd>no model reached an answer either way. Missing information, not a suspicion.</dd>
+                    <dt class="st-look">Worth a closer look</dt><dd>something flagged it and nothing has settled it. Usually a false positive about behaviour the application is supposed to have; not a claim that it is malicious.</dd>
+                    <dt class="st-confirmed">Confirmed malicious</dt><dd>two independent audits said unsafe and a judge agreed.</dd>
+                </dl>
             </div>
-            <div class="card">
-                <h2 class="card-title">Cost by model <span id="stat-cost" class="card-title-note"></span></h2>
+            <div>
+                <div class="head"><h2>Cost by model</h2><span id="stat-cost" class="meta"></span></div>
                 <div id="model-chart" class="bars"></div>
+                <p>Open a package to see every report, the files each one flagged, and the lines it quoted.</p>
             </div>
-        </div>
+        </footer>
     </div>
 
     <script src="app.js"></script>

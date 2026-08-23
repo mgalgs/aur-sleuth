@@ -428,6 +428,10 @@ def build_index_data(audits, judges, now=None, funding_inputs=None):
             # Reports that said unsafe, each counted once: what "agree" rests on.
             "unsafe_audits": sum(1 for a in pkg_audits if a["result"] == "unsafe"),
         }
+        # The state is decided here, once, and the page reads it. The page
+        # used to carry its own copy of package_state() in JavaScript, and
+        # nothing checked that the two copies agreed.
+        pkg_summaries[pkg_name]["state"] = package_state(pkg_summaries[pkg_name])
 
     # Aggregate stats
     audit_cost = sum(safe_float(a["frontmatter"].get("cost")) for a in audits)

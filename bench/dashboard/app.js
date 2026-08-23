@@ -6,6 +6,10 @@ let currentFilter = 'all';
 let searchTerm = '';
 const detailCache = {};
 
+// Everything on the page is model output over attacker-controlled input.
+// Every string goes through escapeHtml() or escapeAttr() before it becomes
+// markup; the renderers below only decide which class wraps it.
+
 const DANGER_SCORE = {unsafe: 3, contested: 2, inconclusive: 1, unknown: 0, safe: 0};
 
 function dangerScore(pkg) {
@@ -13,6 +17,22 @@ function dangerScore(pkg) {
     const j = pkg.judge_majority ? (DANGER_SCORE[pkg.judge_majority] || 0) : 0;
     const hasJudge = pkg.judges && pkg.judges.length > 0 ? 1 : 0;
     return a * 10 + j * 5 + hasJudge;
+}
+
+// The four package states, their labels, and the one place their names and
+// colours are paired. Defined once at the bottom of the page; used everywhere.
+const STATES = ['clean', 'unknown', 'look', 'confirmed'];
+const STATE_LABEL = {clean: 'clean', unknown: 'no verdict',
+                     look: 'worth a closer look', confirmed: 'confirmed malicious'};
+const STATE_TITLE = {clean: 'Clean', unknown: 'No verdict',
+                     look: 'Worth a closer look', confirmed: 'Confirmed malicious'};
+
+// A package's state is decided once, in package_state() in
+// generate-dashboard.py, and written into data.json. The page only reads
+// it: the headline, the bar, the filters and the rows all use this one
+// field, so they cannot disagree with each other or with the generator.
+function packageState(pkg) {
+    return STATES.includes(pkg.state) ? pkg.state : 'unknown';
 }
 
 async function init() {
@@ -24,10 +44,10 @@ async function init() {
             '<tr><td colspan="7" class="empty">Failed to load data. Are you serving from the audit-reports branch root?</td></tr>';
         return;
     }
-    renderSummary();
+    renderHeadline();
     renderActivity();
     renderFunding();
-    renderCharts();
+    renderModelCosts();
     renderTable();
     setupEventListeners();
     // A shareable link to one package: #pkg=<name>.
@@ -41,13 +61,17 @@ function shortModel(m) {
     return String(m).split('/').pop();
 }
 
+function fmtNum(n) {
+    return Number(n || 0).toLocaleString();
+}
+
 // A headline count that filters the table to exactly the packages it counts.
 // The count and the filter share packageState(), so the number the reader
-// clicked is the number of rows they get.
+// clicked is the number of rows they get. `text` is already markup.
 function countLink(filter, text, cls) {
-    return '<button type="button" class="count-link ' + cls + '" data-filter="'
+    return '<button type="button" class="count-link ' + escapeAttr(cls || '') + '" data-filter="'
         + escapeAttr(filter) + '" title="Show these in the table below">'
-        + escapeHtml(text) + '</button>';
+        + text + '</button>';
 }
 
 // Open one package's detail from anywhere on the page. The current filter or
@@ -83,8 +107,7 @@ function applyFilter(name) {
     document.querySelectorAll('.filter-btn').forEach(b =>
         b.classList.toggle('active', b.dataset.filter === name));
     renderTable();
-    document.getElementById('package-table').closest('.table-wrap')
-        .scrollIntoView({behavior: 'smooth', block: 'start'});
+    document.querySelector('.toolbar').scrollIntoView({behavior: 'smooth', block: 'start'});
 }
 
 function joinNicely(parts) {
@@ -93,64 +116,94 @@ function joinNicely(parts) {
     return parts.slice(0, -1).join(', ') + ', and ' + parts[parts.length - 1];
 }
 
+// --- The answer ---------------------------------------------------------
+
+// Counted from the rows, not read from summary.package_states, so the
+// number a reader taps is the number of rows they get.
+function countStates() {
+    const counts = {clean: 0, unknown: 0, look: 0, confirmed: 0};
+    for (const pkg of Object.values(DATA.packages || {})) counts[packageState(pkg)]++;
+    return counts;
+}
+
+function renderHeadline() {
+    const s = DATA.summary || {};
+    const counts = countStates();
+    const total = Object.keys(DATA.packages || {}).length;
+
+    document.getElementById('generated-at').textContent =
+        'Updated ' + String(DATA.generated_at || 'unknown').split('T')[0];
+    document.getElementById('stat-cost').textContent =
+        '$' + Number(s.total_cost || 0).toFixed(2) + ' all time · '
+        + fmtNum(s.total_reports) + ' reports · ' + fmtNum(s.total_judges) + ' judgements';
+
+    const stat = (filter, n, label, cls) =>
+        '<button type="button" class="stat ' + escapeAttr(cls) + '" data-filter="' + escapeAttr(filter) + '" title="Show these in the table below">'
+        + '<span class="n">' + fmtNum(n) + '</span><span class="stat-label">' + escapeHtml(label) + '</span></button>';
+    document.getElementById('headline').innerHTML =
+        stat('all', total, 'packages audited', 'total')
+        + stat('confirmed', counts.confirmed, STATE_LABEL.confirmed, counts.confirmed ? 'st-confirmed' : '')
+        + stat('look', counts.look, STATE_LABEL.look, counts.look ? 'st-look' : '')
+        + stat('clean', counts.clean, STATE_LABEL.clean, 'st-clean')
+        + stat('unknown', counts.unknown, STATE_LABEL.unknown, 'st-unknown');
+
+    // The bar: the same four counts as shares of one line, in the order the
+    // filters list them. A state with nothing in it gets no segment.
+    const bar = document.getElementById('state-bar');
+    const words = STATES.map(k => fmtNum(counts[k]) + ' ' + STATE_LABEL[k]);
+    bar.setAttribute('aria-label', words.join(', '));
+    bar.title = words.join(' · ');
+    bar.innerHTML = STATES.filter(k => counts[k] > 0).map(k =>
+        '<span class="seg-' + k + '" style="flex-grow:' + Number(counts[k]) + '"></span>').join('');
+}
+
 function renderActivity() {
     const activity = document.getElementById('activity');
     const wk = (DATA.summary && DATA.summary.week) || null;
     const rec = (DATA.summary && DATA.summary.recent) || [];
     // Older data.json (before this field existed) has no week block.
-    if (!wk) { activity.style.display = 'none'; return; }
+    if (!wk) { activity.classList.add('hidden'); return; }
 
     const p = wk.packages || {};
-    const confirmed = Number(p.confirmed || 0);
     // data.json can be older than the page. Without the new keys every
     // count would render as a confident zero, which is worse than saying
     // nothing: show the totals and leave the breakdown out.
     const counted = Object.prototype.hasOwnProperty.call(p, 'confirmed');
-    document.getElementById('activity-packages').innerHTML =
-        '<span class="num-big">' + Number(p.updated || 0).toLocaleString() + '</span>' +
-        ' packages audited' +
-        '<span class="week-new"> (' + Number(p.new || 0) + ' new)</span>' +
-        (!counted ? '' :
-        '<br><span class="small">' +
-        countLink('clean', Number(p.green || 0) + ' clean', 'result-safe strong') +
-        '<span class="sep"> &middot; </span>' +
-        countLink('unknown', Number(p.unknown || 0) + ' no verdict', 'muted') +
-        '<span class="sep"> &middot; </span>' +
-        countLink('look', Number(p.look || 0) + ' worth a closer look', 'text') +
-        '<span class="sep"> &middot; </span>' +
-        (confirmed
-            ? countLink('confirmed', confirmed + ' confirmed malicious', 'result-unsafe strong')
-            : '<span class="result-safe strong">none confirmed malicious</span>') +
-        '</span>');
-
-    const parts = Object.entries(wk.by_model || {}).slice(0, 6)
-        .map(([m, c]) => escapeHtml(shortModel(m)) + ' (' + Number(c) + ')');
-    document.getElementById('activity-audits').innerHTML =
-        Number(wk.audits_total || 0).toLocaleString() + ' audits' +
-        (parts.length ? ' by ' + joinNicely(parts) : '');
+    const confirmed = Number(p.confirmed || 0);
+    const dot = '<span class="sep"> · </span>';
+    const n = v => '<span class="n tab">' + fmtNum(v) + '</span>';
+    let html = '<span class="lead">This week</span> '
+        + '<span>' + n(p.updated) + ' packages audited, ' + fmtNum(p.new) + ' new</span>';
+    if (counted) {
+        html += dot + countLink('clean', n(p.green) + ' clean')
+            + dot + countLink('unknown', n(p.unknown) + ' no verdict')
+            + dot + countLink('look', n(p.look) + ' worth a closer look', 'st-look')
+            + dot + (confirmed
+                ? countLink('confirmed', n(confirmed) + ' confirmed malicious', 'st-confirmed')
+                : '<span>none confirmed</span>');
+    }
+    if (wk.audits_total) {
+        const by = Object.entries(wk.by_model || {}).slice(0, 6)
+            .map(([m, c]) => shortModel(m) + ' (' + fmtNum(c) + ')');
+        html += dot + '<span class="muted" title="' + escapeAttr(by.length ? 'by ' + joinNicely(by) : '') + '">'
+            + n(wk.audits_total) + ' audits</span>';
+    }
 
     // Only the packages worth a reader's attention get a chip: a list of
-    // every clean package this week is the table, repeated. A "look" chip
-    // is drawn hollow, because a solid amber dot beside a name reads as a
-    // warning about the package rather than what it is: noted, nothing
-    // concluded.
-    const DOT = {confirmed: 'block-unsafe', look: 'block-look'};
+    // every clean package this week is the table, repeated.
     const WHAT = {confirmed: 'two audits and a judge agree: unsafe',
                   look: 'flagged by a model; not confirmed'};
-    const flagged = rec.filter(r => DOT[r.state]).slice(0, 24);
-    const label = document.getElementById('activity-recent-label');
-    label.classList.toggle('hidden', flagged.length === 0);
-    label.textContent = flagged.length ? 'Flagged this week:' : '';
-    document.getElementById('activity-recent').innerHTML = flagged.map(r => {
-        const d = String(r.date || '').split('T')[0];
-        return '<span class="chip" ' +
-            'data-pkg="' + escapeAttr(r.package || '') + '" ' +
-            'title="' + escapeAttr(WHAT[r.state] + ' • ' + (r.date || '') + ' — open this package') + '">' +
-            '<span class="block ' + DOT[r.state] + '" style="margin-right:0"></span>' +
-            '<span class="chip-name">' + escapeHtml(r.package || '') + '</span>' +
-            '<span class="chip-date">' + escapeHtml(d) + '</span>' +
-            '</span>';
-    }).join('');
+    const flagged = rec.filter(r => WHAT[r.state]).slice(0, 24);
+    if (flagged.length) {
+        html += '<span class="chips"><span class="lead">Flagged:</span>' + flagged.map(r => {
+            const d = String(r.date || '').split('T')[0].slice(5);
+            return '<button type="button" class="chip" data-pkg="' + escapeAttr(r.package || '') + '" '
+                + 'title="' + escapeAttr(WHAT[r.state] + ' · ' + (r.date || '') + ' · open this package') + '">'
+                + '<span class="sq ' + (r.state === 'confirmed' ? 'sq-unsafe' : 'sq-flagged') + '" style="width:9px;height:9px"></span>'
+                + escapeHtml(r.package || '') + '<span class="chip-date">' + escapeHtml(d) + '</span></button>';
+        }).join('') + '</span>';
+    }
+    activity.innerHTML = html;
 }
 
 // Every number here is computed in code at publish time (see
@@ -165,15 +218,15 @@ function renderFunding() {
 
     document.getElementById('funding-needed').textContent = money(f.needed_per_day, 2);
     document.getElementById('funding-inputs').textContent =
-        Number(f.updates_per_day).toLocaleString() + ' packages updated in the last 24 hours, at about '
-        + money(f.cost_per_package, 3) + ' per package.';
+        fmtNum(f.updates_per_day) + ' packages updated in the last 24 hours, at about '
+        + money(f.cost_per_package, 3) + ' each.';
 
     const budget = document.getElementById('funding-budget');
     const track = document.getElementById('funding-track');
     if (f.daily_budget != null && f.covered != null) {
         const pct = Math.round(Number(f.covered) * 100);
-        budget.textContent = 'The current budget is ' + money(f.daily_budget, 2) + ' a day. That covers '
-            + (pct < 1 ? 'under 1%' : pct + '%') + '.';
+        budget.innerHTML = 'The current budget is <span class="n">' + escapeHtml(money(f.daily_budget, 2))
+            + '</span> a day and covers <span class="n">' + escapeHtml(pct < 1 ? 'under 1%' : pct + '%') + '</span>.';
         document.getElementById('funding-bar').style.width = Math.max(1, Math.min(100, pct)) + '%';
         track.classList.remove('hidden');
     } else {
@@ -190,105 +243,24 @@ function renderFunding() {
     }
 }
 
-function renderSummary() {
-    const s = DATA.summary;
-    document.getElementById('stat-packages').textContent = s.packages_audited.toLocaleString();
-    document.getElementById('stat-reports').textContent = s.total_reports.toLocaleString();
-    document.getElementById('stat-cost').textContent = '$' + s.total_cost.toFixed(2) + ' all time';
-    document.getElementById('generated-at').textContent = 'Updated ' + String(DATA.generated_at || 'unknown').split('T')[0];
-
-    // The same rule as the table and the chart, so the number a reader
-    // taps is the number of rows they get.
-    let confirmed = 0, look = 0;
-    for (const pkg of Object.values(DATA.packages)) {
-        const st = packageState(pkg);
-        if (st === 'confirmed') confirmed++;
-        if (st === 'look') look++;
-    }
-    const c = document.getElementById('stat-confirmed');
-    c.innerHTML = countLink('confirmed', confirmed.toLocaleString(), confirmed ? 'result-unsafe' : 'result-safe');
-    document.getElementById('stat-look').innerHTML = countLink('look', look.toLocaleString(), look ? 'warn' : 'text');
-}
-
-
-// Both charts are drawn by hand -- an inline SVG ring and a row of HTML
-// bars -- so the page needs no chart library and no CDN. Every label and
-// number passes through the escapers like everything else on the page.
-function renderCharts() {
-    renderVerdictChart(DATA.summary);
-    renderModelCosts(DATA.summary);
-}
-
-// Verdicts per package, after the judge. Charting the raw per-report results
-// would put verdicts the judge overturned into a headline figure; a package
-// the judge cleared is simply clean here, and the audit that called it unsafe
-// stays visible in its own row.
-function renderVerdictChart(s) {
-    const STATE_LABEL = {clean: 'Clean', look: 'Worth a closer look',
-                         confirmed: 'Confirmed malicious', unknown: 'No verdict'};
-    const STATE_COLOR = {clean: '#22c55e', look: '#f59e0b',
-                         confirmed: '#ef4444', unknown: '#64748b'};
-    const states = s.package_states
-        || {unknown: Object.keys(DATA.packages || {}).length};
-    const keys = ['clean', 'unknown', 'look', 'confirmed'].filter(k => states[k]);
-    const total = keys.reduce((n, k) => n + Number(states[k]), 0);
-    const box = document.getElementById('results-chart');
-    if (!total) { box.innerHTML = '<div class="empty">No verdicts yet.</div>'; return; }
-
-    // One stroked circle per state; the dash pattern draws just its share of
-    // the circumference, offset to where the previous one ended. The ring
-    // starts at twelve o'clock and runs clockwise. A 2-unit gap between
-    // segments stands in for the border the old chart drew.
-    const R = 40, C = 2 * Math.PI * R, GAP = keys.length > 1 ? 2 : 0;
-    let offset = 0, arcs = '';
-    for (const k of keys) {
-        const n = Number(states[k]);
-        const len = C * n / total;
-        const drawn = Math.max(0, len - GAP);
-        arcs += `<circle r="${R}" cx="50" cy="50" fill="none" stroke="${STATE_COLOR[k]}" stroke-width="20"`
-            + ` stroke-dasharray="${drawn.toFixed(3)} ${(C - drawn).toFixed(3)}" stroke-dashoffset="${(-offset).toFixed(3)}">`
-            + `<title>${escapeHtml(STATE_LABEL[k])}: ${n.toLocaleString()}</title></circle>`;
-        offset += len;
-    }
-    const legend = keys.map(k =>
-        `<span><span class="swatch" style="background:${STATE_COLOR[k]}"></span>${escapeHtml(STATE_LABEL[k])}</span>`
-    ).join('');
-    box.innerHTML = `<div class="doughnut">`
-        + `<svg viewBox="0 0 100 100" role="img" aria-label="Verdicts per package">`
-        + `<g transform="rotate(-90 50 50)">${arcs}</g></svg>`
-        + `<div class="doughnut-legend">${legend}</div></div>`;
-}
-
-// What each model has cost, all time. Bars scale to the most expensive one.
-function renderModelCosts(s) {
+// What each model has cost, all time. Bars scale to the most expensive one;
+// the label names the model, so the bars need no colour of their own.
+function renderModelCosts() {
+    const s = DATA.summary || {};
     const entries = Object.entries(s.by_model || {}).filter(([, v]) => Number(v.cost) > 0);
     const box = document.getElementById('model-chart');
     if (!entries.length) { box.innerHTML = '<div class="empty">No cost recorded.</div>'; return; }
     const max = Math.max(...entries.map(([, v]) => Number(v.cost)));
-    const colors = ['#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#22c55e', '#06b6d4'];
-    box.innerHTML = entries.map(([m, v], i) => {
+    box.innerHTML = entries.map(([m, v]) => {
         const cost = Number(v.cost);
         const pct = Math.max(1, 100 * cost / max);
-        return `<div class="bar-row" title="${escapeAttr(m)}: $${cost.toFixed(4)} (${Number(v.count)} runs)">`
-            + `<span class="bar-label">${escapeHtml(shortModel(m))}</span>`
-            + `<span class="bar-track"><span class="bar-fill" style="width:${pct.toFixed(1)}%;background:${colors[i % colors.length]}"></span></span>`
-            + `<span class="bar-value">$${cost.toFixed(2)}</span></div>`;
+        return '<span class="label" title="' + escapeAttr(m + ': ' + fmtNum(v.count) + ' runs') + '">' + escapeHtml(shortModel(m)) + '</span>'
+            + '<span class="track"><span class="fill" style="width:' + pct.toFixed(1) + '%"></span></span>'
+            + '<span class="value">$' + cost.toFixed(2) + '</span>';
     }).join('');
 }
 
-// The same rule as package_state() in generate-dashboard.py. The headline
-// counts and these filters must agree: clicking "2 confirmed" has to produce
-// exactly two rows, or one of the two numbers is lying.
-function packageState(pkg) {
-    const audit = pkg.audit_majority;
-    const judge = pkg.judge_majority;
-    // Mirrors package_state() in Python: two unsafe reports or it is not confirmed.
-    if (audit === 'unsafe' && judge === 'unsafe' && (pkg.unsafe_audits || 0) >= 2) return 'confirmed';
-    if (judge === 'safe') return 'clean';
-    if (audit === 'unsafe' || audit === 'contested' || judge === 'unsafe') return 'look';
-    if (audit === 'safe') return 'clean';
-    return 'unknown';
-}
+// --- The table ----------------------------------------------------------
 
 function matchesPreset(pkg, preset) {
     switch (preset) {
@@ -343,81 +315,87 @@ function getFilteredPackages() {
     return entries;
 }
 
-// judgeVerdict is the judge's majority for this package, when there is one.
-// An audit the judge overturned is struck through rather than left standing:
-// a red square next to a judgement that cleared the package says the package
-// is dangerous, when what happened is that a model was wrong about it.
-function renderBlocks(items, type, judgeVerdict) {
-    if (!items || items.length === 0) {
-        return '<span class="dim">—</span>';
+// One square per report. Colour says how much weight the verdict carries,
+// not just what it said: red is only for a finding the judge agreed with
+// on a confirmed package; a lone model's "unsafe" is amber, because it is
+// usually a false positive and painting it red would say something the
+// evidence does not. An audit the judge overturned is struck through.
+function squareClass(value, type, pkg) {
+    const judge = pkg.judge_majority;
+    if (type === 'audit' && judge === 'safe' && (value === 'unsafe' || value === 'inconclusive')) {
+        return 'sq-flagged sq-overridden';
     }
-    return items.map(item => {
-        const value = type === 'audit' ? item.result : item.verdict;
-        const model = (item.model || 'unknown').split('/').pop();
-        const reaudit = item.reaudit ? ' block-reaudit' : '';
-        const label = item.reaudit ? 're-audit' : type;
-        // Colour says how much weight the verdict carries, not just what it
-        // said. Red is only for a finding the judge agreed with: a lone
-        // model's "unsafe" is usually a false positive, and painting it the
-        // same red as a confirmed one says something the evidence does not.
-        let shade = value || 'unknown';
-        let note = '';
-        if (type === 'audit') {
-            if (judgeVerdict === 'safe' && (value === 'unsafe' || value === 'inconclusive')) {
-                note = ' — the judge did not agree; overridden';
-            } else if (value === 'unsafe' && judgeVerdict !== 'unsafe') {
-                shade = 'flagged';        // amber: nobody has confirmed it
-                note = ' — flagged, not confirmed by a judge';
-            }
-        }
-        const overridden = type === 'audit' && judgeVerdict === 'safe'
-            && (value === 'unsafe' || value === 'inconclusive');
-        const cls = overridden ? ' block-overridden' : '';
-        return `<span class="block block-${escapeAttr(shade)}${reaudit}${cls}" title="${escapeAttr(model)}: ${escapeAttr(value || 'unknown')} (${label})${escapeAttr(note)}"></span>`;
-    }).join('');
+    if (value === 'unsafe') return packageState(pkg) === 'confirmed' ? 'sq-unsafe' : 'sq-flagged';
+    if (value === 'safe') return 'sq-safe';
+    return 'sq-none';
+}
+
+function squareNote(value, type, pkg) {
+    const judge = pkg.judge_majority;
+    if (type === 'audit' && judge === 'safe' && (value === 'unsafe' || value === 'inconclusive')) {
+        return ' — the judge did not agree; overridden';
+    }
+    if (type === 'audit' && value === 'unsafe' && packageState(pkg) !== 'confirmed') {
+        return ' — flagged, not confirmed';
+    }
+    return '';
+}
+
+function renderSquares(items, type, pkg) {
+    if (!items || items.length === 0) return '<span class="dim">—</span>';
+    return '<span class="sqs">' + items.map(item => {
+        const value = (type === 'audit' ? item.result : item.verdict) || 'unknown';
+        const model = shortModel(item.model || 'unknown');
+        const label = item.reaudit ? 'second audit' : type;
+        const cls = squareClass(value, type, pkg) + (item.reaudit ? ' sq-reaudit' : '');
+        return '<span class="sq ' + cls + '" title="' + escapeAttr(model + ': ' + value + ' (' + label + ')' + squareNote(value, type, pkg)) + '"></span>';
+    }).join('') + '</span>';
 }
 
 function renderTable() {
     const entries = getFilteredPackages();
     const tbody = document.getElementById('package-table');
 
-    document.getElementById('result-count').textContent = `${entries.length} package${entries.length !== 1 ? 's' : ''}`;
+    document.getElementById('result-count').textContent = fmtNum(entries.length) + ' package' + (entries.length !== 1 ? 's' : '');
 
+    if (!entries.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="empty">No packages match.</td></tr>';
+        return;
+    }
     tbody.innerHTML = entries.map(([name, pkg]) => {
         const date = pkg.latest_date ? pkg.latest_date.split('T')[0] : '—';
         const safeId = escapeAttr(name);
-
-        return `<tr class="pkg-row" data-pkg="${safeId}">
-            <td class="pkg-name">${escapeHtml(name)}
-                <div class="pkg-date-sub">${escapeHtml(date)}</div></td>
-            <td class="col-md pkg-version">${escapeHtml(pkg.pkgver || '—')}</td>
-            <td><span class="blocks">${renderBlocks(pkg.audits, 'audit', pkg.judge_majority)}</span></td>
-            <td class="col-sm"><span class="blocks">${renderBlocks(pkg.judges, 'judge')}</span></td>
-            <td class="col-lg num">${pkg.files_reviewed === 0 && pkg.audits && pkg.audits.every(a => a.result === 'skipped' || a.result === 'inconclusive') ? '—' : escapeHtml(pkg.files_reviewed)}</td>
-            <td class="col-lg num">$${pkg.total_cost.toFixed(4)}</td>
-            <td class="pkg-date">${escapeHtml(date)}</td>
-        </tr>
-        <tr class="detail-row" id="detail-${safeId}">
-            <td colspan="7">
-                <div class="detail-box">
-                    <div class="detail-content">Loading...</div>
-                </div>
-            </td>
-        </tr>`;
+        const skippedAll = pkg.files_reviewed === 0 && pkg.audits
+            && pkg.audits.every(a => a.result === 'skipped' || a.result === 'inconclusive');
+        const sub = [pkg.pkgver, date.slice(5)].filter(Boolean).join(' · ');
+        return '<tr class="pkg-row" data-pkg="' + safeId + '">'
+            + '<td><span class="pkg-name">' + escapeHtml(name) + '</span><div class="pkg-sub">' + escapeHtml(sub) + '</div></td>'
+            + '<td class="col-version pkg-version">' + escapeHtml(pkg.pkgver || '—') + '</td>'
+            + '<td>' + renderSquares(pkg.audits, 'audit', pkg) + '</td>'
+            + '<td>' + renderSquares(pkg.judges, 'judge', pkg) + '</td>'
+            + '<td class="col-files num pkg-num">' + (skippedAll ? '—' : escapeHtml(pkg.files_reviewed)) + '</td>'
+            + '<td class="col-cost num pkg-num">$' + Number(pkg.total_cost || 0).toFixed(4) + '</td>'
+            + '<td class="col-date num pkg-date">' + escapeHtml(date) + '</td>'
+            + '</tr>'
+            + '<tr class="detail-row" id="detail-' + safeId + '"><td colspan="7"><div class="detail-content detail muted">Loading…</div></td></tr>';
     }).join('');
 }
 
 async function toggleDetail(name) {
     const row = document.getElementById('detail-' + name);
     if (!row) return;
+    const pkgRow = row.previousElementSibling;
 
     if (row.classList.contains('open')) {
         row.classList.remove('open');
+        if (pkgRow) pkgRow.classList.remove('open');
         return;
     }
 
     document.querySelectorAll('.detail-row.open').forEach(r => r.classList.remove('open'));
+    document.querySelectorAll('.pkg-row.open').forEach(r => r.classList.remove('open'));
     row.classList.add('open');
+    if (pkgRow) pkgRow.classList.add('open');
 
     const content = row.querySelector('.detail-content');
 
@@ -427,7 +405,7 @@ async function toggleDetail(name) {
     }
 
     try {
-        const resp = await fetch(`_dashboard/pkg/${name}.json`);
+        const resp = await fetch('_dashboard/pkg/' + encodeURIComponent(name) + '.json');
         const data = await resp.json();
         detailCache[name] = data;
         content.innerHTML = renderDetail(name, data);
@@ -436,77 +414,141 @@ async function toggleDetail(name) {
     }
 }
 
+// --- The open package ---------------------------------------------------
+
+// One plain sentence on why the package is in the state it is in, built
+// from the counts the state rule used. Nothing a model wrote goes in here.
+function explainState(pkg) {
+    const state = packageState(pkg);
+    const audits = pkg.audits || [];
+    const judges = pkg.judges || [];
+    const unsafe = audits.filter(a => a.result === 'unsafe').length;
+    const word = n => ['No', 'One', 'Two', 'Three', 'Four', 'Five'][n] || String(n);
+    const said = unsafe === 1 ? 'One audit said unsafe'
+        : word(unsafe) + ' of ' + audits.length + ' audits said unsafe';
+    if (state === 'confirmed') {
+        return said + ' and the judge agreed.';
+    }
+    if (state === 'look') {
+        let judge;
+        if (!judges.length) judge = 'no judge has read the reports yet';
+        else if (pkg.judge_majority === 'unsafe') judge = 'the judge agreed';
+        else if (pkg.judge_majority === 'contested') judge = 'the judges split';
+        else judge = 'the judge did not settle it';
+        const second = unsafe < 2 && pkg.judge_majority === 'unsafe' ? ' No second audit has looked yet.' : '';
+        return said + ' and ' + judge + '.' + second;
+    }
+    if (state === 'clean') {
+        if (judges.length && audits.some(a => a.result === 'unsafe' || a.result === 'inconclusive')) {
+            return 'An audit flagged it. The judge read the reports and cleared it.';
+        }
+        return 'Nothing found.';
+    }
+    return 'No model reached a verdict: the files were skipped, or the audits were inconclusive.';
+}
+
 function renderDetail(name, data) {
-    let html = '';
+    const pkg = (DATA.packages || {})[name] || {};
+    const state = packageState(pkg);
+    const audits = (data.audits || []).slice().sort((a, b) =>
+        String((b.frontmatter || {}).date || '').localeCompare(String((a.frontmatter || {}).date || '')));
+    const judges = data.judges || [];
+    const judgeSafe = pkg.judge_majority === 'safe';
+    const confirmedCls = state === 'confirmed' ? ' confirmed' : '';
 
-    // Judge section
-    if (data.judges && data.judges.length > 0) {
-        html += `<h3 class="detail-title">Judge Verdicts (${data.judges.length})</h3>`;
-        for (const j of data.judges) {
-            const d = j.data;
-            html += `<div class="report">
-                <div class="report-head">
-                    <span>Verdict: <span class="result-${escapeAttr(d.correct_verdict)} strong">${escapeHtml(d.correct_verdict)}</span></span>
-                    <span>Confidence: <strong>${escapeHtml(d.confidence)}</strong></span>
-                    <span>Model: <span class="muted">${escapeHtml((d._judge_usage || {}).model || '?')}</span></span>
-                    ${d.re_audit_recommended ? '<span class="reaudit-flag">&#x26a0; Re-audit recommended</span>' : ''}
-                </div>
-                <p class="report-text">${escapeHtml(d.reasoning || '')}</p>
-                ${d.coverage_issues && d.coverage_issues.length ? '<div class="report-note">Coverage issues: ' + d.coverage_issues.map(escapeHtml).join(', ') + '</div>' : ''}
-                ${d.re_audit_focus && d.re_audit_focus.length ? '<div class="report-note">Re-audit focus: ' + d.re_audit_focus.map(escapeHtml).join(', ') + '</div>' : ''}
-            </div>`;
+    let html = '<div class="detail-state">'
+        + '<span class="state st-' + state + '">' + escapeHtml(STATE_TITLE[state]) + '</span>'
+        + '<span class="why">' + escapeHtml(explainState(pkg)) + '</span>'
+        + '<a class="detail-link" href="#pkg=' + escapeAttr(encodeURIComponent(name)) + '">#pkg=' + escapeHtml(name) + '</a>'
+        + '</div>';
+
+    // What was flagged, first. Every file a report called unsafe, with the
+    // lines the auditor quoted when it quoted any. Newest report first. Two
+    // reports that quote the same lines of the same file share one block,
+    // with each report's summary under it.
+    const findings = new Map();
+    for (const a of audits) {
+        const fm = a.frontmatter || {};
+        const model = shortModel(fm.model || 'unknown');
+        for (const v of fm.file_verdicts || []) {
+            if (v.status !== 'unsafe') continue;
+            const key = (v.file || '') + '\n' + (v.evidence || '');
+            let f = findings.get(key);
+            if (!f) { f = {v, models: [], summaries: []}; findings.set(key, f); }
+            if (!f.models.includes(model)) f.models.push(model);
+            if (v.summary && !f.summaries.includes(v.summary)) f.summaries.push(v.summary);
         }
     }
+    if (findings.size) {
+        html += '<div class="detail-section">' + Array.from(findings.values()).map(f => {
+            const v = f.v;
+            const start = Number(v.evidence_line) || 0;
+            return '<div class="finding"><div class="head">'
+                + '<span class="file">' + escapeHtml(v.file || '') + '</span>'
+                + (start ? '<span class="where">line ' + start + '</span>' : '')
+                + '<span class="tag">flagged by ' + escapeHtml(joinNicely(f.models)) + (judgeSafe ? ', overturned by the judge' : '') + '</span>'
+                + f.summaries.map(s => '<span class="summary">' + escapeHtml(s) + '</span>').join('')
+                + '</div>'
+                + (v.evidence ? renderEvidence(v, state) : '')
+                + '</div>';
+        }).join('') + '</div>';
+    }
 
-    // Audit reports
-    if (data.audits && data.audits.length > 0) {
-        html += `<h3 class="detail-title">Audit Reports (${data.audits.length})</h3>`;
-        for (const a of data.audits) {
-            const fm = a.frontmatter;
-            const result = fm.result || 'unknown';
-            const model = fm.model || 'unknown';
-            const date = (fm.date || '').split('T')[0];
-            const fv = fm.file_verdicts || [];
+    // The judge: the stronger model's reading of the reports.
+    for (const j of judges) {
+        const d = j.data || {};
+        const verdict = String(d.correct_verdict || '?');
+        html += '<div class="detail-section">'
+            + '<div class="head"><span class="title">Judge</span>'
+            + '<span class="meta">' + escapeHtml(shortModel((d._judge_usage || {}).model || '?')) + ' · '
+            + '<span class="result-' + escapeAttr(verdict) + confirmedCls + '">' + escapeHtml(verdict) + '</span>'
+            + (d.confidence ? ' · ' + escapeHtml(d.confidence) + ' confidence' : '')
+            + (d.re_audit_recommended ? ' · asked for a second audit' : '') + '</span></div>'
+            + '<div class="prose">' + escapeHtml(d.reasoning || '') + '</div>'
+            + (d.coverage_issues && d.coverage_issues.length ? '<div class="note">Coverage: ' + d.coverage_issues.map(escapeHtml).join('; ') + '</div>' : '')
+            + (d.re_audit_focus && d.re_audit_focus.length ? '<div class="note">Second audit should look at: ' + d.re_audit_focus.map(escapeHtml).join('; ') + '</div>' : '')
+            + '</div>';
+    }
 
-            html += `<div class="report">
-                <div class="report-head">
-                    <span class="result-${escapeAttr(result)} strong">${escapeHtml(result)}</span>
-                    <span class="muted">${escapeHtml(model)}</span>
-                    <span class="sep">${escapeHtml(date)}</span>
-                    <span class="sep">${escapeHtml(fm.files_reviewed || 0)} files</span>
-                    <span class="sep">$${(parseFloat(fm.cost) || 0).toFixed(4)}</span>
-                    <span class="sep">${(parseFloat(fm.execution_time) || 0).toFixed(1)}s</span>
-                </div>`;
-
-            if (fv.length > 0) {
-                html += `<table class="verdicts">
-                    <thead><tr>
-                        <th>File</th>
-                        <th class="nowrap">Status</th>
-                        <th>Summary</th>
-                    </tr></thead><tbody>`;
-                for (const v of fv) {
-                    html += `<tr class="verdict">
-                        <td class="file">${escapeHtml(v.file || '')}</td>
-                        <td class="nowrap result-${escapeAttr(v.status || 'unknown')}">${escapeHtml(v.status || '?')}</td>
-                        <td class="summary">${escapeHtml(v.summary || '')}</td>
-                    </tr>`;
-                    if (v.evidence) {
-                        html += `<tr><td colspan="3" class="evidence-cell">${renderEvidence(v)}</td></tr>`;
-                    }
+    // Every report, one line each; the per-file table and the full text
+    // fold out under the line.
+    if (audits.length) {
+        html += '<div class="detail-section"><div class="head"><span class="title">Reports</span></div>'
+            + audits.map((a, i) => {
+                const fm = a.frontmatter || {};
+                const result = String(fm.result || 'unknown');
+                const fv = fm.file_verdicts || [];
+                // data.json knows which reports were second audits even when
+                // the report itself does not say (older reports are tagged by
+                // cross-referencing the judge). Its list is newest first,
+                // like this one; it is used when the two line up.
+                const summary = (pkg.audits || []).length === audits.length ? pkg.audits[i] : null;
+                const reaudit = summary ? !!summary.reaudit : !!fm.triggered_by;
+                const cls = squareClass(result, 'audit', pkg) + (reaudit ? ' sq-reaudit' : '');
+                const bodyId = 'report-' + name.replace(/[^a-zA-Z0-9-]/g, '_') + '-' + i;
+                const meta = [shortModel(fm.model || 'unknown'), String(fm.date || '').split('T')[0],
+                    fmtNum(fm.files_reviewed || 0) + ' files', '$' + (parseFloat(fm.cost) || 0).toFixed(4),
+                    (parseFloat(fm.execution_time) || 0).toFixed(0) + 's'].join(' · ');
+                let full = '';
+                if (fv.length) {
+                    full += '<table class="verdicts"><thead><tr><th>File</th><th>Status</th><th>Summary</th></tr></thead><tbody>'
+                        + fv.map(v => '<tr><td class="file">' + escapeHtml(v.file || '') + '</td>'
+                            + '<td class="nowrap result-' + escapeAttr(v.status || 'unknown') + '">' + escapeHtml(v.status || '?') + '</td>'
+                            + '<td class="summary">' + escapeHtml(v.summary || '') + '</td></tr>').join('')
+                        + '</tbody></table>';
                 }
-                html += '</tbody></table>';
-            }
-
-            const bodyId = 'body-' + name.replace(/[^a-zA-Z0-9-]/g, '_') + '-' + a.filename.replace(/[^a-zA-Z0-9]/g, '_');
-            html += `<button onclick="document.getElementById('${bodyId}').classList.toggle('open')"
-                class="link-btn">Toggle full report</button>
-                <pre id="${bodyId}" class="report-body">${escapeHtml(a.body || '')}</pre>
-            </div>`;
-        }
+                full += '<pre class="report-body">' + escapeHtml(a.body || '') + '</pre>';
+                return '<div class="report"><div class="line">'
+                    + '<span class="sq ' + cls + '"></span>'
+                    + '<span class="verdict result-' + escapeAttr(result) + confirmedCls + '">' + escapeHtml(result) + '</span>'
+                    + (reaudit ? '<span class="meta">second audit</span>' : '')
+                    + '<span class="meta">' + escapeHtml(meta) + '</span>'
+                    + '<button type="button" class="link-btn" data-toggle="' + escapeAttr(bodyId) + '">Full report</button>'
+                    + '</div><div id="' + escapeAttr(bodyId) + '" class="report-full">' + full + '</div></div>';
+            }).join('') + '</div>';
     }
 
-    return html || '<p class="sep">No details available.</p>';
+    return html || '<p class="muted">No details available.</p>';
 }
 
 function escapeHtml(text) {
@@ -560,7 +602,7 @@ function highlightLine(line, lang) {
         const cls = /^(\+\+\+|---|@@)/.test(line) ? 'tok-hunk'
             : line.startsWith('+') ? 'tok-add'
             : line.startsWith('-') ? 'tok-del' : '';
-        return cls ? `<span class="${cls}">${escapeHtml(line)}</span>` : escapeHtml(line);
+        return cls ? '<span class="' + cls + '">' + escapeHtml(line) + '</span>' : escapeHtml(line);
     }
     const rules = LANG_RULES[lang];
     if (!rules) return escapeHtml(line);
@@ -572,7 +614,7 @@ function highlightLine(line, lang) {
             re.lastIndex = i;
             const m = re.exec(line);
             if (m && m[0].length) {
-                out += `<span class="tok-${cls}">${escapeHtml(m[0])}</span>`;
+                out += '<span class="tok-' + cls + '">' + escapeHtml(m[0]) + '</span>';
                 i += m[0].length;
                 matched = true;
                 break;
@@ -588,17 +630,17 @@ function highlightLine(line, lang) {
     return out;
 }
 
-function renderEvidence(v) {
+function renderEvidence(v, state) {
     const lang = langForFile(v.file);
     const lines = String(v.evidence).split('\n');
     const start = Number(v.evidence_line) || 0;
     const body = lines.map((line, n) => {
-        const ln = start ? `<span class="ln">${start + n}</span>` : '<span class="ln unplaced">0</span>';
-        return ln + highlightLine(line, lang);
-    }).join('\n');
-    const where = start ? `line ${start}` : 'quoted by the auditor; not matched to a line';
-    return `<div class="evidence-wrap"><div class="evidence-where">Evidence &middot; ${escapeHtml(where)}</div>
-        <pre class="evidence">${body}</pre></div>`;
+        const ln = start ? '<span class="ln">' + (start + n) + '</span>' : '<span class="ln unplaced">0</span>';
+        return '<div class="line">' + ln + highlightLine(line, lang) + '</div>';
+    }).join('');
+    const cls = (state === 'confirmed' ? ' confirmed' : '') + (start ? '' : ' unplaced');
+    const title = start ? '' : ' title="Quoted by the auditor; not matched to a line in the file"';
+    return '<pre class="evidence' + cls + '"' + title + '>' + body + '</pre>';
 }
 
 function escapeAttr(text) {
@@ -620,33 +662,44 @@ function setupEventListeners() {
         renderTable();
     });
 
-    // A headline count anywhere on the page filters the table, and a
-    // package chip opens that package. Delegated, because the panels are
-    // re-rendered.
+    // A headline count anywhere on the page filters the table, a package
+    // chip opens that package, and a "Full report" unfolds one. Delegated,
+    // because every panel is re-rendered.
     document.addEventListener('click', e => {
-        const link = e.target.closest('.count-link');
-        if (link) { applyFilter(link.dataset.filter); return; }
+        const link = e.target.closest('.count-link, .stat');
+        if (link && link.dataset.filter) { applyFilter(link.dataset.filter); return; }
         const chip = e.target.closest('.chip');
-        if (chip && chip.dataset.pkg) openPackage(chip.dataset.pkg);
+        if (chip && chip.dataset.pkg) { openPackage(chip.dataset.pkg); return; }
+        const toggle = e.target.closest('[data-toggle]');
+        if (toggle) {
+            const box = document.getElementById(toggle.dataset.toggle);
+            if (box) box.classList.toggle('open');
+        }
     });
 
-    document.querySelectorAll('th[data-sort]').forEach(th => {
+    const heads = document.querySelectorAll('th[data-sort]');
+    const markSort = () => heads.forEach(h => {
+        h.classList.toggle('sort-asc', h.dataset.sort === currentSort.key && currentSort.asc);
+        h.classList.toggle('sort-desc', h.dataset.sort === currentSort.key && !currentSort.asc);
+    });
+    markSort();
+    heads.forEach(th => {
         th.addEventListener('click', () => {
             const key = th.dataset.sort;
             if (currentSort.key === key) {
                 currentSort.asc = !currentSort.asc;
             } else {
-                currentSort = {key, asc: true};
+                currentSort = {key, asc: key === 'name' || key === 'version'};
             }
-            document.querySelectorAll('th[data-sort]').forEach(h => {
-                h.textContent = h.textContent.replace(/ [▲▼]$/, '');
-            });
-            th.textContent += currentSort.asc ? ' ▲' : ' ▼';
+            markSort();
             renderTable();
         });
     });
 
+    // A click on a package row opens it; a click inside the open detail
+    // (a "Full report" button, selecting text) must not close it again.
     document.getElementById('package-table').addEventListener('click', e => {
+        if (e.target.closest('.detail-row')) return;
         const row = e.target.closest('.pkg-row');
         if (!row) return;
         toggleDetail(row.dataset.pkg);
