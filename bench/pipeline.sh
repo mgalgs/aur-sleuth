@@ -756,6 +756,7 @@ main() {
         log "=== Scout Phase ==="
         python3 bench/scout.py --catalog "$DATA_DIR/models-catalog.json" \
             --out "$DATA_DIR/bench/scout.json" --bench-dir "$DATA_DIR/bench" \
+            --data-dir "$DATA_DIR" \
             --seats "audit=$AUDIT_MODELS;judge=$JUDGE_MODEL;reaudit=$REAUDIT_MODEL" 2>&1 \
             || log "WARNING: the scout failed; the page keeps the old shortlist"
     fi

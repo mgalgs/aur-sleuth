@@ -83,6 +83,67 @@ def parse_seats(spec):
     return seats
 
 
+def read_frontmatter(path, keys):
+    """The named keys out of a report's frontmatter, cheaply: read at most
+    the header block, split on ':' once per line."""
+    out = {}
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            first = f.readline()
+            if first.strip() != "---":
+                return out
+            for _ in range(60):
+                line = f.readline()
+                if not line or line.strip() == "---":
+                    break
+                key, sep, value = line.partition(":")
+                if sep and key.strip() in keys:
+                    out[key.strip()] = value.strip()
+    except OSError:
+        pass
+    return out
+
+
+def spend_shares(data_dir, now, days=7):
+    """How the recent spend splits across the three seats, from the working
+    reports and judge files on the volume. The page uses this to put a
+    candidate's price in pipeline terms: a pricier judge is noise when
+    judging is a twentieth of the spend, and a pricier audit model is not.
+
+    Working files hold the latest report per package and model -- close
+    enough for shares. None when there is nothing recent to count."""
+    cutoff = now - days * 86400
+    totals = {"audit": 0.0, "reaudit": 0.0, "judge": 0.0}
+    for path in glob.glob(os.path.join(data_dir, "bulk-reports", "*", "aur-sleuth-report-*.txt")):
+        try:
+            if os.path.getmtime(path) < cutoff:
+                continue
+        except OSError:
+            continue
+        fm = read_frontmatter(path, {"cost", "triggered_by"})
+        try:
+            cost = float(fm.get("cost") or 0)
+        except ValueError:
+            continue
+        totals["reaudit" if fm.get("triggered_by") else "audit"] += cost
+    for path in glob.glob(os.path.join(data_dir, "judge", "*.json")):
+        try:
+            if os.path.getmtime(path) < cutoff:
+                continue
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, ValueError):
+            continue
+        totals["judge"] += float((data.get("_judge_usage") or {}).get("cost") or 0)
+    total = sum(totals.values())
+    if total <= 0:
+        return None
+    return {
+        "days": days,
+        "shares": {seat: round(v / total, 3) for seat, v in totals.items()},
+    }
+
+
 def load_bench_scores(bench_dir):
     """{model: {'agreement': float, 'run': id}} from the newest result that
     scored each model. A result that does not parse is skipped: benchmarks
@@ -109,6 +170,7 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--seats", default="")
     ap.add_argument("--bench-dir", default="")
+    ap.add_argument("--data-dir", default="", help="for the seat spend shares")
     ap.add_argument("--min-context", type=int, default=32768)
     ap.add_argument("--max-per-seat", type=int, default=10)
     ap.add_argument("--now", type=int, default=0, help="unix time, for tests")
@@ -200,6 +262,10 @@ def main():
         "seats": seat_out,
         "candidates": kept,
     }
+    if args.data_dir:
+        shares = spend_shares(args.data_dir, now)
+        if shares:
+            out["spend"] = shares
     os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
     tmp = args.out + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:

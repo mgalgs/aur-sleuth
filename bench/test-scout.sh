@@ -102,6 +102,28 @@ assert [c["id"] for c in d["candidates"]] == ["new/cheap", "old/mid"]
 assert d["seats"]["judge"]["blended_per_mtok"] == 1.25
 PY
 
+echo "== the spend shares put a seat's price in pipeline terms =="
+# A week of work: two plain audits, one escalation, one judge ruling. The
+# shares tell the page how much of the pipeline each seat is.
+mkdir -p "$tmp/data/bulk-reports/m1" "$tmp/data/judge"
+printf -- '---\ncost: 0.02\ndate: x\n---\nbody\n' > "$tmp/data/bulk-reports/m1/aur-sleuth-report-a.txt"
+printf -- '---\ncost: 0.02\ndate: x\n---\nbody\n' > "$tmp/data/bulk-reports/m1/aur-sleuth-report-b.txt"
+printf -- '---\ncost: 0.05\ntriggered_by: a/judge.json\ndate: x\n---\nbody\n' > "$tmp/data/bulk-reports/m1/aur-sleuth-report-c.txt"
+printf '{"_judge_usage": {"cost": 0.01}}\n' > "$tmp/data/judge/a.json"
+python3 bench/scout.py --catalog "$tmp/catalog.json" --out "$tmp/out2.json" \
+    --data-dir "$tmp/data" --now "$NOW" --seats "audit=seat/audit" >/dev/null 2>&1 || true
+if python3 - "$tmp/out2.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+s = d["spend"]["shares"]
+assert s == {"audit": 0.4, "reaudit": 0.5, "judge": 0.1}, s
+PY
+then
+    ok "audit/escalation/judge shares computed from the volume"
+else
+    bad "spend shares wrong or missing"
+fi
+
 echo "== a missing catalog is quiet, not an error =="
 if python3 bench/scout.py --catalog "$tmp/nope.json" --out "$tmp/none.json" --now "$NOW" 2>/dev/null; then
     ok "exit 0 with no catalog"
