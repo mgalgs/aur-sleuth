@@ -103,20 +103,29 @@ def package_state(ps):
     same harm the publish review is told to watch for. So the page counts them
     separately and says plainly what they are.
     """
-    if ps.get("audit_majority") == "unsafe" and ps.get("judge_majority") == "unsafe":
+    audit = ps.get("audit_majority")
+    judge = ps.get("judge_majority")
+
+    if audit == "unsafe" and judge == "unsafe":
         return "confirmed"
     # The judge read the audits and disagreed with them. It is the better model
     # looking at the same evidence, so its answer stands: a package it cleared is
     # clean, not "worth a look". Leaving it flagged would keep a package that did
     # nothing wrong on a public list of ones that might have.
-    if ps.get("judge_majority") == "safe":
+    if judge == "safe":
         return "clean"
-    if (ps.get("audit_majority") in ("unsafe", "contested", "inconclusive")
-            or ps.get("judge_majority") == "unsafe"):
+    # Something actually called it unsafe and nothing has settled it. "contested"
+    # counts because it means one model said unsafe and another said safe.
+    if audit in ("unsafe", "contested") or judge == "unsafe":
         return "look"
-    if ps.get("audit_majority") == "safe":
+    if audit == "safe":
         return "clean"
-    return "other"
+    # Everything left is inconclusive or skipped: no model reached a verdict
+    # either way. That is missing information, not a suspicion, and it is the
+    # single largest group -- 66 of 76 packages once carried the "worth a closer
+    # look" label on this basis alone, which read as an accusation about
+    # packages nothing had ever flagged.
+    return "unknown"
 
 
 def safe_float(v, default=0.0):
@@ -308,7 +317,7 @@ def build_index_data(audits, judges):
     # audit set is drawn from recently-updated and top-popular packages.
     week_start = (datetime.now(timezone.utc) - timedelta(days=7)).strftime("%Y-%m-%d")
 
-    wk_updated = wk_new = wk_confirmed = wk_look = wk_green = 0
+    wk_updated = wk_new = wk_confirmed = wk_look = wk_green = wk_unknown = 0
     for ps in pkg_summaries.values():
         if (ps["latest_date"] or "")[:10] < week_start:
             continue
@@ -322,6 +331,8 @@ def build_index_data(audits, judges):
             wk_look += 1
         elif state == "clean":
             wk_green += 1
+        else:
+            wk_unknown += 1
 
     wk_by_model = defaultdict(int)
     wk_audits_total = 0
@@ -368,7 +379,7 @@ def build_index_data(audits, judges):
             "start": week_start,
             "packages": {"updated": wk_updated, "new": wk_new,
                          "confirmed": wk_confirmed, "look": wk_look,
-                         "green": wk_green},
+                         "green": wk_green, "unknown": wk_unknown},
             "audits_total": wk_audits_total,
             # "unknown" is not worth naming on the public headline; audits_total
             # still counts it, so the named models need not sum to the total.
@@ -556,10 +567,13 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             <p class="text-slate-500 text-xs mt-3 leading-relaxed">
                 These audits look for one thing: code injected into the AUR packaging of a
                 package &mdash; in the <code>PKGBUILD</code>, an <code>.install</code> hook, or a patch.
-                &ldquo;Worth a closer look&rdquo; means a model wanted a second opinion, most often
-                about something the application legitimately does; it is not a claim that
-                the package is malicious, and on this corpus most such flags are false
-                positives. Only &ldquo;confirmed&rdquo; means the audits and the judge agreed.
+                &ldquo;No verdict&rdquo; means no model reached an answer either way &mdash; missing
+                information, not a suspicion. &ldquo;Worth a closer look&rdquo; means something did
+                flag the package and nothing has settled it since; that is usually a false
+                positive about behaviour the application is supposed to have, and it is not
+                a claim that the package is malicious. Only &ldquo;confirmed&rdquo; means the audits
+                and the judge agreed, and a verdict a judge overturned is struck through
+                rather than left standing.
             </p>
             <div id="activity-recent" class="mt-4 flex flex-wrap gap-2"></div>
         </div>
@@ -728,6 +742,8 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             '<br><span class="text-base">' +
             '<span class="result-safe font-semibold">' + Number(p.green || 0) + ' clean</span>' +
             '<span class="text-slate-500"> &middot; </span>' +
+            '<span class="text-slate-400">' + Number(p.unknown || 0) + ' no verdict</span>' +
+            '<span class="text-slate-500"> &middot; </span>' +
             '<span class="text-slate-300">' + Number(p.look || 0) + ' worth a closer look</span>' +
             '<span class="text-slate-500"> &middot; </span>' +
             (confirmed
@@ -748,13 +764,13 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         // beside a package name reads as a warning about that package; an
         // outline reads as what it is -- noted, nothing concluded.
         const DOT = {confirmed: 'block-unsafe', look: 'block-look',
-                     clean: 'block-safe', other: 'block-skipped'};
+                     clean: 'block-safe', unknown: 'block-skipped'};
         const WHAT = {confirmed: 'audits and judge agree: unsafe',
                       look: 'flagged by a model; not confirmed',
-                      clean: 'no findings', other: 'no verdict'};
+                      clean: 'no findings', unknown: 'no verdict reached'};
         document.getElementById('activity-recent').innerHTML = rec.map(r => {
             const d = String(r.date || '').split('T')[0];
-            const st = DOT[r.state] ? r.state : 'other';
+            const st = DOT[r.state] ? r.state : 'unknown';
             return '<span class="inline-flex items-center gap-1.5 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs" ' +
                 'title="' + escapeAttr((WHAT[st] || '') + ' • ' + (r.date || '')) + '">' +
                 '<span class="block ' + DOT[st] + '" style="margin-right:0"></span>' +
@@ -786,12 +802,12 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         // the judge cleared is simply clean here, and the audit that called it
         // unsafe stays visible in its own row.
         const STATE_LABEL = {clean: 'No findings', look: 'Worth a closer look',
-                             confirmed: 'Confirmed', other: 'No verdict'};
+                             confirmed: 'Confirmed', unknown: 'No verdict reached'};
         const STATE_COLOR = {clean: '#22c55e', look: '#f59e0b',
-                             confirmed: '#ef4444', other: '#6b7280'};
+                             confirmed: '#ef4444', unknown: '#64748b'};
         const states = s.package_states
-            || {other: Object.keys(DATA.packages || {}).length};
-        const stateKeys = ['clean', 'look', 'confirmed', 'other'].filter(k => states[k]);
+            || {unknown: Object.keys(DATA.packages || {}).length};
+        const stateKeys = ['clean', 'unknown', 'look', 'confirmed'].filter(k => states[k]);
         const resultsCtx = document.getElementById('results-chart').getContext('2d');
         new Chart(resultsCtx, {
             type: 'doughnut',
