@@ -31,8 +31,15 @@ RUN pacman -Syu --noconfirm --needed \
 
 # GitHub's SSH host keys, fetched over TLS rather than trusted on first use by
 # ssh-keyscan. Pins them at build time; rebuild the image if GitHub rotates.
+#
+# Written for two names, because a deployment may have to push over port 443.
+# GitHub answers SSH on ssh.github.com:443 with these same keys, which matters
+# where egress is restricted: the publish stage can then push without anything
+# opening port 22, and a stage that runs untrusted code must not be given SSH
+# egress just so a trusted stage can push. A non-default port is matched in
+# known_hosts as [host]:port, so it needs its own line.
 RUN curl -fsS https://api.github.com/meta \
-    | python -c 'import json,sys; [print("github.com", k) for k in json.load(sys.stdin)["ssh_keys"]]' \
+    | python -c 'import json,sys; [print(h, k) for k in json.load(sys.stdin)["ssh_keys"] for h in ("github.com", "[ssh.github.com]:443")]' \
     > /etc/ssh/ssh_known_hosts \
     && test -s /etc/ssh/ssh_known_hosts
 
