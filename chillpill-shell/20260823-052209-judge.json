@@ -1,0 +1,29 @@
+{
+  "package": "chillpill-shell",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The 'unsafe' verdict was based solely on install.sh, which clones and executes an external script. However, install.sh is never executed during makepkg (build/install) or by PKGBUILD/.install scripts. It's inert source code, not part of AUR build/install workflow.",
+  "disagreement_analysis": "Qwen incorrectly flagged install.sh as a risk despite it not being executed during package build/installation. DeepSeek correctly recognized it as inert source code.",
+  "coverage_issues": [],
+  "false_positives": [
+    "Qwen's install.sh verdict: Script isn't executed during makepkg or by PKGBUILD/.install hooks"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Improve prompt emphasis: Highlight that only scripts executed during makepkg (build/package/prepare/check) or .install hooks are relevant risks",
+    "Enhance file prioritization: PKGBUILD and .install scripts should be weighted higher than other source files during risk assessment",
+    "Add execution context analysis: Models should explicitly verify whether scripts are invoked by build/install processes before flagging them"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 13974,
+    "completion_tokens": 1737,
+    "cost": 0.0141243
+  },
+  "audits_judged": [
+    "20260823-035155-qwen-qwen3-235b-a22b-2507.md",
+    "20260823-035244-deepseek-deepseek-v4-flash.md"
+  ]
+}
