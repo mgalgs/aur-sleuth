@@ -55,14 +55,21 @@ reports=(/tmp/aur-sleuth/aur-sleuth-report-*.txt)
 if (( ${#reports[@]} == 0 )); then
     ok "no local reports to scan (source checks above still applied)"
 else
-    dirty=0
+    dirty=0 scanned=0
     for f in "${reports[@]}"; do
+        # A report about this tool itself quotes this tool's own strings
+        # (entrypoint.sh names svc.cluster.local as the default internal
+        # string), which is the package's content, not a leak.
+        case "$(basename "$f")" in
+            aur-sleuth-report-aur-sleuth.txt|aur-sleuth-report-aur-sleuth-git.txt) continue ;;
+        esac
+        scanned=$(( scanned + 1 ))
         if grep -qE 'svc\.cluster\.local|base_url:|/data/bulk-reports|Cloned repository to /|working in /' "$f"; then
             bad "machine detail in $(basename "$f")"
             dirty=$(( dirty + 1 ))
         fi
     done
-    (( dirty == 0 )) && ok "${#reports[@]} local report(s) carry no machine detail"
+    (( dirty == 0 )) && ok "$scanned local report(s) carry no machine detail"
 fi
 
 echo

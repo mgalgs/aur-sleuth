@@ -129,6 +129,13 @@ reason to do?
   re-audit → dashboard → push. Feeds the dashboard at mgalgs.io/aur-sleuth.
 - `bench/run-synthetic-tests.sh` — regression tests. Run after every prompt change.
 - `bench/synthetics/` — hand-written benign and malicious fixtures.
+- `bench/test.sh` — runs every offline suite (`bench/test-*.sh`, the script's selftest)
+  and fails if any fails. `--live` adds the synthetics. Run it before every commit.
+- `deploy/container/` — the image and its entrypoint: the `prepare`, `audit`, `review`,
+  `quarantine`, `publish`, `bundle` and `benchmark` stages. `bench/review-pending.py` is
+  the review stage's summary and advisory model read.
+- `bench/dashboard/` — the public page's source (`index.html`, `app.css`, `app.js`);
+  `bench/generate-dashboard.py` inlines them and builds the page's JSON from the branch.
 - `bench/benchmark.sh` — scores candidate models against the verdicts settled on the
   branch (synthetics first, then a stratified sample of real packages). Writes only
   under `$DATA_DIR/bench/`, never to the branch. `bench/test-benchmark.sh` covers the
@@ -137,7 +144,13 @@ reason to do?
 
 ## Verifying a change
 
-Run both checks after any prompt or audit-logic change:
+Run the offline suites before every commit:
+
+```bash
+bash bench/test.sh                        # every bench/test-*.sh and the selftest
+```
+
+Run both of these as well after any prompt or audit-logic change:
 
 ```bash
 bash bench/run-synthetic-tests.sh -q     # benign exits 0, both malicious exit 1
