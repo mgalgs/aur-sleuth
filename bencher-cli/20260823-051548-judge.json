@@ -1,0 +1,35 @@
+{
+  "package": "bencher-cli",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The flagged scripts (fly_config.sh, bencher_config.sh, run.sh) are development/deployment utilities not executed during AUR build/install. They pose no risk to end-users during `makepkg` operations.",
+  "disagreement_analysis": "qwen overreacted to development scripts not in build path, while deepseek correctly contextualized them as out-of-scope for AUR safety.",
+  "coverage_issues": [
+    "Both models skipped binary tarball (expected)",
+    "qwen missed reviewing PKGBUILD hooks for script references"
+  ],
+  "false_positives": [
+    "fly_config.sh: Deployment script not executed in build context",
+    "bencher_config.sh: Config loader unused in packaging",
+    "run.sh: Docker helper irrelevant to AUR install"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Improve prompt clarity: Emphasize that only PKGBUILD/.install-executed scripts are in-scope",
+    "Prioritize files referenced in PKGBUILD functions over general project scripts",
+    "Add logic to detect if flagged scripts are actually invoked during build",
+    "Train models to better distinguish development tools from build-critical code"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 13207,
+    "completion_tokens": 1590,
+    "cost": 0.0132199
+  },
+  "audits_judged": [
+    "20260823-044237-qwen-qwen3-235b-a22b-2507.md",
+    "20260823-044512-deepseek-deepseek-v4-flash.md"
+  ]
+}
