@@ -779,8 +779,16 @@ do_publish() {
         online=false
         log "WARNING: could not reach $FETCH_URL; the push will decide whether origin agrees"
     fi
-    check_origin_reports "$pub" "$sha" \
-        || die "refusing to publish: origin holds reports this store has not seen; run a prepare (any run) and review again"
+    if ! check_origin_reports "$pub" "$sha"; then
+        # Two different situations end up here, with different remedies.
+        # Origin ahead of the pin but not of the tip: a publish moved origin
+        # past this review, so the review is stale. Origin ahead of the tip
+        # too: someone pushed reports this store has never fetched.
+        if check_origin_reports "$pub" "$tip"; then
+            die "refusing to publish: a publish moved $REPORTS_BRANCH past this review; review again, then publish"
+        fi
+        die "refusing to publish: origin holds reports this store has not seen; run a prepare (any run) and review again"
+    fi
 
     # The page goes on its own branch, built on origin's current page so that
     # push is a fast-forward too. No previous page means a root commit.
