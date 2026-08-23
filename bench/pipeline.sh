@@ -11,6 +11,7 @@
 #                     [--audit-budget-share FRACTION]
 #                     [--updated-count N] [--seed-count N]
 #                     [--packages LIST] [--escalate LIST]
+#                     [--escalate-pending true|false] [--run-budget USD]
 #
 # State is derived from the audit-reports branch (no local state files needed).
 # Daily spend is tracked in $DATA_DIR/pipeline/spend-YYYY-MM-DD.log.
@@ -65,10 +66,18 @@ SEED_COUNT=0
 # A run over named packages only (comma-separated). Skips discovery, and
 # audits them even at an already-audited version: naming a package is asking.
 PACKAGES=""
-# Escalation: for each named package, a fresh audit by REAUDIT_MODEL and then
-# a forced judge ruling over the enlarged report set. The operator's closer
-# look at a package the judge would otherwise never revisit.
+# Escalation: a fresh audit by REAUDIT_MODEL and then a forced judge ruling
+# over the enlarged report set. The operator's closer look at packages the
+# judge would otherwise never revisit. --escalate names packages;
+# --escalate-pending true sweeps everything currently worth a closer look
+# (the page's own state rule, via bench/pending-escalations.py).
 ESCALATE=""
+ESCALATE_PENDING="false"
+# A manual run's own spend ceiling. When set, the gates in this run compare
+# against the run's own spend instead of the day's ledger: a person asking
+# for a run gets one, whatever the schedule already spent. The ledger still
+# records every cost, so the scheduled runs' daily cap sees it all.
+RUN_BUDGET=""
 
 DATA_DIR="${AUR_SLEUTH_DATA_DIR:-$HOME/aur-sleuth-data}"
 METADATA_CACHE="$DATA_DIR/packages-meta-ext-v1.json.gz"
@@ -100,9 +109,18 @@ while [[ $# -gt 0 ]]; do
         --seed-count) SEED_COUNT="$2"; shift 2 ;;
         --packages) PACKAGES="$2"; shift 2 ;;
         --escalate) ESCALATE="$2"; shift 2 ;;
+        --escalate-pending) ESCALATE_PENDING="$2"; shift 2 ;;
+        --run-budget) RUN_BUDGET="$2"; shift 2 ;;
         *) echo "Unknown arg: $1" >&2; exit 1 ;;
     esac
 done
+
+[[ "$ESCALATE_PENDING" =~ ^(true|false)$ ]] \
+    || { echo "--escalate-pending must be true or false, got '$ESCALATE_PENDING'" >&2; exit 1; }
+# A positive number; zero would be a run that cannot start. Interpolated into
+# python3 -c strings below, so the shape check is the security check too.
+[[ -z "$RUN_BUDGET" || "$RUN_BUDGET" =~ ^(0*[1-9][0-9]*(\.[0-9]+)?|0*\.[0-9]*[1-9][0-9]*)$ ]] \
+    || { echo "--run-budget must be a positive number, got '$RUN_BUDGET'" >&2; exit 1; }
 
 [[ "$UPDATED_COUNT" =~ ^[0-9]+$ ]] \
     || { echo "--updated-count must be a whole number, got '$UPDATED_COUNT'" >&2; exit 1; }
@@ -126,7 +144,10 @@ if [[ ! "$AUDIT_BUDGET_SHARE" =~ ^(0\.[1-9][0-9]*|1(\.0+)?)$ ]]; then
     echo "--audit-budget-share must be between 0.1 and 1.0, got '$AUDIT_BUDGET_SHARE'" >&2
     exit 1
 fi
-AUDIT_BUDGET="$(python3 -c "print(round($DAILY_BUDGET * $AUDIT_BUDGET_SHARE, 6))")"
+# The total the gates in this run compare against: the day's budget for a
+# scheduled run, the run's own ceiling for a manual one.
+GATE_TOTAL="${RUN_BUDGET:-$DAILY_BUDGET}"
+AUDIT_BUDGET="$(python3 -c "print(round($GATE_TOTAL * $AUDIT_BUDGET_SHARE, 6))")"
 
 # The updated-vs-seed split. Accepts 0 through 1 inclusive: 1.0 is updated-only
 # (the seed never runs), 0.0 is seed-only. Read as a float in discover_packages,
@@ -172,6 +193,22 @@ get_daily_spent() {
     awk '{s+=$1} END {printf "%.6f", s+0}' "$SPEND_FILE"
 }
 
+# What was already on the ledger when this run started: the baseline a
+# manual run's own ceiling is measured from.
+RUN_START_SPENT="$(get_daily_spent)"
+
+# The spend the gates compare. A scheduled run answers for the whole day; a
+# manual run (--run-budget) answers only for itself -- the person asked, so
+# the schedule's spending must not refuse them. Every cost still lands on
+# the ledger, so the daily cap sees manual spend too.
+gate_spent() {
+    if [[ -n "$RUN_BUDGET" ]]; then
+        python3 -c "print('%.6f' % max(0, $(get_daily_spent) - $RUN_START_SPENT))"
+    else
+        get_daily_spent
+    fi
+}
+
 record_cost() {
     (
         flock -x 201
@@ -189,21 +226,21 @@ report_cost() {
 }
 
 budget_remaining() {
-    python3 -c "print(max(0, $DAILY_BUDGET - $(get_daily_spent)))"
+    python3 -c "print(max(0, $GATE_TOTAL - $(gate_spent)))"
 }
 
-# How far past the daily budget the day's spend is. Nonzero is expected, not
+# How far past its budget this run's gate spend is. Nonzero is expected, not
 # an error: the judge and re-audit phases are allowed to overrun. This is the
 # number to watch when tuning AUDIT_BUDGET_SHARE.
 budget_overrun() {
-    python3 -c "print(max(0, round($(get_daily_spent) - $DAILY_BUDGET, 6)))"
+    python3 -c "print(max(0, round($(gate_spent) - $GATE_TOTAL, 6)))"
 }
 
-# True when the day's spend has reached a ceiling. With no argument the ceiling
-# is the whole budget; the audit phase passes its own, lower one.
+# True when the gate spend has reached a ceiling. With no argument the
+# ceiling is the whole gate budget; the audit phase passes its own, lower one.
 is_over_budget() {
-    local ceiling="${1:-$DAILY_BUDGET}"
-    python3 -c "import sys; sys.exit(0 if $(get_daily_spent) >= $ceiling else 1)"
+    local ceiling="${1:-$GATE_TOTAL}"
+    python3 -c "import sys; sys.exit(0 if $(gate_spent) >= $ceiling else 1)"
 }
 
 # --- Refresh AUR metadata (at most once per hour) ---
@@ -512,6 +549,9 @@ print(d.get('_judge_usage', {}).get('cost') or 0)
 main() {
     log "=== AUR Sleuth Pipeline ==="
     log "Config: min-votes=$MIN_VOTES, lookback=${LOOKBACK_HOURS}h, budget=\$$DAILY_BUDGET/day, jobs=$JOBS"
+    if [[ -n "$RUN_BUDGET" ]]; then
+        log "Manual run: its own \$$RUN_BUDGET ceiling gates it, not the day's ledger; the ledger still records the spend"
+    fi
     log "Audit phase stops at \$$AUDIT_BUDGET; judge and re-audit run to completion even past the daily budget"
     if [[ "$SEED_TOP" -gt 0 ]]; then
         log "Candidates: updated + top $SEED_TOP by popularity, interleaved at updated-share=$UPDATED_SHARE"
@@ -524,14 +564,27 @@ main() {
     # ruling over the enlarged report set. It is judge work, so it has top
     # priority in the budget: an explicit escalation runs even on a spent day,
     # and the overrun rules above apply.
-    if [[ -n "$ESCALATE" ]]; then
+    if [[ -n "$ESCALATE" || "$ESCALATE_PENDING" == "true" ]]; then
         log ""
         log "=== Escalation ==="
         local esc_marker="$PIPELINE_DIR/.escalate-marker"
         touch "$esc_marker"
         local esc_pkgs=()
-        IFS=',' read -ra esc_pkgs <<< "$ESCALATE"
         local pkg
+        if [[ -n "$ESCALATE" ]]; then
+            IFS=',' read -ra esc_pkgs <<< "$ESCALATE"
+        else
+            # The sweep: everything currently worth a closer look, by the
+            # page's own state rule.
+            while IFS= read -r pkg; do
+                esc_pkgs+=("$pkg")
+            done < <(python3 bench/pending-escalations.py)
+            log "Worth a closer look: ${#esc_pkgs[@]} package(s)"
+            if [[ ${#esc_pkgs[@]} -eq 0 ]]; then
+                log "Nothing needs a second look."
+                return 0
+            fi
+        fi
         for pkg in "${esc_pkgs[@]}"; do
             bash bench/judge.sh --package "$pkg" --escalate \
                 --audit-model "$REAUDIT_MODEL" --judge-model "$JUDGE_MODEL" \
@@ -558,7 +611,7 @@ main() {
     fi
 
     if is_over_budget; then
-        log "Daily budget already exhausted (\$$(get_daily_spent) >= \$$DAILY_BUDGET). Exiting."
+        log "Daily budget already exhausted (\$$(gate_spent) >= \$$GATE_TOTAL). Exiting."
         return 0
     fi
 
@@ -695,10 +748,25 @@ main() {
         push_reports
     fi
 
+    # Step 8: Scout the model catalog for candidates that undercut a seat.
+    # Code only, seconds, no API call; the operations page shows the result
+    # and a person decides what to benchmark. A missing catalog is fine.
+    if [[ -f "$DATA_DIR/models-catalog.json" ]]; then
+        log ""
+        log "=== Scout Phase ==="
+        python3 bench/scout.py --catalog "$DATA_DIR/models-catalog.json" \
+            --out "$DATA_DIR/bench/scout.json" --bench-dir "$DATA_DIR/bench" \
+            --seats "audit=$AUDIT_MODELS;judge=$JUDGE_MODEL;reaudit=$REAUDIT_MODEL" 2>&1 \
+            || log "WARNING: the scout failed; the page keeps the old shortlist"
+    fi
+
     # Summary
     log ""
     log "=== Pipeline Complete ==="
     log "Daily spend: \$$(get_daily_spent) / \$$DAILY_BUDGET"
+    if [[ -n "$RUN_BUDGET" ]]; then
+        log "This run: \$$(gate_spent) / \$$RUN_BUDGET"
+    fi
     log "Budget remaining: \$$(budget_remaining)"
     local overrun
     overrun=$(budget_overrun)
@@ -709,8 +777,9 @@ main() {
         log "--no-push: $REPORTS_BRANCH left unpushed for a separate publish step"
     fi
 
-    # Append to run log
-    echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) spent=\$$(get_daily_spent) budget=\$$DAILY_BUDGET overrun=\$$overrun candidates=$candidate_count" \
+    # Append to run log. run_budget marks manual runs, so the overrun trend
+    # for tuning the share can be read from the scheduled runs alone.
+    echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) spent=\$$(get_daily_spent) budget=\$$DAILY_BUDGET overrun=\$$overrun run_budget=\$${RUN_BUDGET:-0} candidates=$candidate_count" \
         >> "$PIPELINE_DIR/runs.log"
 }
 

@@ -148,6 +148,35 @@ else
     bad "spending past the day's budget should exit"
 fi
 
+echo "== a manual run's own budget outranks the exhausted daily ledger =="
+# The same exhausted ledger, but the run carries --run-budget: the person
+# asked, so it runs, gated by its own ceiling instead of the day's.
+out="$(AUR_SLEUTH_DATA_DIR="$data" OPENAI_API_KEY="unused-no-completion-is-made" \
+        bash bench/pipeline.sh --daily-budget 2.00 --run-budget 1.00 \
+        --packages-file /dev/null --skip-dashboard --no-push 2>&1 || true)"
+if grep -q 'Daily budget already exhausted' <<< "$out"; then
+    bad "a manual run must not be refused by the daily ledger"
+else
+    ok "the exhausted ledger did not stop the manual run"
+fi
+if grep -q '=== Judge Phase ===' <<< "$out"; then
+    ok "the manual run reached its phases"
+else
+    bad "the manual run did not get to work"
+fi
+# shellcheck disable=SC2016  # literal dollar signs in the log line
+if grep -q 'This run: \$0.000000 / \$1.00' <<< "$out"; then
+    ok "the summary reports the run's own spend against its own ceiling"
+else
+    bad "no per-run spend line; got: $(grep -m1 'This run' <<< "$out" || echo nothing)"
+fi
+if bash bench/pipeline.sh --run-budget 0 --packages-file /dev/null \
+        --dry-run --skip-judge --skip-dashboard --no-push >/dev/null 2>&1; then
+    bad "should have refused --run-budget 0"
+else
+    ok "refused a zero run budget"
+fi
+
 echo
 if (( fails > 0 )); then
     echo "FAILED: $fails check(s)"

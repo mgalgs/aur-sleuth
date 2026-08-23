@@ -79,6 +79,8 @@ expect_flags "--updated-count 25" AUR_SLEUTH_UPDATED_COUNT=25
 expect_flags "--seed-count 10" AUR_SLEUTH_SEED_COUNT=10
 expect_flags "--packages icaclient,snapd" AUR_SLEUTH_PACKAGES=icaclient,snapd
 expect_flags "--escalate pcloud-drive" AUR_SLEUTH_ESCALATE=pcloud-drive
+expect_flags "--escalate-pending true" AUR_SLEUTH_ESCALATE_PENDING=true
+expect_flags "--run-budget 2.50" AUR_SLEUTH_RUN_BUDGET=2.50
 
 echo "== a budget that is not a number is code, so refuse it =="
 expect_refused 'AUR_SLEUTH_DAILY_BUDGET=1) or __import__("os").system("id") or (0'
@@ -114,6 +116,12 @@ expect_refused "AUR_SLEUTH_PACKAGES=a b"
 expect_refused 'AUR_SLEUTH_ESCALATE=$(id)'
 expect_refused "AUR_SLEUTH_ESCALATE=pkg;id"
 expect_refused "AUR_SLEUTH_UPDATED_COUNT=ten"
+expect_refused "AUR_SLEUTH_ESCALATE_PENDING=yes"
+# A zero run budget would gate the run shut, which is the opposite of what
+# the setting exists for.
+expect_refused "AUR_SLEUTH_RUN_BUDGET=0"
+expect_refused "AUR_SLEUTH_RUN_BUDGET=0.00"
+expect_refused "AUR_SLEUTH_RUN_BUDGET=-2"
 
 echo "== the pipeline takes the last flag, so the environment wins =="
 out="$(bash bench/pipeline.sh --daily-budget 2.00 --jobs 8 \

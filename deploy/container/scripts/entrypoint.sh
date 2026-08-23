@@ -264,6 +264,8 @@ collect_audit_env_flags() {
         "AUR_SLEUTH_SEED_COUNT:--seed-count:int"
         "AUR_SLEUTH_PACKAGES:--packages:packages"
         "AUR_SLEUTH_ESCALATE:--escalate:packages"
+        "AUR_SLEUTH_ESCALATE_PENDING:--escalate-pending:bool"
+        "AUR_SLEUTH_RUN_BUDGET:--run-budget:posnum"
     )
     local spec var flag kind value rest
 
@@ -303,6 +305,13 @@ collect_audit_env_flags() {
                 # hyphen, or it reads as a flag downstream.
                 [[ "$value" =~ ^[A-Za-z0-9@._+][A-Za-z0-9@._+-]*(,[A-Za-z0-9@._+][A-Za-z0-9@._+-]*)*$ ]] \
                     || die "$var is not a comma-separated package list, got '$value'" ;;
+            bool)
+                [[ "$value" =~ ^(true|false)$ ]] \
+                    || die "$var must be true or false, got '$value'" ;;
+            posnum)
+                # A positive number: zero would gate the run shut.
+                [[ "$value" =~ ^(0*[1-9][0-9]*(\.[0-9]+)?|0*\.[0-9]*[1-9][0-9]*)$ ]] \
+                    || die "$var must be a positive number, got '$value'" ;;
         esac
 
         AUDIT_ENV_FLAGS+=("$flag" "$value")
