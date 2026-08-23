@@ -400,12 +400,19 @@ def build_index_data(audits, judges):
     # package the two models disagreed about appeared twice, once green and once
     # red, which reads as an alarming finding when it is only a disagreement.
     # The package's settled state is the honest summary of it.
+    # The packages a reader would want named: the ones flagged this week, in
+    # either unsettled or confirmed state. Every clean package is in the table;
+    # listing them here again was a wall of chips that said nothing.
     recent = [
         {"package": name, "state": package_state(ps), "date": ps["latest_date"],
          "audits": len(ps["audits"])}
         for name, ps in pkg_summaries.items()
+        if package_state(ps) in ("look", "confirmed")
+        and (ps["latest_date"] or "")[:10] >= week_start
     ]
+    # Newest first, confirmed ahead of the rest (sorts are stable).
     recent.sort(key=lambda r: r["date"] or "", reverse=True)
+    recent.sort(key=lambda r: r["state"] != "confirmed")
     recent = recent[:24]
 
     summary = {
@@ -638,80 +645,53 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 <body class="bg-slate-900 text-slate-200 min-h-screen">
     <div class="max-w-7xl mx-auto px-4 py-6">
         <!-- Header -->
-        <div class="flex items-center justify-between mb-8">
+        <div class="flex items-center justify-between mb-6">
             <div>
-                <h1 class="text-3xl font-bold text-blue-400">AUR Sleuth Dashboard</h1>
-                <p class="text-slate-400 text-sm mt-1">LLM-powered AUR package security audits</p>
+                <h1 class="text-3xl font-bold text-blue-400">AUR Sleuth</h1>
+                <p class="text-slate-400 text-sm mt-1">Supply-chain audits of AUR packages: is the packaging clean?</p>
             </div>
-            <div class="text-right text-sm text-slate-500">
+            <div class="text-right text-sm text-slate-500 shrink-0 whitespace-nowrap">
                 <span id="generated-at"></span>
                 <br>
                 <a href="https://github.com/mgalgs/aur-sleuth" class="text-blue-400 hover:text-blue-300">GitHub</a>
             </div>
         </div>
 
-        <!-- This week's activity -->
-        <div id="activity" class="bg-slate-800 rounded-lg p-5 border border-slate-700 mb-6">
-            <p id="activity-packages" class="text-slate-200"></p>
-            <p id="activity-audits" class="text-slate-400 text-sm mt-1"></p>
-            <p class="text-slate-500 text-xs mt-3 leading-relaxed">
-                These audits look for one thing: code injected into the AUR packaging of a
-                package &mdash; in the <code>PKGBUILD</code>, an <code>.install</code> hook, or a patch.
-                &ldquo;No verdict&rdquo; means no model reached an answer either way &mdash; missing
-                information, not a suspicion. &ldquo;Worth a closer look&rdquo; means something did
-                flag the package and nothing has settled it since; that is usually a false
-                positive about behaviour the application is supposed to have, and it is not
-                a claim that the package is malicious. Only &ldquo;confirmed&rdquo; means the audits
-                and the judge agreed, and a verdict a judge overturned is struck through
-                rather than left standing.
-            </p>
-            <div id="activity-recent" class="mt-4 flex flex-wrap gap-2"></div>
-        </div>
-
-        <!-- Where these reports came from. Filled from _dashboard/review.json,
-             which the publish stage writes; hidden when there is none. The
-             model's pre-publish read stays internal: its one job is to catch a
-             leaked private detail of the operator, and a find is a reason not
-             to publish, never something to print here. -->
-        <div id="review" class="hidden bg-slate-800/60 rounded-lg px-5 py-4 border border-slate-700 mb-6 text-sm">
-            <div class="text-slate-400 text-xs uppercase tracking-wide mb-1">Before publishing</div>
-            <p id="review-read" class="text-slate-300"></p>
-            <p id="review-found" class="text-slate-400 mt-1"></p>
-        </div>
-
-        <!-- Summary Cards -->
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        <!-- The answer first: how many packages, and how many are actually a
+             finding. Each number filters the table. -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             <div class="bg-slate-800 rounded-lg p-4 border border-slate-700">
-                <div class="text-slate-400 text-xs uppercase tracking-wide">Packages</div>
+                <div class="text-slate-400 text-xs uppercase tracking-wide">Packages audited</div>
                 <div id="stat-packages" class="text-2xl font-bold text-white mt-1">—</div>
             </div>
             <div class="bg-slate-800 rounded-lg p-4 border border-slate-700">
-                <div class="text-slate-400 text-xs uppercase tracking-wide">Audit Reports</div>
+                <div class="text-slate-400 text-xs uppercase tracking-wide">Confirmed malicious</div>
+                <div id="stat-confirmed" class="text-2xl font-bold text-white mt-1">—</div>
+            </div>
+            <div class="bg-slate-800 rounded-lg p-4 border border-slate-700">
+                <div class="text-slate-400 text-xs uppercase tracking-wide">Worth a closer look</div>
+                <div id="stat-look" class="text-2xl font-bold text-white mt-1">—</div>
+            </div>
+            <div class="bg-slate-800 rounded-lg p-4 border border-slate-700">
+                <div class="text-slate-400 text-xs uppercase tracking-wide">Audit reports</div>
                 <div id="stat-reports" class="text-2xl font-bold text-white mt-1">—</div>
-            </div>
-            <div class="bg-slate-800 rounded-lg p-4 border border-slate-700">
-                <div class="text-slate-400 text-xs uppercase tracking-wide">Total Cost</div>
-                <div id="stat-cost" class="text-2xl font-bold text-white mt-1">—</div>
-            </div>
-            <div class="bg-slate-800 rounded-lg p-4 border border-slate-700">
-                <div class="text-slate-400 text-xs uppercase tracking-wide">Needs Attention</div>
-                <div id="stat-attention" class="text-2xl font-bold text-red-400 mt-1">—</div>
             </div>
         </div>
 
-        <!-- Charts Row -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        <!-- Verdicts, and this week -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
             <div class="bg-slate-800 rounded-lg p-4 border border-slate-700">
-                <h2 class="text-sm font-semibold text-slate-300 mb-3 uppercase tracking-wide">Packages, after the judge</h2>
-                <div class="h-64 flex items-center justify-center">
+                <h2 class="text-sm font-semibold text-slate-300 mb-3 uppercase tracking-wide">Verdicts</h2>
+                <div class="h-56 flex items-center justify-center">
                     <canvas id="results-chart"></canvas>
                 </div>
             </div>
-            <div class="bg-slate-800 rounded-lg p-4 border border-slate-700">
-                <h2 class="text-sm font-semibold text-slate-300 mb-3 uppercase tracking-wide">Cost by Model</h2>
-                <div class="h-64 flex items-center justify-center">
-                    <canvas id="model-chart"></canvas>
-                </div>
+            <div id="activity" class="bg-slate-800 rounded-lg p-4 border border-slate-700">
+                <h2 class="text-sm font-semibold text-slate-300 mb-3 uppercase tracking-wide">This week</h2>
+                <p id="activity-packages" class="text-slate-200"></p>
+                <p id="activity-audits" class="text-slate-500 text-xs mt-1"></p>
+                <div id="activity-recent-label" class="text-slate-400 text-xs mt-4 hidden"></div>
+                <div id="activity-recent" class="mt-2 flex flex-wrap gap-2"></div>
             </div>
         </div>
 
@@ -722,7 +702,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                     class="bg-slate-700 border border-slate-600 rounded px-3 py-1.5 text-sm text-slate-200 placeholder-slate-400 focus:outline-none focus:border-blue-500 w-full sm:w-64">
                 <div class="flex flex-wrap gap-1" id="filter-buttons">
                     <button class="filter-btn active px-3 py-1 rounded text-xs font-medium bg-slate-700 text-slate-300" data-filter="all">All</button>
-                    <button class="filter-btn px-3 py-1 rounded text-xs font-medium bg-slate-700 text-slate-300" data-filter="clean">No findings</button>
+                    <button class="filter-btn px-3 py-1 rounded text-xs font-medium bg-slate-700 text-slate-300" data-filter="clean">Clean</button>
                     <button class="filter-btn px-3 py-1 rounded text-xs font-medium bg-slate-700 text-slate-300" data-filter="unknown">No verdict</button>
                     <button class="filter-btn px-3 py-1 rounded text-xs font-medium bg-slate-700 text-slate-300" data-filter="look">Worth a closer look</button>
                     <button class="filter-btn px-3 py-1 rounded text-xs font-medium bg-slate-700 text-slate-300 border border-red-800/50" data-filter="confirmed">Confirmed</button>
@@ -733,7 +713,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                 <span id="result-count" class="text-xs text-slate-500 ml-auto"></span>
             </div>
             <div class="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 text-xs text-slate-500">
-                <span><span class="block block-safe"></span>no findings</span>
+                <span><span class="block block-safe"></span>clean</span>
                 <span><span class="block block-flagged"></span>flagged, unconfirmed</span>
                 <span><span class="block block-unsafe"></span>confirmed by a judge</span>
                 <span><span class="block block-inconclusive"></span>no verdict</span>
@@ -761,6 +741,31 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                 </thead>
                 <tbody id="package-table"></tbody>
             </table>
+        </div>
+
+        <!-- For the curious: what the labels mean, and what this costs. -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
+            <div class="bg-slate-800 rounded-lg p-4 border border-slate-700">
+                <h2 class="text-sm font-semibold text-slate-300 mb-3 uppercase tracking-wide">How to read this page</h2>
+                <p class="text-slate-400 text-sm leading-relaxed">
+                    These audits look for one thing: code injected into the AUR packaging of a
+                    package &mdash; in the <code>PKGBUILD</code>, an <code>.install</code> hook, or a patch.
+                    They do not rate the application itself.
+                </p>
+                <ul class="text-slate-400 text-sm leading-relaxed mt-3 space-y-1">
+                    <li><span class="result-safe font-semibold">Clean</span> &mdash; nothing found, or a flag a judge overturned.</li>
+                    <li><span class="text-slate-300 font-semibold">No verdict</span> &mdash; no model reached an answer either way. Missing information, not a suspicion.</li>
+                    <li><span class="text-yellow-500 font-semibold">Worth a closer look</span> &mdash; something flagged it and nothing has settled it. Usually a false positive about behaviour the application is supposed to have; not a claim that it is malicious.</li>
+                    <li><span class="result-unsafe font-semibold">Confirmed malicious</span> &mdash; two independent audits said unsafe and a judge agreed.</li>
+                </ul>
+                <p class="text-slate-500 text-xs mt-3">Open a package to see every report, the files each one flagged, and the lines it quoted.</p>
+            </div>
+            <div class="bg-slate-800 rounded-lg p-4 border border-slate-700">
+                <h2 class="text-sm font-semibold text-slate-300 mb-3 uppercase tracking-wide">Cost by model <span id="stat-cost" class="normal-case text-slate-500 font-normal"></span></h2>
+                <div class="h-56 flex items-center justify-center">
+                    <canvas id="model-chart"></canvas>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -805,7 +810,6 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         renderCharts();
         renderTable();
         setupEventListeners();
-        loadReview();
         // A shareable link to one package: #pkg=<name>.
         const m = /^#pkg=(.+)$/.exec(location.hash);
         if (m) {
@@ -815,46 +819,6 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 
     function shortModel(m) {
         return String(m).split('/').pop();
-    }
-
-    // What was read before these reports were published. Advisory text from a
-    // model that read attacker-influenced reports, so every field is escaped and
-    // nothing here feeds a package's state.
-    async function loadReview() {
-        let r;
-        try {
-            const resp = await fetch('_dashboard/review.json');
-            if (!resp.ok) return;
-            r = await resp.json();
-        } catch (e) {
-            return;
-        }
-        if (!r || typeof r !== 'object') return;
-        const llm = r.llm || {};
-        const when = String(r.published_at || '').split('T')[0];
-        const head = String(r.head || '').slice(0, 10);
-        const box = document.getElementById('review');
-        const read = document.getElementById('review-read');
-        const found = document.getElementById('review-found');
-
-        let intro = `Published ${escapeHtml(when)} from commit <code class="text-slate-400">${escapeHtml(head)}</code>: `
-            + `${Number(r.audit_reports) || 0} audit report(s) and ${Number(r.judge_reports) || 0} judge report(s) `
-            + `across ${Number(r.packages) || 0} package(s). A code check confirmed every published file is inert data.`;
-        read.innerHTML = intro;
-
-        if (llm.status === 'ok' || llm.status === 'partial') {
-            let s = `Before that, ${escapeHtml(shortModel(llm.model || 'a model'))} read ${Number(llm.read) || 0} of the `
-                + `${Number(llm.of) || 0} generated text(s) in the sweep, for one thing only: a leaked private `
-                + `detail of the operator (a credential, an internal hostname, a path on the machine that ran the audit). `
-                + `Anything it finds is handled before publishing and is not listed here.`;
-            if (llm.status === 'partial') s += ' Part of that read did not complete.';
-            found.textContent = s;
-        } else if (llm.status === 'error') {
-            found.textContent = 'The model’s pre-publish read did not complete; the code check alone stood.';
-        } else {
-            found.textContent = 'No model read the reports this time; the code check alone stood.';
-        }
-        box.classList.remove('hidden');
     }
 
     // A headline count that filters the table to exactly the packages it counts.
@@ -916,23 +880,18 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         // Older data.json (before this field existed) has no week block.
         if (!wk) { activity.style.display = 'none'; return; }
 
-        // Only "confirmed" -- audits agreed unsafe AND the judge agreed -- is
-        // shown in red. A single model's "unsafe" is usually a false positive on
-        // a package that merely looks alarming, so it is counted plainly as
-        // something to look at, never coloured as an accusation.
         const p = wk.packages || {};
         const confirmed = Number(p.confirmed || 0);
-        // data.json is written by the audit stage and the page by the publish
-        // stage, so a page can be newer than the data it reads. Without the new
-        // keys every count would render as a confident zero, which is worse than
-        // saying nothing: show the totals and leave the breakdown out.
+        // data.json can be older than the page. Without the new keys every
+        // count would render as a confident zero, which is worse than saying
+        // nothing: show the totals and leave the breakdown out.
         const counted = Object.prototype.hasOwnProperty.call(p, 'confirmed');
         document.getElementById('activity-packages').innerHTML =
             '<span class="text-2xl font-bold text-white">' + Number(p.updated || 0).toLocaleString() + '</span>' +
-            ' packages audited in the past week ' +
-            '<span class="text-slate-400 text-base">(' + Number(p.new || 0) + ' new)</span>' +
+            ' packages audited' +
+            '<span class="text-slate-400 text-base"> (' + Number(p.new || 0) + ' new)</span>' +
             (!counted ? '' :
-            '<br><span class="text-base">' +
+            '<br><span class="text-sm">' +
             countLink('clean', Number(p.green || 0) + ' clean', 'result-safe font-semibold') +
             '<span class="text-slate-500"> &middot; </span>' +
             countLink('unknown', Number(p.unknown || 0) + ' no verdict', 'text-slate-400') +
@@ -940,34 +899,34 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             countLink('look', Number(p.look || 0) + ' worth a closer look', 'text-slate-300') +
             '<span class="text-slate-500"> &middot; </span>' +
             (confirmed
-                ? countLink('confirmed', confirmed + ' confirmed', 'result-unsafe font-semibold')
+                ? countLink('confirmed', confirmed + ' confirmed malicious', 'result-unsafe font-semibold')
                 : '<span class="result-safe font-semibold">none confirmed malicious</span>') +
             '</span>');
 
         const parts = Object.entries(wk.by_model || {}).slice(0, 6)
             .map(([m, c]) => escapeHtml(shortModel(m)) + ' (' + Number(c) + ')');
         document.getElementById('activity-audits').innerHTML =
-            Number(wk.audits_total || 0).toLocaleString() + ' security audits' +
+            Number(wk.audits_total || 0).toLocaleString() + ' audits' +
             (parts.length ? ' by ' + joinNicely(parts) : '');
 
-        // One chip per package, coloured by its settled state. Per audit, a
-        // package the models disagreed about showed twice -- green and red --
-        // which reads as a finding when it is only a disagreement.
-        // "Worth a closer look" is drawn hollow, not filled. A solid amber dot
-        // beside a package name reads as a warning about that package; an
-        // outline reads as what it is -- noted, nothing concluded.
-        const DOT = {confirmed: 'block-unsafe', look: 'block-look',
-                     clean: 'block-safe', unknown: 'block-skipped'};
-        const WHAT = {confirmed: 'audits and judge agree: unsafe',
-                      look: 'flagged by a model; not confirmed',
-                      clean: 'no findings', unknown: 'no verdict reached'};
-        document.getElementById('activity-recent').innerHTML = rec.map(r => {
+        // Only the packages worth a reader's attention get a chip: a list of
+        // every clean package this week is the table, repeated. A "look" chip
+        // is drawn hollow, because a solid amber dot beside a name reads as a
+        // warning about the package rather than what it is: noted, nothing
+        // concluded.
+        const DOT = {confirmed: 'block-unsafe', look: 'block-look'};
+        const WHAT = {confirmed: 'two audits and a judge agree: unsafe',
+                      look: 'flagged by a model; not confirmed'};
+        const flagged = rec.filter(r => DOT[r.state]).slice(0, 24);
+        const label = document.getElementById('activity-recent-label');
+        label.classList.toggle('hidden', flagged.length === 0);
+        label.textContent = flagged.length ? 'Flagged this week:' : '';
+        document.getElementById('activity-recent').innerHTML = flagged.map(r => {
             const d = String(r.date || '').split('T')[0];
-            const st = DOT[r.state] ? r.state : 'unknown';
             return '<span class="chip inline-flex items-center gap-1.5 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs" ' +
                 'data-pkg="' + escapeAttr(r.package || '') + '" ' +
-                'title="' + escapeAttr((WHAT[st] || '') + ' • ' + (r.date || '') + ' — open this package') + '">' +
-                '<span class="block ' + DOT[st] + '" style="margin-right:0"></span>' +
+                'title="' + escapeAttr(WHAT[r.state] + ' • ' + (r.date || '') + ' — open this package') + '">' +
+                '<span class="block ' + DOT[r.state] + '" style="margin-right:0"></span>' +
                 '<span class="text-blue-300">' + escapeHtml(r.package || '') + '</span>' +
                 '<span class="text-slate-500">' + escapeHtml(d) + '</span>' +
                 '</span>';
@@ -978,25 +937,31 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         const s = DATA.summary;
         document.getElementById('stat-packages').textContent = s.packages_audited.toLocaleString();
         document.getElementById('stat-reports').textContent = s.total_reports.toLocaleString();
-        document.getElementById('stat-cost').textContent = '$' + s.total_cost.toFixed(2);
-        document.getElementById('generated-at').textContent = 'Generated: ' + (DATA.generated_at || 'unknown');
+        document.getElementById('stat-cost').textContent = '$' + s.total_cost.toFixed(2) + ' all time';
+        document.getElementById('generated-at').textContent = 'Updated ' + String(DATA.generated_at || 'unknown').split('T')[0];
 
-        let attention = 0;
+        // The same rule as the table and the chart, so the number a reader
+        // taps is the number of rows they get.
+        let confirmed = 0, look = 0;
         for (const pkg of Object.values(DATA.packages)) {
-            if (pkg.audit_majority === 'unsafe' && pkg.judge_majority === 'unsafe') attention++;
+            const st = packageState(pkg);
+            if (st === 'confirmed') confirmed++;
+            if (st === 'look') look++;
         }
-        document.getElementById('stat-attention').textContent = attention.toLocaleString();
+        const c = document.getElementById('stat-confirmed');
+        c.innerHTML = countLink('confirmed', confirmed.toLocaleString(), confirmed ? 'result-unsafe' : 'result-safe');
+        document.getElementById('stat-look').innerHTML = countLink('look', look.toLocaleString(), look ? 'text-yellow-500' : 'text-slate-300');
     }
 
     function renderCharts() {
         const s = DATA.summary;
 
-        // Packages, after the judge. Charting the raw per-report results would
+        // Verdicts per package, after the judge. Charting the raw per-report results would
         // put verdicts the judge overturned into a headline figure; a package
         // the judge cleared is simply clean here, and the audit that called it
         // unsafe stays visible in its own row.
-        const STATE_LABEL = {clean: 'No findings', look: 'Worth a closer look',
-                             confirmed: 'Confirmed', unknown: 'No verdict reached'};
+        const STATE_LABEL = {clean: 'Clean', look: 'Worth a closer look',
+                             confirmed: 'Confirmed malicious', unknown: 'No verdict'};
         const STATE_COLOR = {clean: '#22c55e', look: '#f59e0b',
                              confirmed: '#ef4444', unknown: '#64748b'};
         const states = s.package_states
@@ -1019,7 +984,9 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                 maintainAspectRatio: false,
                 plugins: {
                     legend: {
-                        position: 'right',
+                        // Beside the ring where there is room; under it on a phone,
+                        // where beside it the labels were cut mid-word.
+                        position: window.innerWidth < 640 ? 'bottom' : 'right',
                         labels: { color: '#94a3b8', font: { family: "'Courier New', monospace", size: 11 } },
                     },
                 },
@@ -1412,9 +1379,10 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             renderTable();
         });
 
-        // The activity panel: a headline count filters the table, a package chip
-        // opens that package. Delegated, because the panel is re-rendered.
-        document.getElementById('activity').addEventListener('click', e => {
+        // A headline count anywhere on the page filters the table, and a
+        // package chip opens that package. Delegated, because the panels are
+        // re-rendered.
+        document.addEventListener('click', e => {
             const link = e.target.closest('.count-link');
             if (link) { applyFilter(link.dataset.filter); return; }
             const chip = e.target.closest('.chip');
