@@ -845,16 +845,31 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             let s = `${escapeHtml(shortModel(llm.model || 'a model'))} then read ${Number(llm.read) || 0} of the `
                 + `${Number(llm.of) || 0} report(s) that reached an unclear verdict, looking only at the reports' own `
                 + `wording: text aimed at the reader, a secret of the operator, a broken report, abusive text.`;
-            const n = (llm.concerns || []).length;
-            s += n === 0 ? ' It raised nothing.' : ` It raised ${n} note(s).`;
+            // A note about a package an audit flagged and a judge then cleared is,
+            // on this corpus, the reviewer repeating the audit's overturned
+            // accusation ("fictitious CVE patches ... likely injecting backdoors").
+            // The judge's answer stands on this page, so the note's text is not
+            // repeated under the package's name; the count still says it was raised.
+            const all = Array.isArray(llm.concerns) ? llm.concerns : [];
+            const overturned = c => {
+                const p = DATA.packages && DATA.packages[String(c.package || '')];
+                return !!p && p.judge_majority === 'safe'
+                    && (p.audit_majority === 'unsafe' || p.audit_majority === 'contested');
+            };
+            const shown = all.filter(c => !overturned(c));
+            const hidden = all.length - shown.length;
+            s += all.length === 0 ? ' It raised nothing.' : ` It raised ${all.length} note(s).`;
+            if (hidden > 0) {
+                s += ` ${hidden} of those repeat${hidden === 1 ? 's' : ''} an audit finding a judge has since overturned, so the package is listed as clean and the note is not shown.`;
+            }
             if (Number(llm.dismissed) > 0) {
                 s += ` ${Number(llm.dismissed)} more, about the reviewer’s own trimming of long reports, were set aside.`;
             }
             if (llm.status === 'partial') s += ' Part of the read did not complete.';
             found.textContent = s;
-            if (n > 0) {
+            if (shown.length > 0) {
                 const list = document.getElementById('review-list');
-                list.innerHTML = (llm.concerns || []).map(c => {
+                list.innerHTML = shown.map(c => {
                     const kind = REVIEW_KINDS[String(c.kind || '').trim()] || String(c.kind || '');
                     return `<li><span class="text-slate-300">${escapeHtml(c.package || '?')}</span>`
                         + ` <span class="text-slate-500">(${escapeHtml(kind)})</span> &mdash; ${escapeHtml(c.detail || '')}</li>`;
