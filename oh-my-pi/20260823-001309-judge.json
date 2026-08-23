@@ -1,0 +1,32 @@
+{
+  "package": "oh-my-pi",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The flagged script (tune-kata-runtime.sh) is a CI infrastructure tool not executed during AUR build/install. PKGBUILD and build-related files show no malicious behavior.",
+  "disagreement_analysis": "qwen incorrectly flagged infra/tune-kata-runtime.sh as unsafe despite it being irrelevant to AUR packaging, while deepseek correctly contextualized it as CI tooling.",
+  "coverage_issues": [
+    "Both models missed reviewing src/oh-my-pi/bazel/patches/audiopus-sys-libdir.patch (only deepseek caught it)",
+    "Models prioritized TypeScript application code over build scripts"
+  ],
+  "false_positives": [
+    "qwen's tune-kata-runtime.sh verdict: CI script incorrectly flagged despite no execution during makepkg"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Improve file prioritization: Weight PKGBUILD-called scripts higher than unrelated infra/CI files",
+    "Enhance context awareness: Explicitly remind models that CI scripts are out-of-scope unless PKGBUILD-referenced",
+    "Reduce false positives: Train models to distinguish between build-executed vs development-only scripts"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 13516,
+    "completion_tokens": 1556,
+    "cost": 0.0133512
+  },
+  "audits_judged": [
+    "20260822-231859-qwen-qwen3-235b-a22b-2507.md",
+    "20260822-231919-deepseek-deepseek-v4-flash.md"
+  ]
+}
