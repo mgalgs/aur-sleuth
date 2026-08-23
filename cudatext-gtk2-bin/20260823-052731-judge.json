@@ -1,0 +1,31 @@
+{
+  "package": "cudatext-gtk2-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Both models correctly identified the PKGBUILD as safe: pinned checksum, standard extraction of prebuilt binaries, no malicious commands or network risks. Binary payload auditing is out-of-scope for AUR security reviews.",
+  "disagreement_analysis": null,
+  "coverage_issues": [
+    "Both models skipped the .deb binary and its internal archives (data.tar.zst). While expected for binary packages, this leaves the actual executable unaudited."
+  ],
+  "false_positives": [],
+  "false_negatives": [
+    "Potential risk in upstream binary (e.g., compromised build) was missed due to skipped binary analysis. Models didn't flag that binaries bypass source-level scrutiny."
+  ],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Prioritize PKGBUILD/.install scripts over binaries. For -bin packages, explicitly state in reports that payload safety relies on upstream trust.",
+    "Improve handling of archives: Consider prompting models to note if binaries contain executable scripts (e.g., .desktop files) even when skipping binaries.",
+    "Add warning when packages install precompiled binaries to highlight inherent trust assumptions."
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 3310,
+    "completion_tokens": 1320,
+    "cost": 0.0056170000000000005
+  },
+  "audits_judged": [
+    "20260823-045806-qwen-qwen3-235b-a22b-2507.md",
+    "20260823-045810-deepseek-deepseek-v4-flash.md"
+  ]
+}
