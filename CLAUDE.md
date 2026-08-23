@@ -129,6 +129,10 @@ reason to do?
   re-audit → dashboard → push. Feeds the dashboard at mgalgs.io/aur-sleuth.
 - `bench/run-synthetic-tests.sh` — regression tests. Run after every prompt change.
 - `bench/synthetics/` — hand-written benign and malicious fixtures.
+- `bench/benchmark.sh` — scores candidate models against the verdicts settled on the
+  branch (synthetics first, then a stratified sample of real packages). Writes only
+  under `$DATA_DIR/bench/`, never to the branch. `bench/test-benchmark.sh` covers the
+  scoring offline. The ops UI runs it as the `benchmark` container stage.
 - `.claude/skills/self-improve/` — the audit-review-improve loop.
 
 ## Verifying a change
