@@ -1,0 +1,35 @@
+{
+  "package": "ruffle-demo-nightly",
+  "correct_verdict": "inconclusive",
+  "confidence": "high",
+  "reasoning": "Both models skipped the only file they attempted to review (PKGBUILD), classifying it as a 'binary file' and aborting the audit. No files were actually reviewed by either model. This is a tooling/file-detection bug, not a genuine safety determination. The PKGBUILD almost certainly is a normal text file that was misidentified as binary (likely due to encoding detection heuristics flagging non-ASCII content or a false binary-detection trigger). Since zero content was analyzed, no safety verdict can be reached.",
+  "disagreement_analysis": "There is no disagreement \u2014 both models reached identical outcomes (skipped) for the identical reason (PKGBUILD misdetected as binary). The common failure points to a shared upstream tooling issue in the binary-file detection logic, not model-specific reasoning.",
+  "coverage_issues": [
+    "PKGBUILD was never reviewed \u2014 it was incorrectly flagged as a binary file and skipped, aborting the entire audit before any analysis.",
+    "No other package files (e.g., .install hooks, .SRCINFO, auxiliary scripts) were enumerated or reviewed because the initial PKGBUILD gate failed."
+  ],
+  "false_positives": [
+    "The 'binary file' classification of PKGBUILD is almost certainly a false positive from the file-type detection heuristic; AUR PKGBUILDs are shell scripts (text), not binaries."
+  ],
+  "false_negatives": [
+    "Unable to assess \u2014 since the PKGBUILD was never read, any genuine risks (source URLs, build/package functions, install hooks pulling nightly binaries) are entirely unevaluated. A 'ruffle-demo-nightly' package by nature fetches nightly build artifacts, which warrants scrutiny of download sources and checksum handling."
+  ],
+  "re_audit_recommended": true,
+  "re_audit_focus": [
+    "PKGBUILD \u2014 force text-mode reading and analyze source/download URLs, sha sums, build()/package()/prepare() functions",
+    "Any .install hooks and .SRCINFO",
+    "Verify nightly artifact download source legitimacy and integrity (skip-checksum patterns common in -nightly packages)"
+  ],
+  "learnings": [
+    "The binary-file detection heuristic is over-aggressive and misclassifies text PKGBUILDs; PKGBUILD should be whitelisted as a text file or detection should fall back to attempting UTF-8/Latin-1 decode before declaring binary.",
+    "When the initial PKGBUILD gate fails due to a skip (not a security finding), the result should be clearly distinguished as a 'tooling error / needs manual review' rather than implying any safety assessment.",
+    "A failed initial PKGBUILD read should not silently abort enumeration of the rest of the package; at minimum the tool should list remaining files so a human knows what is unreviewed.",
+    "Identical skip outcomes across multiple independent models is a strong signal of a deterministic tooling bug rather than a content-driven decision \u2014 such cases should auto-flag for re-audit with corrected file handling."
+  ],
+  "_judge_usage": {
+    "model": "anthropic/claude-opus-4.8",
+    "prompt_tokens": 2903,
+    "completion_tokens": 1100,
+    "cost": 0.042015000000000004
+  }
+}

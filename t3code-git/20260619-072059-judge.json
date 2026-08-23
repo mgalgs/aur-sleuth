@@ -1,0 +1,27 @@
+{
+  "package": "t3code-git",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The disagreement hinges entirely on alchemy.sh, which both models found to contain a hardcoded developer path (/Users/samgoodwin/workspaces/...). This is a vendored upstream source file deep within the project tree (src/t3code/.repos/alchemy-effect/packages/alchemy/bin/alchemy.sh) and is NOT referenced by any PKGBUILD function or .install hook. The PKGBUILD builds via 'pnpm run dist:desktop:linux' and packages an extracted AppImage \u2014 alchemy.sh is never executed during makepkg build/package/install. A hardcoded absolute macOS path that won't exist on the target system is a packaging/developer artifact, not a supply-chain attack. The qwen model's UNSAFE verdict is a false positive based on speculative 'what if this ran with elevated privileges' reasoning that does not apply to the actual build flow. The deepseek model correctly classified it as a benign packaging error. All other reviewed files (AWS infra TypeScript, CLI launchers, package.json) are legitimate application code with no malicious indicators.",
+  "disagreement_analysis": "qwen3-235b flagged alchemy.sh as UNSAFE due to hardcoded developer paths, escalating it to a 'supply-chain risk' with hypothetical privilege-escalation framing. deepseek-v4-flash reviewed the same file and correctly judged it a non-malicious packaging error. The verdict split is purely over how to weight a benign dev-machine path artifact in a vendored, non-executed source file. qwen applied an overly cautious heuristic without verifying whether the file is actually in the makepkg execution path.",
+  "coverage_issues": [],
+  "false_positives": [
+    "alchemy.sh 'hardcoded dev paths pose supply-chain risks' (qwen) \u2014 the file is vendored upstream source not referenced by PKGBUILD build/package/prepare/check or any .install hook; the hardcoded macOS path is a benign developer artifact that never executes during packaging. The privilege-escalation framing is purely speculative."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Reinforce in the prompt that the threat model for AUR packages is what executes during makepkg (build/prepare/package/check functions and .install scripts). Files in the vendored source tree that are not invoked by these are NOT a concern even if they contain odd artifacts.",
+    "Add explicit guidance distinguishing 'packaging error / developer artifact' (hardcoded local paths, broken paths) from 'malicious behavior'. A path that simply won't resolve on the target is a functionality bug, not a security threat.",
+    "Models should trace whether a flagged file is reachable from the PKGBUILD execution graph before escalating to UNSAFE. Both models correctly identified the AppImage-extraction build flow in the PKGBUILD but qwen failed to connect that alchemy.sh is irrelevant to it.",
+    "Calibrate against speculative escalation language ('if this ran with elevated privileges', 'if an attacker could influence'). Such conditional reasoning should not drive an UNSAFE verdict absent an actual execution path.",
+    "File selection was good \u2014 both models prioritized scripts (.sh, .js) and source with credential/network access (AuthProvider.ts, AWS modules). The selection heuristic is working well; the issue is verdict calibration, not coverage."
+  ],
+  "_judge_usage": {
+    "model": "anthropic/claude-opus-4.8",
+    "prompt_tokens": 24974,
+    "completion_tokens": 1228,
+    "cost": 0.15557
+  }
+}

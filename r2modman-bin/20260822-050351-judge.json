@@ -1,0 +1,36 @@
+{
+  "package": "r2modman-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Both models correctly identified the PKGBUILD as safe: it fetches prebuilt binaries from official GitHub releases with verified checksums, contains no dangerous operations during build/install, and follows standard AUR practices. The LICENSE file is benign. No evidence of malicious code in packaging.",
+  "disagreement_analysis": null,
+  "coverage_issues": [
+    "Critical gap: Neither model reviewed the .INSTALL file (detected in unauditable files), which may contain install hooks executed during package installation.",
+    "Models skipped 81 unauditable files (including payload binaries) without attempting extraction or heuristic analysis."
+  ],
+  "false_positives": [],
+  "false_negatives": [
+    "Potential risk in .INSTALL hooks: Models missed auditing install scripts that execute during 'pacman' operations (e.g., post_install).",
+    "Binary payload: Precompiled .pacman file wasn't scanned for embedded scripts/executables."
+  ],
+  "re_audit_recommended": true,
+  "re_audit_focus": [
+    ".INSTALL file for install hooks",
+    "Extracted contents of r2modman-*.pacman for hidden scripts"
+  ],
+  "learnings": [
+    "File selection: Prioritize install hooks (.INSTALL) and payload extraction for binary packages. Treat archived files as auditable if they contain scripts.",
+    "Prompt improvement: Explicitly require models to flag unaudited install hooks and binary payloads as potential risks.",
+    "Common failure: Models overlook nested executable content in archives. Add payload extraction step for packages with prebuilt binaries."
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 3189,
+    "completion_tokens": 2347,
+    "cost": 0.0080998
+  },
+  "audits_judged": [
+    "20260822-034323-qwen-qwen3-235b-a22b-2507.md",
+    "20260822-034326-deepseek-deepseek-v4-flash.md"
+  ]
+}

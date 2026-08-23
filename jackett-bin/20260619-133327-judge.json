@@ -1,0 +1,31 @@
+{
+  "package": "jackett-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The unsafe verdict was based on misinterpreted risks: 1) Template syntax in indexer YAML files is normal Jackett functionality, not injection risk. 2) The install_service_systemd.sh isn't executed during makepkg and is upstream code. PKGBUILD uses pinned checksums and safe practices.",
+  "disagreement_analysis": "Qwen overreacted to standard patterns: interpreted Go templates in indexer configs as injection risks and flagged install_service_systemd.sh despite it not being executed during package build.",
+  "coverage_issues": [
+    "Both models missed reviewing jackett.sysusers",
+    "Qwen skipped all JavaScript files reviewed by DeepSeek",
+    "Neither reviewed .SRCINFO for metadata accuracy"
+  ],
+  "false_positives": [
+    "0magnet.yml: Flagged Go template syntax as injection risk (normal Jackett config feature)",
+    "install_service_systemd.sh: Incorrectly treated as build-time risk (not executed by PKGBUILD)"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Prioritize files executed during makepkg (PKGBUILD, install hooks) over runtime configs",
+    "Improve model training on AUR-specific risks: distinguish build-time vs runtime execution contexts",
+    "Add heuristics to ignore templating in known config formats",
+    "Require explicit justification when flagging upstream-maintained scripts"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 12738,
+    "completion_tokens": 1971,
+    "cost": 0.013844100000000002
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "package": "linux-xanmod",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Both audits confirm the PKGBUILD and helper scripts use trusted sources (kernel.org/Xanmod) with PGP verification, contain no malicious patterns (no network calls, data exfiltration, or unsafe command execution), and follow standard kernel packaging practices. Qwen's expanded review of kernel build scripts found no risks.",
+  "disagreement_analysis": null,
+  "coverage_issues": [
+    "deepseek failed to review critical build scripts (e.g., gen_kheaders.sh, install.sh) due to selecting non-existent files. Qwen covered 12 files including kernel build utilities.",
+    "Neither reviewed .install hooks (none present) or modprobed.db handling (optional user feature in PKGBUILD)."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "File selection: Prioritize AUR-provided scripts (PKGBUILD, *.sh, *.install) over kernel source files. Kernel build scripts are lower risk unless modified by PKGBUILD.",
+    "Validation: Add existence checks for model-selected files before review to avoid wasted capacity on non-existent paths.",
+    "Prompt guidance: Emphasize that kernel source scripts are typically safe unless PKGBUILD modifies/executes them unsafely.",
+    "Failure mode: Models confuse kernel source paths; improve context about typical Linux source structure."
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 10264,
+    "completion_tokens": 1945,
+    "cost": 0.0120473
+  }
+}

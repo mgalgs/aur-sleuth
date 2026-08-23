@@ -1,0 +1,37 @@
+{
+  "package": "pane-bin",
+  "correct_verdict": "inconclusive",
+  "confidence": "medium",
+  "reasoning": "Both models correctly assessed PKGBUILD as safe, but skipped critical AppImage binary analysis. The executable binary contains the actual runtime code and must be analyzed for supply-chain risks.",
+  "disagreement_analysis": null,
+  "coverage_issues": [
+    "Critical gap: Both models skipped Pane-2.3.8-linux-x86_64.AppImage - the main executable containing all runtime logic",
+    "No analysis of extracted squashfs-root contents during prepare() which executes during full build"
+  ],
+  "false_positives": [],
+  "false_negatives": [
+    "Missed binary analysis: AppImage could contain malicious payloads, hidden executables, or unexpected network/filesystem access",
+    "No validation of desktop file/icon installation paths for potential hijacking"
+  ],
+  "re_audit_recommended": true,
+  "re_audit_focus": [
+    "Pane-2.3.8-linux-x86_64.AppImage (via strings/binwalk analysis)",
+    "Extracted squashfs-root contents from prepare() step"
+  ],
+  "learnings": [
+    "File selection: Must prioritize executable binaries over config files. Implement binary analysis (strings extraction, entropy checks) for AppImages/ELF",
+    "Prompt quality: Models should be instructed to flag skipped executables as audit failures, not just informational skips",
+    "Failure mode: Binary skipping creates false negatives. Audit tools need binary analysis capabilities for AUR packages",
+    "Coverage enhancement: Audit should simulate prepare()/build() extraction to review unpacked contents"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 3591,
+    "completion_tokens": 1089,
+    "cost": 0.0052362
+  },
+  "reaudit_date": "2026-06-19T17:02:38Z",
+  "reaudit_model": "anthropic/claude-sonnet-4.6",
+  "reaudit_result": "safe",
+  "reaudit_report": "pane-bin/20260619-170238-anthropic-claude-sonnet-4.6.md"
+}

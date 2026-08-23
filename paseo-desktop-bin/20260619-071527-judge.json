@@ -1,0 +1,29 @@
+{
+  "package": "paseo-desktop-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "This is a binary package that extracts an upstream .deb from the project's official GitHub releases with a pinned SHA256 checksum. The PKGBUILD, postinst, and postrm scripts perform only standard packaging operations (update-alternatives symlinks, chrome-sandbox permissions, MIME/desktop cache refresh, AppArmor profile install/removal). None of the contents bundled inside the .deb (the .zshenv, paseo-integration.zsh, Electron launcher, node-pty scripts, node-entrypoint-runner.js) execute during makepkg build/install \u2014 they are application runtime files that only run when the user actively launches Paseo and opts into its terminal shell integration. The qwen UNSAFE verdict flagged the bundled .zshenv for 'unconditional sourcing of untrusted shell scripts,' but this is normal terminal-integration behavior (identical pattern to VS Code, iTerm2, etc.): the .zshenv sources the user's own config and the package's own integration script from the script's own resolved directory. This file is part of the application payload and is only invoked when the app sets up a shell with ZDOTDIR pointing at it \u2014 it is not part of the makepkg attack surface.",
+  "disagreement_analysis": "The disagreement stems entirely from qwen3 marking the bundled .zshenv shell-integration file as UNSAFE. qwen reasoned that sourcing user/package shell scripts in a global init file enables 'arbitrary code execution' and 'supply-chain risk.' This is a false positive: the file is application runtime content inside the extracted .deb, not executed during package build/install, and the sourcing of the package's own integration script is the standard mechanism every terminal-app shell integration uses. deepseek correctly classified the same file as SAFE.",
+  "coverage_issues": [
+    "Both models skipped the .deb binary itself (Paseo-0.1.97-amd64.deb), which is expected and acceptable since it is a binary blob \u2014 the real payload cannot be meaningfully audited as text, but it is checksum-pinned to the official upstream release.",
+    "deepseek did not review src/control or the node-pty scripts (post-install.js, prebuild.js) that qwen reviewed; qwen did not review the apparmor-profile or app-dist/manifest.json that deepseek reviewed. Neither gap is material since none of these execute during makepkg."
+  ],
+  "false_positives": [
+    "qwen3's UNSAFE verdict on .zshenv: the file is a standard terminal shell-integration script bundled in the app payload that does NOT run during makepkg build/install. Sourcing the package's own integration script and the user's existing config is normal, expected behavior identical to mainstream terminal integrations (VS Code, iTerm2). The 'untrusted script' framing is incorrect \u2014 the script is the package's own content."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "The audit prompt should reinforce that for -bin packages, files extracted from a binary archive into the package tree are application RUNTIME content and are NOT part of the makepkg execution surface unless referenced by PKGBUILD build/package/prepare functions or .install hooks. Only postinst/postrm/.install and PKGBUILD functions execute at install/build time.",
+    "Models repeatedly over-flag shell integration scripts (.zshenv, *-integration.zsh) that source user dotfiles or sibling package files. The tool should include guidance that terminal shell-integration sourcing is a well-established benign pattern, distinguishing it from genuine attack vectors (e.g., sourcing from /tmp, network-fetched content, or files writable by other users).",
+    "qwen3 conflated 'theoretical post-installation tampering' (an attacker replacing the file later) with actual package risk. The prompt should clarify that hypothetical post-install tampering of package-owned files is out of scope \u2014 every installed binary is subject to that, and it is not a supply-chain finding for the package as shipped.",
+    "File selection was reasonable in both runs; the divergence was purely in risk interpretation of the same file, suggesting the higher-value improvement is assessment-quality/prompt guidance rather than file-selection logic."
+  ],
+  "_judge_usage": {
+    "model": "anthropic/claude-opus-4.8",
+    "prompt_tokens": 22573,
+    "completion_tokens": 1485,
+    "cost": 0.14999
+  }
+}

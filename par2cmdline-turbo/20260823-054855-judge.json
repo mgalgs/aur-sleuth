@@ -1,0 +1,36 @@
+{
+  "package": "par2cmdline-turbo",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The flagged issue in sign-release.sh is a development/maintainer script not executed during makepkg. PKGBUILD and build scripts show no malicious behavior during package build/installation.",
+  "disagreement_analysis": "qwen over-prioritized sign-release.sh (maintainer script) as a security risk, while deepseek correctly assessed it as non-executable during AUR build",
+  "coverage_issues": [
+    "qwen failed to review any source code files (e.g., controller.cpp), focusing only on build scripts",
+    "Both models skipped binary test files (21 unauditable files), though this is expected"
+  ],
+  "false_positives": [
+    "sign-release.sh command injection (qwen): False positive - script not referenced in PKGBUILD and doesn't execute during makepkg"
+  ],
+  "false_negatives": [
+    "deepseek missed command injection in sign-release.sh (though low risk as not executed)",
+    "Neither model reviewed network/filesystem operations in source code (e.g., par2.cpp)"
+  ],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Improve file prioritization: Weight PKGBUILD-called scripts higher than maintainer/CI scripts",
+    "Enhance prompt clarity: Explicitly state that non-build scripts (release/CI) are low-risk unless PKGBUILD-referenced",
+    "Add source code analysis heuristic: Prioritize files with network/filesystem syscalls during selection",
+    "Implement vulnerability context scoring: Downweight findings in non-build scripts during final verdict"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 12836,
+    "completion_tokens": 2029,
+    "cost": 0.0140577
+  },
+  "audits_judged": [
+    "20260823-033451-qwen-qwen3-235b-a22b-2507.md",
+    "20260823-033531-deepseek-deepseek-v4-flash.md"
+  ]
+}

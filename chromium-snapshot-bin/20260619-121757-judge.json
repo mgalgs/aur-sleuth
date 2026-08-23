@@ -1,0 +1,28 @@
+{
+  "package": "chromium-snapshot-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The qwen model flagged the PKGBUILD as unsafe solely because of a top-level `curl` to commondatastorage.googleapis.com used to fetch the latest Chromium snapshot build number. This is a well-established, legitimate pattern for snapshot/VCS-style AUR packages. The endpoint is Google's official Chromium snapshot storage over HTTPS, the resulting value only constructs download URLs (which are then handled by makepkg's source mechanism), and there is no code execution, obfuscation, or exfiltration. The deepseek model reviewed all 13 relevant files including PKGBUILD, the .install script, both wrapper scripts, and the desktop entry \u2014 finding nothing malicious. The qwen verdict is a false positive driven by an overly conservative heuristic against any top-level network call. There is no actual maintainer-introduced malicious behavior; the package merely tracks an upstream binary, which carries the normal supply-chain trust assumption inherent to all -bin packages, not a specific vulnerability.",
+  "disagreement_analysis": "The disagreement stems entirely from interpretation of the top-level `curl` in PKGBUILD. qwen treated 'network call at PKGBUILD parse time' as inherently dangerous and stopped its audit immediately (only 1 file reviewed, 429 completion tokens). deepseek correctly contextualized it as standard practice for Chromium snapshot packaging and proceeded with a full 13-file review. Note the two reports also audited slightly different pkgvers (151.0.7901 vs 151.0.7872), but this does not affect the verdict since both reference the same PKGBUILD logic.",
+  "coverage_issues": [
+    "qwen aborted after reviewing only the PKGBUILD due to its early-exit on the curl finding, so it never examined the .install script, wrapper scripts, or desktop file \u2014 though in this case the PKGBUILD was correctly the gating file and contained no actual threat."
+  ],
+  "false_positives": [
+    "qwen: 'Top-level curl risks supply-chain attack' \u2014 fetching a build number from Google's official HTTPS Chromium snapshot bucket is the standard, expected mechanism for this class of package; the value only parameterizes source URLs and introduces no code execution or unverified payload beyond the inherent trust of any -bin package."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "The audit tool should treat top-level `curl`/`wget` that merely fetches a version/build identifier from a known-trusted upstream over HTTPS (used to construct source URLs) as a LOW-severity informational note, not an automatic UNSAFE verdict \u2014 especially for snapshot/-bin packages where this is idiomatic.",
+    "An early-exit on the initial PKGBUILD gate should distinguish 'arbitrary code execution / data exfiltration' (true blocker) from 'benign network metadata fetch' (proceed with audit). qwen's gate logic is too coarse and prevented full coverage.",
+    "Provide models with reference context that for -bin packages tracking upstream binaries, the 'supply-chain risk' is the upstream trust assumption itself, which is expected and not maintainer-introduced malice; reports should not escalate this to UNSAFE without evidence of tampering or a non-official endpoint.",
+    "Consider normalizing the pkgver/snapshot across model runs so disagreements reflect genuine analysis differences rather than transient upstream version differences."
+  ],
+  "_judge_usage": {
+    "model": "anthropic/claude-opus-4.8",
+    "prompt_tokens": 14501,
+    "completion_tokens": 1247,
+    "cost": 0.10368
+  }
+}

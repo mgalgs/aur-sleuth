@@ -1,0 +1,28 @@
+{
+  "package": "late-sh-cli",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD fetches source from the upstream GitHub repo at a pinned tag and builds a Rust project with cargo. The PKGBUILD functions (prepare/build/package) only run cargo fetch/build and install the resulting binary \u2014 none of them invoke the infra shell scripts (setup_app.sh, setup_rke2.sh) or fetch_mp3s.py. Those scripts are part of the upstream project's deployment tooling and are never executed during makepkg. For AUR safety, the only thing that matters is what executes during build/install. qwen flagged setup_rke2.sh and setup_app.sh as 'unsafe', but these are operator-run infrastructure scripts intended for deploying the maintainer's own service \u2014 they configure SSH ports, install RKE2, and store the operator's own credentials in their own GitHub repo's secrets. This is legitimate infra-as-code, not malware, and crucially is out of scope for the package build. deepseek correctly concluded safe.",
+  "disagreement_analysis": "The disagreement stems entirely from qwen treating in-tree deployment/infra scripts as if they were part of the package's executed code. qwen labeled setup_rke2.sh and setup_app.sh as 'unsafe' based on credential handling and 'curl | sudo sh' patterns, but these scripts are never referenced by any PKGBUILD function or .install hook. They are upstream developer/operator tooling that ships in the source tree and does not run during makepkg. deepseek reviewed the same files and correctly characterized them as legitimate operator deployment automation.",
+  "coverage_issues": [],
+  "false_positives": [
+    "setup_rke2.sh flagged as 'unsafe' for SSH port change and uploading kubeconfig to GitHub secrets \u2014 this is legitimate operator-run cluster deployment tooling, not executed during makepkg, and stores the operator's own credentials in their own repo (out of scope and not malicious).",
+    "setup_app.sh flagged as 'unsafe' for generating an SSH host key and uploading it to GitHub secrets \u2014 standard infra-as-code for the maintainer's own service deployment; never invoked by the package build, so it has no bearing on AUR install safety.",
+    "qwen's 'curl | sudo sh' concern about get.rke2.io \u2014 official Rancher installer used in an explicitly operator-invoked deploy script, not part of the package build path."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Reinforce in the audit prompt that for AUR packages only code executed by PKGBUILD functions (prepare/build/check/package) or .install hooks is in scope. In-tree deployment/CI/infra scripts that are not referenced by these are out of scope unless invoked.",
+    "Add a verification step: before flagging a shell script as unsafe, the model should check whether it is actually called anywhere in the PKGBUILD or install files. If not invoked during build/install, downgrade to informational rather than 'unsafe'.",
+    "qwen conflated 'risky operator behavior' (uploading one's own credentials to one's own repo) with 'malicious supply-chain behavior'. The prompt should distinguish between operator-facing tooling acting on the operator's own assets vs. exfiltration of the installing user's data.",
+    "File selection was good in both runs (both prioritized infra scripts, build.rs, main.rs). The core failure was scope/context judgment, not coverage \u2014 suggesting the bigger leverage is in the assessment criteria, not file picking."
+  ],
+  "_judge_usage": {
+    "model": "anthropic/claude-opus-4.8",
+    "prompt_tokens": 20454,
+    "completion_tokens": 1257,
+    "cost": 0.133695
+  }
+}

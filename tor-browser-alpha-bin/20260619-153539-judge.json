@@ -1,0 +1,28 @@
+{
+  "package": "tor-browser-alpha-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The flagged 'malicious command' is a commented line in PKGBUILD that isn't executed during build/install. Qwen misclassified this static comment as executable code. Deepseek's comprehensive review found no actual code execution risks.",
+  "disagreement_analysis": "Qwen incorrectly interpreted an obfuscated comment as executable code, while Deepseek properly analyzed execution context.",
+  "coverage_issues": [
+    "Qwen failed to review 10 critical files (start-tor-browser, execdesktop, etc.) that Deepseek analyzed",
+    "Qwen skipped verification of actual executable scripts while focusing only on 3 base files"
+  ],
+  "false_positives": [
+    "Qwen's PKGBUILD verdict: Commented text can't execute during makepkg (AUR packages don't 'run' comments)"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Improve comment handling: Train models to distinguish between code vs. non-executable comments",
+    "Enforce minimum file coverage: Require review of all build/install hooks and PKGBUILD-referenced files",
+    "Add PKGBUILD execution phase awareness: Focus analysis on code that actually runs during build/install stages"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 8993,
+    "completion_tokens": 902,
+    "cost": 0.0085501
+  }
+}

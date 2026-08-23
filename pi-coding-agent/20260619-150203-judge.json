@@ -1,0 +1,27 @@
+{
+  "package": "pi-coding-agent",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The unsafe finding (inline-bash.ts) is an example extension not executed during package build/install. AUR safety focuses on makepkg-time execution, not optional user-facing features. Qwen's finding is a false positive in this context.",
+  "disagreement_analysis": "Qwen flagged an example extension allowing arbitrary command execution, while DeepSeek missed this file. The disagreement stems from whether example code constitutes a supply-chain risk.",
+  "coverage_issues": [
+    "DeepSeek failed to review src/pi/examples/extensions/inline-bash.ts while Qwen did"
+  ],
+  "false_positives": [
+    "inline-bash.ts: Example extension not invoked during build/install, normal for development tooling"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "File selection should deprioritize example/ directories unless referenced in PKGBUILD",
+    "Improve context about AUR threat model in prompts - distinguish build-time vs user-facing risks",
+    "Implement example/test file filtering heuristics to reduce false positives"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 13441,
+    "completion_tokens": 1254,
+    "cost": 0.0125437
+  }
+}

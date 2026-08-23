@@ -1,0 +1,26 @@
+{
+  "package": "vivaldi-snapshot",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Both models confirmed critical build/install files (PKGBUILD, patch) are safe. Qwen's inconclusive verdict stems solely from technical limitations reviewing one large JS file, which doesn't execute during AUR build/install. DeepSeek's comprehensive review of 12 files found no risks.",
+  "disagreement_analysis": "Caused by qwen's context window limit failing to audit one large JS file (bundle.js), while deepseek avoided this file and completed full audit.",
+  "coverage_issues": [
+    "src/opt/vivaldi-snapshot/resources/vivaldi/bundle.js (not reviewed by deepseek; qwen failed due to size)"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Implement file size filtering: Skip files >200KB unless critical to build/install",
+    "Prioritize PKGBUILD/.install/patches over runtime JS bundles",
+    "Add context window warnings: Auto-skip files exceeding model limits",
+    "Improve file selection: Weight build scripts higher than app resources"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 14907,
+    "completion_tokens": 2341,
+    "cost": 0.0162874
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "package": "onedrive-abraunegg",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Both unsafe findings are false positives: HTML entities in onedrive_service.sh are harmless syntax errors, and onedrive.init's PATH/script usage follows standard init practices. No actual malicious behavior exists.",
+  "disagreement_analysis": "qwen model misinterpreted harmless syntax quirks as obfuscation and standard init script patterns as security risks.",
+  "coverage_issues": [
+    "Source code (v2.5.10.tar.gz) skipped by both models: critical for detecting runtime risks like network exfiltration",
+    "PKGBUILD.in not reviewed by qwen despite being referenced in build process"
+  ],
+  "false_positives": [
+    "qwen: HTML entities (&quot;) in onedrive_service.sh - syntax error not obfuscation",
+    "qwen: PATH=/usr/local/bin in onedrive.init - common init script pattern"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Prioritize source code review: Models skipped critical source tarball containing executable logic",
+    "Improve context awareness: qwen misinterpreted standard init/PATH patterns as malicious",
+    "Adjust file selection: PKGBUILD.in should be higher priority as it influences build",
+    "Reduce false positives: Train models to recognize harmless syntax quirks vs true obfuscation"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 14799,
+    "completion_tokens": 2291,
+    "cost": 0.016086800000000002
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "package": "claude-desktop-extra",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The unsafe verdict from qwen3 hinges solely on a runtime application behavior (postMessage in downloads.js), which is irrelevant to AUR packaging safety. Both models agree PKGBUILD and install hooks are safe, and no build/install-time risks exist.",
+  "disagreement_analysis": "qwen3 incorrectly flagged a runtime application behavior (postMessage in downloads.js) as an AUR supply-chain risk, while deepseek correctly focused on packaging safety.",
+  "coverage_issues": [
+    "qwen3 failed to audit composerHighlightWorker-vDmIF6LR.js due to file size (413 error)",
+    "Both models prioritized prebuilt application code over packaging scripts initially"
+  ],
+  "false_positives": [
+    "qwen3's 'unsafe' verdict on downloads.C3GSvEDP.js: Runtime app behavior doesn't impact package safety"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Improve file prioritization: Always rank PKGBUILD/.install highest; deprioritize prebuilt upstream assets",
+    "Enhance context awareness: Models must distinguish runtime app risks from build/install threats",
+    "Handle large files better: Implement chunking or sampling for oversized JS files",
+    "Clarify audit scope in prompts: Emphasize that only build/install-time execution is in-scope"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 15612,
+    "completion_tokens": 1636,
+    "cost": 0.015018400000000001
+  },
+  "audits_judged": [
+    "20260822-230506-qwen-qwen3-235b-a22b-2507.md",
+    "20260822-230526-deepseek-deepseek-v4-flash.md"
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "package": "linux-xanmod-headers",
+  "correct_verdict": "inconclusive",
+  "confidence": "high",
+  "reasoning": "Both models failed to audit the critical PKGBUILD file due to erroneous binary file classification, leaving all build/install logic unexamined.",
+  "disagreement_analysis": null,
+  "coverage_issues": [
+    "PKGBUILD skipped by both models (misclassified as binary)",
+    "No review of .install scripts, hooks, or source files referenced by PKGBUILD"
+  ],
+  "false_positives": [],
+  "false_negatives": [
+    "All potential risks unexamined: malicious commands in build(), package(), or hooks; unsafe source handling; privilege escalation"
+  ],
+  "re_audit_recommended": true,
+  "re_audit_focus": [
+    "PKGBUILD (must be forced as text)",
+    "Any .install scripts",
+    "Source files handling network/FS operations"
+  ],
+  "learnings": [
+    "Fix binary file detection: Critical files like PKGBUILD must never be skipped. Implement fallback decoding for misclassified text files.",
+    "Improve error handling: Abort audit with clear error when critical files fail to process instead of skipping.",
+    "Prioritize core files: Always audit PKGBUILD first before proceeding to other files."
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 1893,
+    "completion_tokens": 1239,
+    "cost": 0.0044226000000000005
+  },
+  "reaudit_date": "2026-06-19T16:58:34Z",
+  "reaudit_model": "anthropic/claude-sonnet-4.6",
+  "reaudit_result": "skipped",
+  "reaudit_report": "linux-xanmod-headers/20260619-165834-anthropic-claude-sonnet-4.6.md"
+}

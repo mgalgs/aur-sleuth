@@ -1,0 +1,32 @@
+{
+  "package": "fontconfig-ubuntu-docs",
+  "correct_verdict": "inconclusive",
+  "confidence": "high",
+  "reasoning": "Both models skipped the PKGBUILD entirely, classifying it as a 'binary file'. No files were actually reviewed by either model, so there is zero evidence on which to base a safety verdict. The PKGBUILD is a plain text shell script and should never be treated as binary \u2014 this is a tooling-level file-type detection bug, not a property of the package. With no content analysis performed, the only honest verdict is inconclusive.",
+  "disagreement_analysis": "There is no substantive disagreement: both models produced identical 'skipped' results due to the same misclassification of PKGBUILD as a binary file. The trigger note ('shallow, reviewed 0 files') confirms the audit never actually examined any content.",
+  "coverage_issues": [
+    "PKGBUILD was not reviewed by any model \u2014 the single most important file for an AUR audit was skipped",
+    "No check for accompanying .install hooks or source files (none were enumerated because the audit aborted at the PKGBUILD stage)"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": true,
+  "re_audit_focus": [
+    "PKGBUILD (force text-mode reading; inspect source array, build/package/prepare functions and any sha/url sources)",
+    "Any .install scripts (post_install/post_upgrade hooks that run fc-cache or similar)",
+    "Verify source download URLs and checksums"
+  ],
+  "learnings": [
+    "Fix the binary-file heuristic: PKGBUILD (and .install, .sh) must always be force-read as text. Misclassifying PKGBUILD as binary causes a total audit failure on the most critical file.",
+    "An audit that reviews 0 files should never be allowed to return anything other than 'inconclusive/error' \u2014 guard against zero-coverage outcomes producing a misleading clean status.",
+    "Add a hardcoded allowlist of known-text filenames/extensions (PKGBUILD, *.install, *.sh, *.patch, *.desktop) that bypass binary detection.",
+    "When the initial PKGBUILD safety gate fails due to a tooling issue (not a genuine danger), the message 'doesn't look good' is misleading \u2014 distinguish 'could not read' from 'looks dangerous'.",
+    "Both models gave identical zero-output results, indicating the failure occurred in the harness before model inference; model selection is irrelevant until the file-reading bug is fixed."
+  ],
+  "_judge_usage": {
+    "model": "anthropic/claude-opus-4.8",
+    "prompt_tokens": 2871,
+    "completion_tokens": 878,
+    "cost": 0.036305000000000004
+  }
+}

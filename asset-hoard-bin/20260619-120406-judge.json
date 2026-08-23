@@ -1,0 +1,33 @@
+{
+  "package": "asset-hoard-bin",
+  "correct_verdict": "inconclusive",
+  "confidence": "low",
+  "reasoning": "Critical gap: neither model reviewed the actual binary package (.pkg.tar.zst) which contains executable code installed on user systems.",
+  "disagreement_analysis": null,
+  "coverage_issues": [
+    "Binary package (asset-hoard_0.1.17_x86_64.pkg.tar.zst) was skipped despite containing installable executables",
+    "No review of extracted package contents where runtime behavior (network/filesystem access) would be visible"
+  ],
+  "false_positives": [],
+  "false_negatives": [
+    "Potential malware in binary executables (unreviewed .pkg.tar.zst)",
+    "Possible post-install hooks or hidden scripts in package contents"
+  ],
+  "re_audit_recommended": true,
+  "re_audit_focus": [
+    "Extracted contents of asset-hoard_0.1.17_x86_64.pkg.tar.zst",
+    "Any .INSTALL scripts (though none present in this case)"
+  ],
+  "learnings": [
+    "Prioritize binary package extraction for -bin packages",
+    "Enforce review of all executable artifacts (binaries, scripts) within packages",
+    "Improve file selection heuristics: treat .pkg.tar.* as critical for -bin packages",
+    "Add explicit checks for runtime behaviors in extracted payloads"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 3639,
+    "completion_tokens": 1431,
+    "cost": 0.0061248
+  }
+}

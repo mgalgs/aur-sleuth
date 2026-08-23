@@ -1,0 +1,35 @@
+{
+  "package": "teams-for-linux-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The flagged unsafe file (download-prebuilds.js) is part of the application payload, not executed during AUR package build/installation. PKGBUILD safely handles verified source downloads without executing risky scripts.",
+  "disagreement_analysis": "qwen incorrectly treated an application-level script as packaging risk, while deepseek correctly focused on build/install hooks",
+  "coverage_issues": [
+    "deepseek failed to review critical install hooks (postinst/postrm)",
+    "deepseek skipped source files with network/filesystem access (app-update.yml)"
+  ],
+  "false_positives": [
+    "qwen: download-prebuilds.js - runtime application behavior irrelevant to AUR packaging safety"
+  ],
+  "false_negatives": [
+    "deepseek: Missed review of postinst script handling SUID permissions (though verified safe)"
+  ],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "File selection: Prioritize PKGBUILD functions and install hooks over application payload files",
+    "Prompt quality: Clarify scope limitation to build/install-time execution risks",
+    "Common failure: Models confuse application behavior with packaging risks; improve context training",
+    "Coverage gap: Require mandatory review of all .install scripts and referenced files"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 8070,
+    "completion_tokens": 1696,
+    "cost": 0.009889
+  },
+  "audits_judged": [
+    "20260822-035846-qwen-qwen3-235b-a22b-2507.md",
+    "20260822-035946-deepseek-deepseek-v4-flash.md"
+  ]
+}

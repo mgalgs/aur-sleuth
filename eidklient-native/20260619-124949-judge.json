@@ -1,0 +1,29 @@
+{
+  "package": "eidklient-native",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The unsafe findings are false positives: qt.hook/patch-qt are legitimate package operations, install.sh/updater.sh are not executed during makepkg. PKGBUILD sources are checksum-verified archives.",
+  "disagreement_analysis": "Qwen overreacted to post-install scripts and misinterpreted patching operations. Deepseek correctly contextualized build/install boundaries.",
+  "coverage_issues": [],
+  "false_positives": [
+    "qt.hook: Auto-executing patch-qt is normal for this package; hook is standard",
+    "install.sh: Not executed during makepkg; merely installed for user use",
+    "updater.sh: Not executed during makepkg; user-triggered operation",
+    "patch-qt: Modifies package-owned files in /usr/lib/eID_klient, not system libraries"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Improve prompt: Emphasize that only makepkg-triggered executions (build/package/prepare/check) are in-scope",
+    "Train models to recognize AUR-specific patterns: SKIP checksums, archive.org sources, Qt patching workflows",
+    "Prioritize PKGBUILD/.install reviews over helper scripts not executed during build",
+    "Reduce false alarms on post-install hooks when they call package-owned scripts"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 10768,
+    "completion_tokens": 2279,
+    "cost": 0.0132351
+  }
+}

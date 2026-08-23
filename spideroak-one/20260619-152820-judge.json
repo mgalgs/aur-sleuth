@@ -1,0 +1,29 @@
+{
+  "package": "spideroak-one",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Qwen's 'unsafe' verdict stems from Debian-specific postinst/postrm scripts that don't execute in Arch. Deepseek correctly notes these are inert in AUR context. PKGBUILD uses official sources with checksums, and .install script is benign.",
+  "disagreement_analysis": "Qwen misinterpreted Debian maintenance scripts as active threats in Arch context, while Deepseek understood Arch's execution model",
+  "coverage_issues": [
+    "Qwen reviewed Debian control files (src/control, src/conffiles) irrelevant to Arch",
+    "Neither reviewed all extracted filesystem paths from the .deb (limited to package() contents)"
+  ],
+  "false_positives": [
+    "Qwen: postinst/postrm apt-key usage (Debian-specific, never executed in Arch)",
+    "Qwen: postrm's dead conditional (syntax error makes block unreachable)"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Prioritize files actually executed in Arch (PKGBUILD, .install) over distro-specific maintenance scripts",
+    "Improve context awareness: distinguish between packaged files vs those executed during installation",
+    "Flag Debian-specific artifacts as low-risk in AUR context"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 13985,
+    "completion_tokens": 897,
+    "cost": 0.012032
+  }
+}

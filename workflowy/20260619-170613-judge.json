@@ -1,0 +1,37 @@
+{
+  "package": "workflowy",
+  "correct_verdict": "safe",
+  "confidence": "medium",
+  "reasoning": "PKGBUILD is standard and safe with pinned HTTPS source/checksum. Both models correctly assessed build script safety but missed AppImage content risks.",
+  "disagreement_analysis": null,
+  "coverage_issues": [
+    "Critical gap: Both models skipped AppImage binary review. This contains the actual executable code with network/filesystem access",
+    "Missing review of extracted AppImage contents during prepare() (e.g., squashfs-root scripts)"
+  ],
+  "false_positives": [],
+  "false_negatives": [
+    "AppImage binary: Contains the actual application code with network access (inherent risk for cloud-based apps) that wasn't analyzed",
+    "Extracted AppImage scripts: prepare() extracts the image but no models reviewed squashfs-root contents for malicious payloads"
+  ],
+  "re_audit_recommended": true,
+  "re_audit_focus": [
+    "Extracted AppImage contents (squashfs-root)",
+    "AppImage binary via decompilation/strings analysis"
+  ],
+  "learnings": [
+    "File selection: Must prioritize extracted build artifacts (like AppImage contents) that execute at runtime",
+    "Prompt improvement: Require models to flag binary risks explicitly when skipping files",
+    "Tool enhancement: Implement automatic AppImage extraction for content analysis",
+    "Common failure: Models reliably miss risks in binary/archived payloads even when referenced in PKGBUILD"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 3409,
+    "completion_tokens": 1841,
+    "cost": 0.006988800000000001
+  },
+  "reaudit_date": "2026-06-19T17:06:13Z",
+  "reaudit_model": "anthropic/claude-sonnet-4.6",
+  "reaudit_result": "safe",
+  "reaudit_report": "workflowy/20260619-170613-anthropic-claude-sonnet-4.6.md"
+}

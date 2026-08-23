@@ -1,0 +1,28 @@
+{
+  "package": "ttf-google-fonts-git",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The flagged script (add-all-scripts.py) is a development tool not executed during makepkg. AUR safety focuses solely on build/install hooks.",
+  "disagreement_analysis": "Qwen incorrectly flagged a development script as unsafe due to network access, while Deepseek correctly ignored non-build files.",
+  "coverage_issues": [
+    "Deepseek missed add-all-scripts.py but it's irrelevant to build safety",
+    "Neither reviewed .install hooks (none exist)"
+  ],
+  "false_positives": [
+    "Qwen's add-all-scripts.py verdict: Development tool not referenced in PKGBUILD/build hooks"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Improve file prioritization: Models should deprioritize scripts in .ci/, snippets/ unless referenced in PKGBUILD",
+    "Enhance context awareness: Train models to distinguish between build-time vs development-only scripts",
+    "Add build-process validation: Cross-check findings against actual PKGBUILD execution hooks"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 13286,
+    "completion_tokens": 2119,
+    "cost": 0.0145977
+  }
+}

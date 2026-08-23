@@ -1,0 +1,33 @@
+{
+  "package": "monado",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The flagged unsafe scripts in .gitlab-ci/ are not executed during AUR build/install. They are CI-only utilities irrelevant to makepkg execution. PKGBUILD and build scripts show no malicious behavior.",
+  "disagreement_analysis": "qwen incorrectly treated CI scripts as build-time risks while deepseek focused on actual build files.",
+  "coverage_issues": [
+    "deepseek failed to review .gitlab-ci scripts (install-ndk.sh, install-android-sdk.sh) despite their high-risk appearance",
+    "Both models skipped gradle-wrapper.jar (binary) but this is acceptable for source packages"
+  ],
+  "false_positives": [
+    "qwen: install-ndk.sh (CI script not executed during AUR build)",
+    "qwen: install-android-sdk.sh (irrelevant to package installation)"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "File selection: Prioritize files referenced in PKGBUILD (prepare/build/package) over CI/dev scripts",
+    "Prompt improvement: Explicitly instruct models to ignore non-build scripts unless PKGBUILD-invoked",
+    "Common failure: Models confuse CI infrastructure with build-time execution risks"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 14015,
+    "completion_tokens": 1516,
+    "cost": 0.0136005
+  },
+  "audits_judged": [
+    "20260823-044658-qwen-qwen3-235b-a22b-2507.md",
+    "20260823-044755-deepseek-deepseek-v4-flash.md"
+  ]
+}

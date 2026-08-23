@@ -1,0 +1,33 @@
+{
+  "package": "azerothcore-wotlk-git",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package's build/install processes (PKGBUILD and .install) are safe. The disputed 'acore_mod' script is a user helper tool not executed during makepkg, and its privileged operations require manual user invocation.",
+  "disagreement_analysis": "qwen incorrectly flagged 'acore_mod' as a build-time risk, while deepseek correctly recognized it as a post-install helper tool requiring manual execution.",
+  "coverage_issues": [
+    "qwen reviewed only 3 files vs deepseek's 13, missing critical build scripts like CMakeLists.txt",
+    "qwen skipped review of service files and source build scripts"
+  ],
+  "false_positives": [
+    "qwen's 'acore_mod' verdict: Misinterpreted user helper script as build-time threat despite no PKGBUILD/.install references"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Prioritize files referenced in PKGBUILD (prepare/build/package) and .install scripts over standalone helpers",
+    "Improve model training: Distinguish build-time risks from post-install user tools",
+    "Enforce minimum file review: Audit all executable scripts/configs in package root + referenced source files",
+    "Clarify prompt: Explicitly state that user-invoked tools aren't supply-chain risks"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 8928,
+    "completion_tokens": 2608,
+    "cost": 0.0127696
+  },
+  "audits_judged": [
+    "20260822-233812-qwen-qwen3-235b-a22b-2507.md",
+    "20260822-234118-deepseek-deepseek-v4-flash.md"
+  ]
+}

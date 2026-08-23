@@ -1,0 +1,36 @@
+{
+  "package": "dooble",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "All flagged unsafe findings exist in non-executed scripts (platform-specific build tools and user utilities) not invoked by PKGBUILD. Core packaging files (PKGBUILD/dooble.sh) are safe.",
+  "disagreement_analysis": null,
+  "coverage_issues": [
+    "No review of .install hooks (if present)",
+    "Incomplete source code review (network/filesystem ops in C++ code)"
+  ],
+  "false_positives": [
+    "build-*.bash scripts: Platform-specific build tools not executed during makepkg",
+    "importBookmarksIntoDooble.sh: User utility not executed during installation"
+  ],
+  "false_negatives": [
+    "VCS source (dooble-dictionaries) lacks commit pinning in PKGBUILD",
+    "No review of post-install hooks for unexpected behaviors"
+  ],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Improve file prioritization: Focus on PKGBUILD/.install hooks first, then source files with network/filesystem access",
+    "Add context-awareness: Suppress alerts for non-build scripts (CI/platform-specific/dev tools)",
+    "Detect VCS source risks: Flag unpinned repos in sources array",
+    "Enhance binary handling: Identify embedded binaries in source tree"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 7877,
+    "completion_tokens": 1845,
+    "cost": 0.0101264
+  },
+  "audits_judged": [
+    "20260822-043413-qwen-qwen3-235b-a22b-2507.md"
+  ]
+}

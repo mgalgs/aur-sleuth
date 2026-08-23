@@ -1,0 +1,27 @@
+{
+  "package": "unbill-tui-nightly-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD is a straightforward binary package that downloads a prebuilt binary from the project's own official GitHub releases over HTTPS and installs it with `install -Dm755`. There is no obfuscation, no eval/command substitution, no suspicious network destinations, and no install hooks. The only deviation flagged by qwen is the use of `SKIP` for sha256sums. This is standard and expected practice for nightly/VCS-style binary packages where the upstream artifact changes frequently and the source URL is HTTPS to a trusted, project-owned location. SKIP does not introduce active malicious behavior during makepkg, and the supply-chain trust concern (compromised upstream) applies equally to any binary package and is not specific to this PKGBUILD. The correct AUR-audit verdict is safe.",
+  "disagreement_analysis": "deepseek correctly classified the package as safe, recognizing SKIP checksums as a common and acceptable pattern for binary AUR packages. qwen escalated the same observation (SKIP checksum on an HTTPS binary download) to UNSAFE by framing it as a generic supply-chain risk. This is a policy/threshold disagreement rather than a factual one: both models reviewed the identical single file and agreed on the facts, but qwen applied a stricter (and arguably miscalibrated) standard, treating an inherent property of all binary packages as a per-package security defect.",
+  "coverage_issues": [],
+  "false_positives": [
+    "qwen's UNSAFE verdict on 'SKIP checksums for a binary download' \u2014 SKIP is normal for nightly binary packages fetched over HTTPS from the project's own releases; it is not active malicious behavior and does not warrant an UNSAFE rating.",
+    "qwen's argument that the binary 'cannot be audited during build time' and 'runs with user privileges' \u2014 this is true of every -bin package on the AUR and is not a distinguishing risk for this package."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Calibrate models to distinguish 'best-practice deviations' (e.g., SKIP checksums on HTTPS binary downloads) from genuine security threats (e.g., active code execution, exfiltration, obfuscation). SKIP on an HTTPS project-owned source should not by itself trigger UNSAFE.",
+    "Provide explicit guidance that -bin / nightly packages inherently use SKIP and ship unauditable prebuilt binaries; this is the expected nature of such packages and should not be flagged as a per-package supply-chain vulnerability unless the source URL is untrusted, non-HTTPS, or attacker-controlled.",
+    "Add a verdict-severity rubric so that 'reduced trust' or 'weakened integrity guarantees' concerns map to a WARN/INFO tier rather than a binary UNSAFE verdict, reducing safe/unsafe disagreements driven by threshold differences.",
+    "Both models correctly limited review to the single PKGBUILD (no .install, no other source files), so file selection was appropriate here; the disagreement is purely about risk calibration, not coverage."
+  ],
+  "_judge_usage": {
+    "model": "anthropic/claude-opus-4.8",
+    "prompt_tokens": 5627,
+    "completion_tokens": 1132,
+    "cost": 0.056435000000000006
+  }
+}

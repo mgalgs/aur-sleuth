@@ -1,0 +1,31 @@
+{
+  "package": "hyphanet",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Qwen's unsafe findings are false positives; flagged scripts aren't executed during AUR build/install. Core package files (PKGBUILD, install hooks) show no malicious behavior.",
+  "disagreement_analysis": "Qwen misinterpreted test/developer scripts as build risks; Deepseek correctly ignored non-packaging files.",
+  "coverage_issues": [
+    "Qwen reviewed irrelevant test scripts (stats/probe_test/*.sh) not executed during packaging",
+    "Deepseek missed reviewing src/fred/stats/probe_test/schedule.sh (though irrelevant)"
+  ],
+  "false_positives": [
+    "build-offline.sh: Not executed by PKGBUILD; standard offline build helper",
+    "upload.sh/schedule.sh: Test scripts unused in packaging; command injection concern irrelevant",
+    "probe_test.sh: Automated data upload is test behavior, not malicious exfiltration"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Prioritize files referenced in PKGBUILD functions (prepare/build/package) and .install scripts",
+    "Improve context awareness: Ignore test/CI scripts unless invoked by packaging",
+    "Add validation: Cross-check script execution paths against PKGBUILD",
+    "Reduce false positives: Train models on benign patterns like offline build helpers"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 12895,
+    "completion_tokens": 2053,
+    "cost": 0.014159000000000001
+  }
+}

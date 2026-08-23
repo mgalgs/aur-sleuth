@@ -1,0 +1,28 @@
+{
+  "package": "gitkraken",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "This is a binary package that downloads official GitKraken tarballs from api.gitkraken.dev over HTTPS with pinned SHA256 checksums. The PKGBUILD package() function only copies files to /opt and installs a wrapper script, desktop file, license, and icon \u2014 no risky execution during makepkg. The qwen 'unsafe' verdict is based entirely on gkc.ps1, a Windows PowerShell wrapper that (a) never executes on Arch Linux, (b) is not referenced by any PKGBUILD function or .install hook, and (c) uses environment-variable-driven binary paths and argument passing that is completely normal for an application launcher. The 'command injection' concern requires an attacker to already control environment variables, which is not a package-level supply-chain risk. This is a textbook false positive.",
+  "disagreement_analysis": "The disagreement stems solely from gkc.ps1. deepseek correctly classified it as a benign CLI wrapper; qwen flagged it as unsafe for 'environment-variable-controlled binary execution with unsanitized arguments.' qwen applied a generic vulnerability-analysis lens (input sanitization / injection theory) rather than the AUR threat model (what executes during makepkg/install). The flagged file is a Windows-only script bundled in the upstream binary, never invoked by the package build/install, so it is irrelevant to the package's safety.",
+  "coverage_issues": [],
+  "false_positives": [
+    "qwen flagging gkc.ps1 as UNSAFE: it is a Windows PowerShell script that never runs on Arch, is not referenced by PKGBUILD or .install, and its env-var-driven launching pattern is normal for app wrappers. The 'command injection' requires pre-existing attacker control of env vars \u2014 not a package-level risk."
+  ],
+  "false_negatives": [],
+  "coverage_notes_consistency": "Both models reviewed the PKGBUILD, gitkraken.sh, desktop file, and several bundled scripts. Neither found anything actionable in the actual build/install path. The bundled app.asar.unpacked content is upstream binary payload not executed at install time, so deep review of it is low-value but harmless.",
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models should weight findings by the AUR threat model: only files executed during makepkg (prepare/build/check/package) or .install hooks matter. Bundled upstream payload (especially platform-irrelevant files like .ps1 on a Linux package) should not drive an overall UNSAFE verdict.",
+    "The audit prompt should explicitly instruct models to distinguish 'theoretical code-quality/injection concerns in upstream application code' from 'package supply-chain risk during build/install.' qwen conflated the two.",
+    "A platform-relevance filter would help: Windows-only scripts (.ps1, .bat, win/ paths) in a Linux AUR package are essentially inert and should be deprioritized or contextualized.",
+    "For binary repackaging PKGBUILDs (download tarball + copy to /opt), the verdict should hinge almost entirely on source authenticity (official domain + pinned checksums) and the package() function \u2014 both models correctly identified these as safe, so the overall verdict should have been safe regardless of bundled-file nitpicks.",
+    "Consider requiring models to state 'is this file executed during makepkg/install?' for any UNSAFE finding before allowing it to flip the package verdict."
+  ],
+  "_judge_usage": {
+    "model": "anthropic/claude-opus-4.8",
+    "prompt_tokens": 24451,
+    "completion_tokens": 1223,
+    "cost": 0.15283000000000002
+  }
+}

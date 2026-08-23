@@ -1,0 +1,37 @@
+{
+  "package": "dsh-tui-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Both models agree the PKGBUILD follows standard practices with verified npm source and safe build/install functions. Reviewed source files show only benign UI/CLI functionality without malicious patterns.",
+  "disagreement_analysis": null,
+  "coverage_issues": [
+    "Neither model reviewed package.json or npm lifecycle scripts (preinstall/postinstall)",
+    "deepseek-v4-flash reviewed only 2 files vs qwen's 7, missing protocol/utility files"
+  ],
+  "false_positives": [],
+  "false_negatives": [
+    "Potential npm lifecycle script risks unverified (though PKGBUILD uses --no-audit flag)",
+    "Filesystem interactions in dsh-tui.js spawn processes but were correctly assessed as safe"
+  ],
+  "re_audit_recommended": true,
+  "re_audit_focus": [
+    "package.json for npm lifecycle scripts",
+    "Any postinstall/preinstall scripts referenced in package.json"
+  ],
+  "learnings": [
+    "Prioritize package.json for npm packages to identify lifecycle scripts",
+    "Improve binary handling: Decompress tarballs to audit contents when feasible",
+    "Enhance file selection heuristics to detect script-hook files in package managers",
+    "Clarify prompt: Explicitly require assessment of package manager hooks"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 6181,
+    "completion_tokens": 2081,
+    "cost": 0.009529200000000002
+  },
+  "audits_judged": [
+    "20260823-184325-qwen-qwen3-235b-a22b-2507.md",
+    "20260823-184351-deepseek-deepseek-v4-flash.md"
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "package": "jitsi",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Both models reviewed the same 12 files and agreed on every file except two. The disagreement stems entirely from qwen flagging two files as UNSAFE that are not relevant to the AUR build/install process. The PKGBUILD's build() runs 'ant rebuild' and package() installs files; neither setup.sh, build-jitsi-rpm.sh (an RPM-specific build helper), nor the Debian/Windows resources are invoked by makepkg. The qwen findings are about theoretical hygiene issues (wildcard JAR glob, unpinned git pull, secrets on command line) in upstream packaging scripts that are bundled in the source tree but never executed during the Arch package build. None of these constitute malicious code or a supply-chain attack on the AUR package itself.",
+  "disagreement_analysis": "qwen applied a generic 'secure coding' lens rather than the AUR-specific threat model. It flagged setup.sh (a Windows/installer template with @PKG_NAME@ placeholder, not referenced by PKGBUILD) for a wildcard glob, and build-jitsi-rpm.sh (an RPM distro build helper, not referenced by PKGBUILD) for git pull --rebase and credentials-on-CLI. These are real-but-irrelevant concerns: the files are inert artifacts in the upstream source tarball that makepkg never executes. deepseek correctly noted these were non-malicious. The PKGBUILD only runs ant rebuild + install commands targeting $pkgdir.",
+  "coverage_issues": [],
+  "false_positives": [
+    "setup.sh wildcard JAR execution: file contains an @PKG_NAME@ placeholder and is an installer template not invoked by PKGBUILD; theoretical glob concern, not malicious",
+    "build-jitsi-rpm.sh git pull / secret leakage: this is an upstream RPM distro build helper bundled in the tarball, never executed by makepkg's build()/package(); irrelevant to AUR install safety"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Audit models should anchor severity to the AUR threat model: a finding is only 'unsafe' if it executes during makepkg (prepare/build/check/package) or .install hooks. Files merely present in the upstream source tarball but not referenced by PKGBUILD functions should be downgraded to informational.",
+    "Models should cross-reference flagged scripts against the PKGBUILD to determine whether they are actually invoked. Here, the PKGBUILD uses 'ant rebuild' and install commands \u2014 none of which call setup.sh or build-jitsi-rpm.sh.",
+    "Generic secure-coding antipatterns (unquoted globs, git pull on mutable refs in distro-specific helpers, credentials on CLI) are common false-positive triggers; the prompt should instruct models to distinguish 'code-quality concern' from 'malicious / supply-chain risk' and not escalate hygiene issues to UNSAFE.",
+    "When build helpers for OTHER distros (Debian patches, RPM SPECS, Windows CMake) appear in the tree, models should recognize these as upstream multi-platform packaging artifacts that are inert in the Arch build context."
+  ],
+  "_judge_usage": {
+    "model": "anthropic/claude-opus-4.8",
+    "prompt_tokens": 21927,
+    "completion_tokens": 1161,
+    "cost": 0.13866
+  }
+}

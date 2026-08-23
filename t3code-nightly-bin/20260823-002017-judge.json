@@ -1,0 +1,34 @@
+{
+  "package": "t3code-nightly-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Both audits confirm standard packaging practices: pinned HTTPS sources, verified checksums, and safe PKGBUILD functions. No malicious patterns detected in reviewed files.",
+  "disagreement_analysis": null,
+  "coverage_issues": [
+    "Neither model reviewed the AppImage binary contents (T3-Code-*.AppImage), though this is expected for -bin packages",
+    "No review of generated wrapper scripts (created during package()) despite being referenced in PKGBUILD"
+  ],
+  "false_positives": [],
+  "false_negatives": [
+    "Potential SUID risk from chrome-sandbox (noted but dismissed as upstream behavior)",
+    "No analysis of AppImage extraction safety despite prepare() executing embedded extractor"
+  ],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Prioritize reviewing generated scripts/wrappers defined in PKGBUILD",
+    "Improve handling of binary payloads: warn about SUID/security implications",
+    "Enhance PKGBUILD analysis to flag embedded script generation (cat > wrapper)",
+    "Add detection for risky operations in prepare()/package() (e.g., setuid, untrusted extraction)"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 3531,
+    "completion_tokens": 1529,
+    "cost": 0.0062942
+  },
+  "audits_judged": [
+    "20260822-230557-qwen-qwen3-235b-a22b-2507.md",
+    "20260822-230620-deepseek-deepseek-v4-flash.md"
+  ]
+}

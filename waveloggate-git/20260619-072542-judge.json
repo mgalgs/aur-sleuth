@@ -1,0 +1,30 @@
+{
+  "package": "waveloggate-git",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package fetches source from the official upstream GitHub repo pinned to a tag, builds with the standard Wails toolchain, and installs to standard locations. All reviewed Go source, frontend config, and packaging files show legitimate behavior consistent with an amateur radio logging gateway application. The single UNSAFE finding from qwen relates to WaveLogGate.sh executing ./WavelogGate from /opt/WaveLogGate/build/bin. This is a standard launcher wrapper that runs the binary the package itself installed. /opt is NOT world-writable by default on Arch (root-owned, 0755), so the 'binary replacement attack' premise is incorrect. Executing an installed binary from its install path is the entire purpose of a launcher script and is not a supply-chain risk introduced by the package.",
+  "disagreement_analysis": "The disagreement stems entirely from qwen flagging WaveLogGate.sh as UNSAFE based on a speculative threat model: it assumed /opt could be world-writable and that the launcher should perform integrity/checksum verification of its own binary. This is a false positive that misapplies general security hygiene expectations to a normal launcher pattern. deepseek correctly identified the same script as a standard launcher. Both models otherwise agreed on every other file.",
+  "coverage_issues": [
+    "Neither model reviewed src/WaveLogGate/internal/hamlib/manager.go AND downloader.go consistently across both runs \u2014 qwen reviewed manager.go (process spawning of rigctld) which is security-relevant, but deepseek did not. The hamlib package's process/exec behavior is the most security-sensitive area and should always be prioritized.",
+    "Neither model reviewed any WebSocket/UDP server or QSY server implementation files referenced in app.go, which handle network input \u2014 though app.go review summarized them as localhost-bound and user-controlled."
+  ],
+  "false_positives": [
+    "qwen's UNSAFE verdict on WaveLogGate.sh: launcher executing an installed binary from /opt is normal; /opt is root-owned on Arch and not world-writable; requiring checksum verification in a launcher script is not a standard expectation and the 'risk' is not introduced by the package."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "The audit prompt should explicitly instruct models that a launcher script executing a binary the package itself installs to a root-owned system path (/opt, /usr/bin) is normal and not a supply-chain risk unless the path is genuinely user-writable or the binary is fetched at runtime.",
+    "Models should not escalate to UNSAFE based on speculative threat models ('the directory MAY be writable', 'there is no checksum verification') without concrete evidence that the package itself introduces the weakness. Distinguish 'package introduces a risk' from 'general defense-in-depth could be better'.",
+    "File selection prioritization should consistently surface process-spawning/exec modules (manager.go) to all models, since these are the highest-value targets; coverage diverged between runs here.",
+    "Both models flagged the @fortawesome/fontawesome-free ^7.2.0 version as potentially suspicious but correctly de-escalated \u2014 this is good reasoning; the tool could note that dependency version oddities are upstream hygiene, not packaging-layer compromise, to reduce noise.",
+    "Consider a calibration note in the prompt: for AUR packages, the SKIP of sha256sums on prebuilt binary sub-PKGBUILDs and tag-pinned VCS sources are common, low-severity hygiene items, not malicious indicators."
+  ],
+  "_judge_usage": {
+    "model": "anthropic/claude-opus-4.8",
+    "prompt_tokens": 20541,
+    "completion_tokens": 1287,
+    "cost": 0.13488
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "package": "android-ndk",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The 'inferno.sh' flagged as unsafe is part of NDK's simpleperf tool (legitimate profiling tool) and not executed during package build/install. Qwen's finding is a false positive as AUR only concerns itself with build/install execution contexts.",
+  "disagreement_analysis": "Qwen incorrectly flagged inferno.sh (profiling tool script) as malicious execution, while Deepseek missed reviewing this file entirely.",
+  "coverage_issues": [
+    "deepseek failed to review src/android-ndk-r29/simpleperf/inferno.sh",
+    "qwen missed reviewing several CMake files analyzed by deepseek"
+  ],
+  "false_positives": [
+    "qwen: inferno.sh - normal profiling tool script not executed during packaging"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Prioritize files in simpleperf/ directory when auditing NDK packages",
+    "Improve model understanding of Android NDK toolchain components",
+    "Enhance file selection to ensure coverage of all executable scripts in source tree",
+    "Train models to better distinguish between bundled tools vs build/install execution risks"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 13574,
+    "completion_tokens": 851,
+    "cost": 0.011629299999999999
+  }
+}

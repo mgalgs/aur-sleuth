@@ -1,0 +1,28 @@
+{
+  "package": "android-platform",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Both audits confirm PKGBUILD uses trusted sources (dl.google.com) with checksum verification and contains only standard installation logic. No evidence of malicious execution during makepkg.",
+  "disagreement_analysis": null,
+  "coverage_issues": [
+    "qwen model reviewed only PKGBUILD/package.xml despite 5010 files. Critical gaps: no review of install hooks, build scripts, or source files with network/filesystem access.",
+    "deepseek model wasted resources reviewing 10 animation XMLs (low-risk) while higher-risk files may exist."
+  ],
+  "false_positives": [
+    "deepseek's animation XML reviews: Overreacted to static UI assets (normal in Android packages) not executed during makepkg."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "File selection: Prioritize build/install scripts over static assets. Models should focus on PKGBUILD-referenced files and executables.",
+    "Prompt improvement: Explicitly instruct models to ignore development/config files unless referenced in PKGBUILD functions.",
+    "Failure mode: Models confuse 'thoroughness' with reviewing irrelevant files. Need better risk-based file prioritization heuristics."
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 8813,
+    "completion_tokens": 1862,
+    "cost": 0.0108241
+  }
+}

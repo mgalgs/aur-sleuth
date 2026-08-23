@@ -1,0 +1,30 @@
+{
+  "package": "netbird",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The flagged unsafe findings are in scripts not executed during AUR build/installation. Qwen's concerns (sudo apt in build-ui-linux.sh, su in ui-post-install.sh) are development/CI scripts unused by PKGBUILD.",
+  "disagreement_analysis": "Qwen overreacted to non-executed source scripts (build-ui-linux.sh, ui-post-install.sh) while deepseek correctly focused on packaging-relevant files.",
+  "coverage_issues": [
+    "Qwen failed to verify if flagged scripts are invoked by PKGBUILD/install hooks",
+    "Both models missed explicit confirmation that all reviewed scripts are unused in packaging context"
+  ],
+  "false_positives": [
+    "Qwen: build-ui-linux.sh (apt usage irrelevant for Arch; script not executed)",
+    "Qwen: ui-post-install.sh (user inference pattern unused in packaging)"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Improve file prioritization: Weight PKGBUILD-referenced scripts higher than general source files",
+    "Enhance context awareness: Explicitly prompt models to verify script invocation in packaging lifecycle",
+    "Reduce false alarms: Train models to distinguish between source tree scripts vs packaging-executed scripts",
+    "Add OS-sensitivity: Flag apt/yum commands as low-risk in Arch context unless executed"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 14030,
+    "completion_tokens": 1870,
+    "cost": 0.014496
+  }
+}

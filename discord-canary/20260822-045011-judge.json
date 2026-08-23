@@ -1,0 +1,33 @@
+{
+  "package": "discord-canary",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The unsafe verdict was based on Discord's standard auto-update mechanism, which is inherent to the upstream application and not introduced by the AUR package. The AUR package itself contains no malicious code in PKGBUILD or install hooks.",
+  "disagreement_analysis": "qwen3 incorrectly flagged Discord's auto-updater as supply-chain risk, while deepseek correctly recognized it as standard upstream behavior.",
+  "coverage_issues": [
+    "Both models skipped auditing updater_bootstrap binary (expected for prebuilt packages)",
+    "No model reviewed .SRCINFO metadata file (low risk)"
+  ],
+  "false_positives": [
+    "qwen3's 'unverified remote code' finding: Normal Discord update mechanism, not AUR-specific risk"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Improve prompt clarity: Emphasize that upstream application behaviors (like auto-updaters) aren't AUR package risks unless modified in packaging scripts",
+    "Prioritize PKGBUILD/.install files over application launchers in file selection",
+    "Add heuristic: Whitist known upstream domains (discordapp.com) for common apps",
+    "Flag 'SKIP' checksums only if used for executable code, not documentation"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 7281,
+    "completion_tokens": 1612,
+    "cost": 0.009126700000000001
+  },
+  "audits_judged": [
+    "20260822-035910-qwen-qwen3-235b-a22b-2507.md",
+    "20260822-040022-deepseek-deepseek-v4-flash.md"
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "package": "android-udev-git",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The unsafe verdict stems from install.sh which isn't executed during package installation. PKGBUILD directly installs config files without invoking external scripts. Environment variables in install.sh are irrelevant as they're never used in the build process.",
+  "disagreement_analysis": "Qwen incorrectly flagged install.sh as unsafe without verifying it's unused in PKGBUILD build/install steps",
+  "coverage_issues": [
+    "Qwen failed to review CI/config files though they're low risk"
+  ],
+  "false_positives": [
+    "install.sh unsafe verdict: script exists in source but isn't called by PKGBUILD or hooks"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Prioritize verifying script execution context (PKGBUILD references)",
+    "Improve false positive filtering for unused source tree scripts",
+    "Enforce cross-check between flagged files and build process triggers"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 8717,
+    "completion_tokens": 872,
+    "cost": 0.0082819
+  }
+}

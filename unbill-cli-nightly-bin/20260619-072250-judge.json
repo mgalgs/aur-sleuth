@@ -1,0 +1,23 @@
+{
+  "package": "unbill-cli-nightly-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "This is a simple binary package that downloads a pre-built executable from the project's official GitHub releases (github.com/unbill-project/unbill) and installs it to /usr/bin via the package() function. Both models reviewed the PKGBUILD and reached the same conclusion. The package has only a single file to review (PKGBUILD); makepkg --printsrcinfo and source download succeeded, and no .install hooks or auxiliary scripts were present. There is no build/prepare/check logic, no command substitution at global scope, and no pkgver() function. The only hygiene note is sha256sums set to 'SKIP', which is normal and expected for a -nightly -bin package and not a security threat.",
+  "disagreement_analysis": null,
+  "coverage_issues": [],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "The 'shallow' trigger (1 file reviewed) is a false alarm here: the package genuinely contains only a PKGBUILD with no .install hooks or auxiliary scripts, so 1 file is complete coverage. The tool should distinguish 'reviewed 1 of N files' from 'package only has 1 reviewable file' before flagging shallow reviews.",
+    "For -bin/-nightly packages, SKIP checksums are routine and correctly identified by both models as a non-malicious hygiene concern; the prompts handled this well and should continue treating it as informational rather than a finding.",
+    "Both models correctly noted the binary is unverifiable but did not overreach into calling it unsafe \u2014 good calibration. However, neither flagged that the actual downloaded binary's behavior cannot be assessed from the PKGBUILD alone; for -bin packages this is an inherent and acceptable trust limitation, but the tool could surface it explicitly to the user as 'binary contents not auditable from source'."
+  ],
+  "_judge_usage": {
+    "model": "anthropic/claude-opus-4.8",
+    "prompt_tokens": 4616,
+    "completion_tokens": 698,
+    "cost": 0.040530000000000004
+  }
+}

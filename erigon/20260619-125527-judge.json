@@ -1,0 +1,27 @@
+{
+  "package": "erigon",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The 'unsafe' verdict was based solely on torrent_hashes_update.sh using a hardcoded SSH key, but this script isn't executed during makepkg. All build/install hooks are safe, and the flagged script is a maintainer-only tool irrelevant to end-user installation.",
+  "disagreement_analysis": "Qwen overreacted to a non-executed maintainer script while DeepSeek correctly contextualized it.",
+  "coverage_issues": [
+    "Both models missed reviewing .install hooks if present"
+  ],
+  "false_positives": [
+    "torrent_hashes_update.sh (qwen): Maintainer script not executed during build/install"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Improve threat model emphasis: Prioritize files executed during makepkg (PKGBUILD funcs, .install scripts)",
+    "Clarify maintainer/CI scripts are low-risk unless invoked by build",
+    "Enhance file prioritization: PKGBUILD > .install > build hooks > other scripts"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 15150,
+    "completion_tokens": 1243,
+    "cost": 0.0137125
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "package": "pyrefly",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD is a standard Rust package that fetches from official Facebook/Meta GitHub repo with a pinned tag and verified b2sum, uses cargo fetch/build --frozen, and installs only the binary and license. None of the build/install functions execute the flagged Python file. The qwen 'unsafe' verdict hinges entirely on `BadTypeAlias1: TA = eval(\"\".join(map(chr, [105, 110, 116])))` in aliases_explicit.py \u2014 but this is a type-checker conformance test fixture intentionally designed to test that the type checker rejects invalid type aliases. It evaluates to the string 'int', is never executed during makepkg, and is a deliberate negative test case (marked '# E' for expected error). This is a textbook false positive. The deepseek 'inconclusive' result was caused by an API/transport error (empty response) on conformance_output.py, not by any genuine security concern \u2014 its reasoning trace actually concluded the file was benign.",
+  "disagreement_analysis": "Two unrelated causes: (1) qwen flagged an eval() in a type-checker test fixture as obfuscated code injection, overreacting to a benign pattern in a file never executed during build/install. (2) deepseek hit an LLM transport error (content=None, finish_reason='error') on conformance_output.py, yielding inconclusive despite its own reasoning trace deeming the file safe. Neither represents a real threat.",
+  "coverage_issues": [],
+  "false_positives": [
+    "qwen flagged aliases_explicit.py eval() as code injection \u2014 it is a type-checker conformance test fixture (resolves to 'int', marked '# E' as an expected type error), never executed during makepkg build/package/install. Classic test-fixture false positive.",
+    "deepseek's conformance_output.py 'inconclusive' is not a finding but an API error; the model's own reasoning trace concluded the file was a benign test runner with no malicious behavior."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models should weight execution context: files under conformance/third_party test suites are not invoked by PKGBUILD build/package/check/prepare or .install hooks, so eval/exec in them is not a build-time risk and should at most be noted, not escalated to UNSAFE.",
+    "eval() over chr()-constructed strings in type-checker test corpora is an expected pattern; the audit prompt should instruct models to distinguish 'dangerous pattern present' from 'dangerous pattern reachable during makepkg'.",
+    "Transport-level LLM errors (content=None / finish_reason=error) should trigger an automatic retry rather than emitting an 'inconclusive' verdict, since the reasoning trace was often already complete and benign \u2014 this avoids spurious disagreement triggers.",
+    "File selection was reasonable but heavily duplicated test fixtures across both models; prioritizing the single executable script (conformance_output.py) and PKGBUILD over many near-identical typing test files would improve coverage efficiency."
+  ],
+  "_judge_usage": {
+    "model": "anthropic/claude-opus-4.8",
+    "prompt_tokens": 23465,
+    "completion_tokens": 1091,
+    "cost": 0.1446
+  }
+}

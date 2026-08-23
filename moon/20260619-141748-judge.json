@@ -1,0 +1,30 @@
+{
+  "package": "moon",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The flagged unsafe files (moon.sh and moon.ps1) are static website installers not executed during AUR build/install. PKGBUILD uses safe pinned sources and verified build commands.",
+  "disagreement_analysis": "Qwen incorrectly flagged static website installers as build risks; DeepSeek's inconclusive was due to technical error auditing an irrelevant file.",
+  "coverage_issues": [
+    "Both models skipped source tarball (moon-2.3.4.tar.gz) review",
+    "Qwen missed yarn-4.12.0.cjs (DeepSeek attempted but failed)"
+  ],
+  "false_positives": [
+    "website/static/install/moon.sh: Static web installer not executed during build",
+    "website/static/install/moon.ps1: PowerShell equivalent not used in PKGBUILD"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Improve file prioritization: Focus on PKGBUILD hooks and referenced scripts over static/web assets",
+    "Enhance model instructions: Explicitly exclude non-build files (CI/configs/web assets) unless PKGBUILD-referenced",
+    "Handle binary files: Implement lightweight heuristics for common binaries (e.g., yarn releases)",
+    "Reduce false positives: Train models to distinguish between dangerous patterns in build vs non-build contexts"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 14577,
+    "completion_tokens": 1923,
+    "cost": 0.015011400000000001
+  }
+}

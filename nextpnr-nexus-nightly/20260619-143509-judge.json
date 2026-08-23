@@ -1,0 +1,30 @@
+{
+  "package": "nextpnr-nexus-nightly",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The qwen model's 'unsafe' findings are false positives: (1) FindOxide.cmake's 'PROPAGATE' syntax is a harmless CMake error, not malicious obfuscation; (2) picorv32.sh is an unused example script not executed during makepkg. The deepseek model correctly verified all build-relevant files as safe. PKGBUILD and build processes show no risks.",
+  "disagreement_analysis": "qwen overreacted to non-executable files (FindOxide.cmake with invalid syntax, picorv32.sh as unused example) while deepseek focused on actual build components. Coverage differences caused unnecessary flags.",
+  "coverage_issues": [
+    "qwen missed src/nextpnr/cmake/CheckCXXCompilerHashEmbed.cmake (build utility)",
+    "deepseek missed src/nextpnr/ice40/picorv32.sh (though irrelevant to build)"
+  ],
+  "false_positives": [
+    "FindOxide.cmake: Invalid CMake syntax misinterpreted as malicious; actual harmless build config",
+    "picorv32.sh: Example script flagged despite no execution during makepkg"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "File selection: Prioritize files referenced in PKGBUILD/build functions over examples/CI",
+    "Prompt quality: Improve CMake syntax understanding to reduce false positives",
+    "False positive reduction: Whitelist non-build scripts (examples, tests) unless PKGBUILD-invoked",
+    "Coverage alignment: Cross-check high-risk file types (CMake, scripts) between models"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 14237,
+    "completion_tokens": 3549,
+    "cost": 0.018838399999999998
+  }
+}

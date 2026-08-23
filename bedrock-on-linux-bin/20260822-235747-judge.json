@@ -1,0 +1,31 @@
+{
+  "package": "bedrock-on-linux-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Both models correctly identified PKGBUILD as safe with standard AppImage handling. No malicious patterns in build/install hooks.",
+  "disagreement_analysis": null,
+  "coverage_issues": [
+    "Both models skipped AppImage binary analysis. While binaries are typically skipped, this is the primary executable containing runtime behavior."
+  ],
+  "false_positives": [],
+  "false_negatives": [
+    "Potential risks in AppImage runtime behavior (e.g., network calls, filesystem access) were missed due to skipped analysis"
+  ],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Improve binary handling: Warn when skipping primary executables; consider lightweight analysis (e.g., strings extraction for suspicious patterns)",
+    "Prioritize files that execute during install: PKGBUILD hooks were correctly prioritized over irrelevant files",
+    "Enhance reasoning depth: Models correctly dismissed runtime dependencies (curl/fuse2) but should explicitly note execution context boundaries"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 3265,
+    "completion_tokens": 1105,
+    "cost": 0.005048
+  },
+  "audits_judged": [
+    "20260822-230804-qwen-qwen3-235b-a22b-2507.md",
+    "20260822-230759-deepseek-deepseek-v4-flash.md"
+  ]
+}

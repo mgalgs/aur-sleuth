@@ -1,0 +1,31 @@
+{
+  "package": "cockpit-tools-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The flagged script (claude-desktop-auth-helper.cjs) is a legitimate authentication helper for the application's functionality. Its operations are confined to claude.ai domains and user-specified local files, with no evidence of exfiltration or malicious execution during package build/install.",
+  "disagreement_analysis": "Qwen misinterpreted the authentication helper's legitimate session management as credential harvesting, while Deepseek correctly identified its functional purpose.",
+  "coverage_issues": [
+    "Both models skipped auditing the main binary (cockpit-tools) and archived files (control.tar.gz/data.tar.gz), leaving runtime behavior partially unaudited"
+  ],
+  "false_positives": [
+    "Qwen's 'unsafe' verdict on claude-desktop-auth-helper.cjs: Overreacts to normal Electron authentication patterns that don't execute during makepkg"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Clarify audit scope in prompts: Emphasize that runtime application logic (unless triggered by install hooks) isn't in scope for AUR safety verdicts",
+    "Improve binary handling: Flag packages with unauditable binaries for manual review despite text-file safety",
+    "Enhance model training: Distinguish between legitimate session helpers and actual credential harvesting patterns"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 6864,
+    "completion_tokens": 1666,
+    "cost": 0.0089698
+  },
+  "audits_judged": [
+    "20260822-235132-qwen-qwen3-235b-a22b-2507.md",
+    "20260822-235123-deepseek-deepseek-v4-flash.md"
+  ]
+}

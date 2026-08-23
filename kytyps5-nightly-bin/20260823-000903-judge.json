@@ -1,0 +1,33 @@
+{
+  "package": "kytyps5-nightly-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Both audits correctly identified the package as safe. PKGBUILD uses verified GitHub sources with pinned commits and checksums, while kytyps5.desktop is a standard desktop entry. No executable hooks or build scripts exist beyond PKGBUILD.",
+  "disagreement_analysis": null,
+  "coverage_issues": [
+    "qwen model reviewed only 2 files (PKGBUILD/desktop), missing .gitlab-ci.yml which could theoretically modify packaging behavior",
+    "Neither model reviewed qt.conf (potential runtime config) though low-risk in binary package context"
+  ],
+  "false_positives": [
+    "deepseek's review of CMake/header files: These are upstream artifacts unused during install (AUR guideline \u00a74)",
+    "deepseek's .gitlab-ci.yml review: CI configs don't execute during makepkg (AUR guideline \u00a73)"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Improve file prioritization: Binary packages should focus exclusively on PKGBUILD, install hooks, and desktop files. Suppress CI/config/source file reviews unless referenced in PKGBUILD functions.",
+    "Fix selection failures: deepseek's empty response during file selection caused fallback to irrelevant files (CMake/headers). Implement hardcoded binary-package file whitelist.",
+    "Clarify audit scope: Models should explicitly state why non-packaging files (e.g., headers) are excluded per AUR guidelines to avoid over-auditing."
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 8112,
+    "completion_tokens": 1718,
+    "cost": 0.0099734
+  },
+  "audits_judged": [
+    "20260822-234835-qwen-qwen3-235b-a22b-2507.md",
+    "20260822-234856-deepseek-deepseek-v4-flash.md"
+  ]
+}

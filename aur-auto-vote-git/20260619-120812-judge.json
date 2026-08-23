@@ -1,0 +1,29 @@
+{
+  "package": "aur-auto-vote-git",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The flagged issue in 'src/bin/smartd-create-super-users-desktop-file' is not a build/install risk. It's an installed script that runs post-deployment under smartd, not during makepkg. No files execute malicious actions during package build/installation.",
+  "disagreement_analysis": "qwen model incorrectly treated an installed utility's runtime behavior as a build-time supply chain risk. Deepseek correctly focused on build/install context.",
+  "coverage_issues": [
+    "deepseek missed src/bin/smartd-create-super-users-desktop-file and other files reviewed by qwen",
+    "Both models failed to verify if flagged scripts are actually executed by PKGBUILD/.install"
+  ],
+  "false_positives": [
+    "qwen's unsafe verdict on smartd-create-super-users-desktop-file: Runtime vulnerability \u2260 build-time threat. Not executed during makepkg."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Improve prompt clarity: Emphasize that ONLY build/install-executed code is in-scope. Installed utilities' runtime behavior is irrelevant.",
+    "Enforce file selection hierarchy: Prioritize PKGBUILD/.install hooks first, then their directly invoked scripts.",
+    "Add validation step: Cross-check if flagged files are actually executed during build phases.",
+    "Train models to distinguish build-time risks from post-install vulnerabilities"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 12776,
+    "completion_tokens": 2466,
+    "cost": 0.0151082
+  }
+}

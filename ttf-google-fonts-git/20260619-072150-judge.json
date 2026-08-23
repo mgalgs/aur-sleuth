@@ -1,0 +1,35 @@
+{
+  "package": "ttf-google-fonts-git",
+  "correct_verdict": "inconclusive",
+  "confidence": "medium",
+  "reasoning": "Both models performed only the initial PKGBUILD gate audit and both concluded the source-fetch portion (global scope + pkgver()) is safe \u2014 which is correct: the PKGBUILD clones from the official upstream github.com/google/fonts via git+https, uses SKIP checksums (standard for VCS), and pkgver() only runs benign git rev-list/rev-parse commands. However, neither model reviewed prepare()/build()/package() functions or any .install hooks, because makepkg --nobuild failed to download the (very large) sources and the audit aborted. The package executes a real package() function and likely prepare() logic that was never analyzed. Therefore the overall package safety is inconclusive even though no malicious indicators were found in what was reviewed.",
+  "disagreement_analysis": "No substantive disagreement. Both models reached identical conclusions (PKGBUILD source-fetch is safe) and both ended in the same SKIPPED state due to the makepkg --nobuild download failure.",
+  "coverage_issues": [
+    "0 files reviewed beyond the PKGBUILD gate; prepare(), build(), and package() functions never assessed",
+    "No .install hook (if present) was reviewed",
+    "Source download failure prevented agent-stage file review entirely \u2014 the trigger reason (shallow review)"
+  ],
+  "false_positives": [],
+  "false_negatives": [
+    "Unreviewed prepare()/package() logic could contain filesystem operations (rm/mv/install) with unexpected scope \u2014 not analyzed because sources failed to download",
+    "The package installs thousands of font files; any post-install hook behavior was not verified"
+  ],
+  "re_audit_recommended": true,
+  "re_audit_focus": [
+    "PKGBUILD prepare(), build(), and package() functions",
+    "Any .install scripts",
+    "Verify package() only installs font files under appropriate prefix and does not run network/exec payloads"
+  ],
+  "learnings": [
+    "makepkg --nobuild can fail for legitimate reasons (huge repos like google/fonts, timeouts, bandwidth) \u2014 the audit should fall back to static review of PKGBUILD build/package functions instead of skipping entirely when download fails",
+    "A download failure should not be conflated with a clean result; the tool should clearly mark such packages as 'inconclusive/manual-review' rather than implying no issues",
+    "For large VCS font packages, consider a shallow clone or skipping actual source download while still statically analyzing all PKGBUILD functions and .install hooks",
+    "The initial PKGBUILD gate prompt correctly scopes only to source-fetch safety; both models reasoned accurately within that scope \u2014 the gap is purely operational (download failure), not reasoning quality"
+  ],
+  "_judge_usage": {
+    "model": "anthropic/claude-opus-4.8",
+    "prompt_tokens": 3609,
+    "completion_tokens": 975,
+    "cost": 0.04242
+  }
+}

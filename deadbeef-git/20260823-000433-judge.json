@@ -1,0 +1,33 @@
+{
+  "package": "deadbeef-git",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The flagged CI scripts aren't executed during makepkg and pose no risk to end-users. PKGBUILD and build files show no malicious behavior.",
+  "disagreement_analysis": "qwen over-prioritized CI scripts irrelevant to AUR builds, while deepseek correctly focused on build-executed files.",
+  "coverage_issues": [
+    "deepseek skipped ci_scripts/* files despite their high-risk potential if executed",
+    "Both models missed verifying if ci_scripts are referenced in PKGBUILD/build hooks"
+  ],
+  "false_positives": [
+    "download-linux-static-deps.sh: HTTP download is insecure but unused in makepkg",
+    "upload.sh: Deployment script not executed during package build/install"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "File selection: Prioritize files referenced in PKGBUILD (prepare/build/package) and .install hooks over CI/dev scripts",
+    "Prompt quality: Require explicit confirmation of script execution context before flagging risks",
+    "Failure mode: Reduce false alarms on CI/deployment scripts by validating build-time relevance"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 12644,
+    "completion_tokens": 2035,
+    "cost": 0.013938299999999999
+  },
+  "audits_judged": [
+    "20260822-231712-qwen-qwen3-235b-a22b-2507.md",
+    "20260822-231659-deepseek-deepseek-v4-flash.md"
+  ]
+}

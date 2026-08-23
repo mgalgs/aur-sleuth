@@ -1,0 +1,29 @@
+{
+  "package": "yazi-nightly-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "This is a standard AUR binary package that downloads a prebuilt zip from the official upstream GitHub releases (github.com/sxyazi/yazi). The PKGBUILD only fetches the source, runs the binary for version detection in pkgver(), and installs binaries, license, docs, and shell completions to standard locations. No obfuscation, no unexpected network destinations, no script-based install hooks. SKIP checksum is normal for nightly releases. The deepseek model reviewed all 11 text files (all shell/Fig completions) confirming they are declarative and harmless. The only unanalyzed content is the binary blob itself, which cannot be statically audited and is the inherent trust boundary of any -bin package.",
+  "disagreement_analysis": "No actual verdict disagreement \u2014 both models concluded 'safe'. The trigger was coverage shallowness: qwen reviewed only 1 file (PKGBUILD) and declined to review the completion scripts, while deepseek reviewed all 11 text files. Both verdicts are correct, but qwen's review was less thorough. Notably, qwen's PKGBUILD reasoning contained a factual error claiming pkgver()'s ./yazi --version is unreachable during makepkg --noprepare; in reality sources are extracted before pkgver() runs, but this does not change the safety outcome since the binary is from trusted upstream.",
+  "coverage_issues": [
+    "qwen reviewed only the PKGBUILD and explicitly declined to review the shell completion scripts, leaving them unverified in that report (deepseek covered them).",
+    "The bundled binary (yazi/ya executables inside the zip) is the actual code that executes on the user's system and is never statically analyzable \u2014 an inherent limitation for all -bin packages."
+  ],
+  "false_positives": [],
+  "false_negatives": [
+    "Neither model can verify the integrity/provenance of the prebuilt binary itself (SKIP checksum + binary blob). This is a real but unavoidable trust assumption, not a missed finding per se. Trust rests entirely on the upstream GitHub release pipeline."
+  ],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "File selection: completion scripts (.bash/.fish/.zsh/.ps1/.ts) bundled in -bin packages are NOT executed during makepkg/install and are low priority; deepseek's exhaustive review of them was thorough but added little risk-reduction value. The audit tool should down-rank completion specs and prioritize .install hooks and PKGBUILD functions.",
+    "qwen's PKGBUILD reasoning contained a technical inaccuracy about makepkg execution order (claiming pkgver() can't run the binary under --noprepare). The tool should validate model claims about makepkg phase semantics; sources ARE extracted before pkgver() runs.",
+    "The 'shallow' re-audit trigger fired correctly when a model reviewed only 1 file, but in this case the single PKGBUILD review was sufficient for an arrived-at-safe verdict because all other files were non-executing completions. Consider weighting shallowness triggers by whether unreviewed files are actually executable during build/install.",
+    "For -bin packages, the tool should explicitly surface the binary-trust caveat in the verdict so users understand the SKIP checksum + opaque binary is the residual risk, rather than implying full assurance."
+  ],
+  "_judge_usage": {
+    "model": "anthropic/claude-opus-4.8",
+    "prompt_tokens": 13403,
+    "completion_tokens": 1201,
+    "cost": 0.09704000000000002
+  }
+}

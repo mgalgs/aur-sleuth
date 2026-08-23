@@ -1,0 +1,26 @@
+{
+  "package": "feather-wallet-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard AUR binary package. The PKGBUILD fetches a precompiled release ZIP from the official Feather Wallet GitHub release page with a pinned SHA256 checksum (not SKIP), uses noextract, and the package() function only extracts the archive, sets execute permissions, and creates a symlink in /usr/bin. There is no top-level code execution, no pkgver() function, no network calls beyond the declared source, and no obfuscation or curl|bash patterns. Both models correctly converged on SAFE with consistent, accurate reasoning. The only unreviewed item is the binary itself, which is inherent and unavoidable for a -bin package.",
+  "disagreement_analysis": null,
+  "coverage_issues": [
+    "The binary ZIP (feather-2.8.1-linux.zip) was skipped by both models \u2014 this is the expected and correct behavior since binary blobs cannot be meaningfully analyzed by an LLM, but it means the audit cannot vouch for the contents of the binary itself, only the packaging logic."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "For -bin packages, the audit scope is inherently limited to the PKGBUILD/install scripts; the trust anchor is the pinned checksum + official upstream URL, which both models correctly identified. The tool could explicitly note this limitation in -bin verdicts rather than treating the skipped binary as a coverage gap.",
+    "Both models reviewed the only auditable file (PKGBUILD) and reached the same correct conclusion \u2014 the 'shallow' trigger (1 file reviewed) was a false alarm here, since the repo legitimately contains only a PKGBUILD plus a binary blob. The trigger heuristic could account for package type (-bin packages naturally have few auditable files).",
+    "The checksum was verified to not use 'SKIP' \u2014 this is the key safety signal for binary packages and was correctly emphasized. The tool should continue prioritizing checksum integrity checks for -bin packages.",
+    "No .install hook, prepare(), build(), or check() functions were present; both models verified absence of top-level execution. Coverage was complete for the auditable surface."
+  ],
+  "_judge_usage": {
+    "model": "anthropic/claude-opus-4.8",
+    "prompt_tokens": 4987,
+    "completion_tokens": 811,
+    "cost": 0.04521
+  }
+}

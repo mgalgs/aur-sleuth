@@ -1,0 +1,28 @@
+{
+  "package": "late-sh-cli",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The flagged scripts (setup_rke2.sh, setup_app.sh) are infrastructure/deployment tools not executed during AUR build/install. They pose no risk to end-users during `makepkg` operations.",
+  "disagreement_analysis": "qwen model misinterpreted deployment scripts as malicious due to credential handling, while deepseek correctly contextualized them as non-executable during build.",
+  "coverage_issues": [
+    "Both models missed reviewing .install hooks if present, but none exist in package"
+  ],
+  "false_positives": [
+    "setup_rke2.sh: Legitimate cluster setup; GitHub secret storage is intentional deployment pattern",
+    "setup_app.sh: SSH key generation for app deployment is expected behavior, not credential theft"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Improve context awareness: Models must better distinguish build-time vs deployment scripts",
+    "Enhance file prioritization: Rust source/build.rs should be higher priority than infrastructure scripts",
+    "Clarify scope rules: Explicitly flag non-build files (CI/deployment) as out-of-scope in prompts"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 12959,
+    "completion_tokens": 1354,
+    "cost": 0.0124563
+  }
+}

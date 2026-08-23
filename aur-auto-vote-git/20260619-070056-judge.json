@@ -1,0 +1,30 @@
+{
+  "package": "aur-auto-vote-git",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard VCS (-git) AUR package that clones cryzed/bin from GitHub and installs a Python AUR-voting script plus systemd service/timer templates. The PKGBUILD's package() only copies files to standard locations; pkgver() uses only git commands. The install script merely prints informational guidance. The main aur-auto-vote script communicates exclusively with the official aur.archlinux.org over HTTPS with no obfuscation or external payload execution. Auxiliary scripts (hotstrings, vpn-whitelist, backup, smartd-wall, restart-plasmashell, update-unbound-root-hints) are unrelated upstream utilities bundled in the repo but reviewed as benign. The qwen model completed a full 13-file review with all SAFE verdicts. The deepseek run reached identical SAFE conclusions on every file it inspected but the final result was marked 'inconclusive' purely due to a disk quota I/O error (Errno 122), not any security finding. This is an infrastructure failure, not genuine analytical disagreement.",
+  "disagreement_analysis": "The disagreement is artificial. deepseek-v4-flash reached SAFE verdicts on all files it actually reviewed (PKGBUILD, install, timer, and 9 src/bin files), but its run terminated with '[Errno 122] Disk quota exceeded' causing a package-level 'inconclusive' status. qwen3-235b completed cleanly with all SAFE. The two models substantively agree; only an environment/disk error prevented deepseek from finalizing a SAFE verdict.",
+  "coverage_issues": [
+    "deepseek selected a non-existent file (src/bin/aur-auto-vote.service.skel) and skipped src/bin/vpn-whitelist.networkmanager-dispatcher, src/bin/smartd-wall, src/bin/restart-plasmashell, and src/bin/backup.conf which qwen did review; however qwen's review of those confirmed they are benign and none are referenced by PKGBUILD build/package/install functions.",
+    "deepseek reviewed src/bin/vpn-whitelist and src/bin/defaults which qwen did not, but both were also benign \u2014 combined coverage across the two models is comprehensive."
+  ],
+  "false_positives": [
+    "Both models correctly avoided flagging the bundled unrelated scripts (backup, vpn, unbound, plasmashell) as malicious \u2014 these are not referenced by PKGBUILD functions or .install and are out of scope; no FP introduced.",
+    "The minor note about AUR_AUTO_VOTE_PASSWORD environment variable in the install script is correctly characterized as optional user guidance, not a vulnerability."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Distinguish infrastructure/runtime errors (disk quota, network timeouts, API failures) from genuine security 'inconclusive' verdicts. An Errno 122 disk-quota failure should trigger a retry/cleanup rather than poison the verdict, since all reviewed files were SAFE.",
+    "The adjudication trigger 'disagreement (inconclusive safe)' fired on what is really a single tool failure, not analytical disagreement \u2014 verdict aggregation should treat a tooling-error inconclusive differently from a security-uncertainty inconclusive.",
+    "File-selection robustness: deepseek hallucinated a non-existent file (aur-auto-vote.service.skel). The tool should pre-validate selected paths against the actual source tree (it already notes this) and prompt re-selection to fill coverage gaps for skipped real files.",
+    "For -git packages where package() only copies a large bundle of upstream files, the tool could prioritize files actually installed by package() and any .install hooks first, then de-prioritize clearly unrelated bundled utilities to focus token budget on the executed/install-path code."
+  ],
+  "_judge_usage": {
+    "model": "anthropic/claude-opus-4.8",
+    "prompt_tokens": 18161,
+    "completion_tokens": 1383,
+    "cost": 0.12538000000000002
+  }
+}

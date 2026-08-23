@@ -1,0 +1,34 @@
+{
+  "package": "kytyps5-nightly-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Both audits correctly identified the package as safe. PKGBUILD uses verified GitHub sources with pinned commits and checksums. No install hooks or dangerous build scripts exist. Desktop file is standard. Prebuilt binaries are explicitly out-of-scope per AUR audit guidelines.",
+  "disagreement_analysis": null,
+  "coverage_issues": [
+    "Both models skipped reviewing the wrapper script in PKGBUILD's package() function (executes at install time).",
+    "deepseek reviewed irrelevant files (.gitlab-ci.yml, CMake files, headers) that don't execute during makepkg/install."
+  ],
+  "false_positives": [
+    "deepseek flagged .gitlab-ci.yml: CI scripts don't execute during package build/install and should be ignored per audit rules.",
+    "deepseek reviewed CMake/header files: These are upstream artifacts with no AUR modifications and don't execute during packaging."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Improve file selection: Prioritize PKGBUILD functions (package()), .install scripts, and wrapper scripts over CI/config files.",
+    "Enhance binary package handling: Explicitly skip upstream artifacts (headers, CMake) unless modified in AUR.",
+    "Fix prompt guidance: Emphasize that only files executed during makepkg/install (not CI/dev files) are security-relevant.",
+    "Address wrapper script gap: Ensure models always review generated scripts in package() functions."
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 8110,
+    "completion_tokens": 1331,
+    "cost": 0.0090045
+  },
+  "audits_judged": [
+    "20260822-234835-qwen-qwen3-235b-a22b-2507.md",
+    "20260822-234856-deepseek-deepseek-v4-flash.md"
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "package": "dnscontrol",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The unsafe verdict was based solely on prepare_release.sh, which is a developer tool not executed during makepkg. The PKGBUILD uses pinned sources with verified checksums and contains no malicious build/install logic.",
+  "disagreement_analysis": "qwen model incorrectly flagged prepare_release.sh as a supply-chain risk despite it not being executed during package build/installation",
+  "coverage_issues": [
+    "qwen model reviewed only 5 additional files vs deepseek's 10, potentially missing critical files",
+    "Neither model reviewed build/check hooks that might execute during makepkg"
+  ],
+  "false_positives": [
+    "prepare_release.sh (qwen): Developer script not called by PKGBUILD; go install is for maintainer tooling"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Improve context awareness: Models should better distinguish between build-time scripts vs developer tools",
+    "Prioritize files referenced in PKGBUILD functions (build/prepare/package) over unrelated scripts",
+    "Enforce review of all executable hooks and scripts called during makepkg lifecycle",
+    "Add explicit checks for network access during build/install phases"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 11263,
+    "completion_tokens": 1501,
+    "cost": 0.0116366
+  }
+}

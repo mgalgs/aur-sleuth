@@ -1,0 +1,38 @@
+{
+  "package": "linux-pf-headers",
+  "correct_verdict": "inconclusive",
+  "confidence": "high",
+  "reasoning": "Both models skipped the critical PKGBUILD file after misclassifying it as binary, preventing any meaningful security assessment. Without reviewing the PKGBUILD (which defines build/install behavior), no safety determination can be made.",
+  "disagreement_analysis": null,
+  "coverage_issues": [
+    "PKGBUILD was skipped by both models despite being the core build script",
+    "No files were reviewed due to critical failure in file type detection"
+  ],
+  "false_positives": [],
+  "false_negatives": [
+    "All potential risks in PKGBUILD were missed due to skipped review",
+    "Possible .install scripts or build hooks were not examined"
+  ],
+  "re_audit_recommended": true,
+  "re_audit_focus": [
+    "PKGBUILD (force text-mode analysis)",
+    "Any .install files",
+    "Scripts referenced in PKGBUILD"
+  ],
+  "learnings": [
+    "Critical flaw in file detection: Tool must never skip PKGBUILD. Implement fallback decoding for misclassified text files",
+    "Prioritization failure: Audit must abort if PKGBUILD can't be read rather than proceeding with zero coverage",
+    "Improve binary detection heuristics: PKGBUILDs are always text - special-case known critical files",
+    "Add validation step: Confirm at least PKGBUILD was successfully read before proceeding"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 1895,
+    "completion_tokens": 1321,
+    "cost": 0.004629
+  },
+  "reaudit_date": "2026-06-19T16:58:33Z",
+  "reaudit_model": "anthropic/claude-sonnet-4.6",
+  "reaudit_result": "skipped",
+  "reaudit_report": "linux-pf-headers/20260619-165833-anthropic-claude-sonnet-4.6.md"
+}

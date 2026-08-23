@@ -1,0 +1,31 @@
+{
+  "package": "codex-app-unofficial",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The flagged 'unsafe' files are part of the prebuilt application's dependencies and are not executed during AUR package build/installation. The PKGBUILD and .install scripts contain no malicious behavior.",
+  "disagreement_analysis": "Qwen misidentified runtime application code as AUR build risks. DeepSeek correctly focused on build/install scripts.",
+  "coverage_issues": [
+    "Both models missed reviewing the main application binary (codex-app-linux-bin) for runtime risks",
+    "Qwen failed to recognize irrelevant files (winpty scripts) don't affect AUR safety"
+  ],
+  "false_positives": [
+    "Qwen: Spew.py (infinite loop) - test script not executed during build/install",
+    "Qwen: build32.sh (command injection) - build tool not used in AUR packaging",
+    "Qwen: download.sh (suspicious URL) - actually downloads from trusted sqlite.org"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Improve file prioritization: Focus exclusively on PKGBUILD, .install, and scripts they execute",
+    "Enhance context awareness: Train models to distinguish build-time vs runtime risks",
+    "Reduce false positives: Add rules to ignore node_modules/ content unless executed during build",
+    "Improve URL analysis: Verify domain reputation before flagging 'suspicious' downloads"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 16150,
+    "completion_tokens": 2726,
+    "cost": 0.01812
+  }
+}

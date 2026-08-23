@@ -1,0 +1,35 @@
+{
+  "package": "sabydesktop",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The flagged scripts are part of upstream binaries and not executed during AUR build/install. Deepseek correctly identified them as standard application scripts with no execution in PKGBUILD functions.",
+  "disagreement_analysis": "Qwen misinterpreted application maintenance scripts as build-time threats. Deepseek understood their context as non-executed upstream components.",
+  "coverage_issues": [
+    "Both models skipped binary payload review (expected for repackaged binaries)",
+    "Qwen missed reviewing configuration files (center.ini, Applications.ini) that Deepseek verified"
+  ],
+  "false_positives": [
+    "Qwen's verdict on addDaemonRestart.sh: Modifying systemd services is normal application behavior when not executed during AUR build",
+    "Qwen's verdict on copyToRoot.sh: File operations are confined to application directories and pose no build-time risk",
+    "Qwen's verdict on installClangRepos.sh/updatePackage.sh: These are upstream update mechanisms, not executed during makepkg"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Improve context awareness: Train models to distinguish between build-time threats and bundled application scripts",
+    "Prioritize files referenced in PKGBUILD (build/package functions) over application internals",
+    "Enhance filesystem operation analysis: Normal file copies shouldn't trigger unsafe verdicts without execution context",
+    "Clarify scope rules: Non-executed scripts in source trees are low-risk unless invoked by packaging logic"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 13644,
+    "completion_tokens": 1317,
+    "cost": 0.0128433
+  },
+  "audits_judged": [
+    "20260823-041115-qwen-qwen3-235b-a22b-2507.md",
+    "20260823-041202-deepseek-deepseek-v4-flash.md"
+  ]
+}

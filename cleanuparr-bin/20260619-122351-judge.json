@@ -1,0 +1,26 @@
+{
+  "package": "cleanuparr-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Both models found no malicious code in critical files (PKGBUILD, install hooks, service files). Qwen's inconclusive verdict was solely due to a technical error auditing a benign manifest file, which deepseek successfully reviewed as safe. All files with execution risk were properly assessed.",
+  "disagreement_analysis": "Qwen's inconclusive verdict resulted from a technical error (HTTP 400) when auditing Cleanuparr.staticwebassets.endpoints.json, a non-executable manifest file. Deepseek reviewed this same file safely. No actual security disagreement exists.",
+  "coverage_issues": [
+    "Both models under-prioritized JavaScript files: Only 4/50+ JS chunks were reviewed despite potential network access. Models should prioritize executable frontend code higher."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Improve error handling: Retry failed file audits with fallback models to avoid inconclusive verdicts from transient errors",
+    "Adjust file prioritization: Frontend JS with network calls (e.g., Angular chunks) should rank above metadata files like .deps.json",
+    "Enhance JSON handling: Large JSON files (like staticwebassets) sometimes cause model errors; consider chunking or simplified parsing",
+    "Optimize cost: deepseek used 10x more tokens than qwen for similar coverage; investigate efficiency improvements"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 14277,
+    "completion_tokens": 1378,
+    "cost": 0.0134389
+  }
+}
