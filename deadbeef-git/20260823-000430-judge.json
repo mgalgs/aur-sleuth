@@ -1,0 +1,33 @@
+{
+  "package": "deadbeef-git",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The flagged CI scripts are not executed during makepkg build/install and pose no risk to AUR users. PKGBUILD and core build scripts show no malicious behavior.",
+  "disagreement_analysis": "qwen incorrectly flagged CI scripts as risks despite them being unused during AUR packaging",
+  "coverage_issues": [
+    "deepseek missed reviewing ci_scripts/ files, though they're irrelevant to build safety"
+  ],
+  "false_positives": [
+    "qwen: download-linux-static-deps.sh - CI-only script unused in build",
+    "qwen: upload.sh - Deployment script unused in build"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Improve file prioritization: Focus on PKGBUILD-referenced files first",
+    "Enhance prompt clarity: Explicitly exclude CI/deployment scripts unless invoked by PKGBUILD",
+    "Train models to distinguish build-time vs CI-only scripts",
+    "Implement PKGBUILD dependency tracing to filter irrelevant files"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 12644,
+    "completion_tokens": 1682,
+    "cost": 0.0130558
+  },
+  "audits_judged": [
+    "20260822-231712-qwen-qwen3-235b-a22b-2507.md",
+    "20260822-231659-deepseek-deepseek-v4-flash.md"
+  ]
+}
