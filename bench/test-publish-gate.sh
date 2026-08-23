@@ -232,6 +232,58 @@ assert r["published_at"].endswith("Z"), r["published_at"]
     fi
 )
 
+echo "== a second publish builds on origin's page rebuild, never on its reports =="
+# In a subshell: the function fetches from FETCH_URL, which here is a local
+# bare repository standing in for GitHub.
+(
+    eval "$(sed -n '/^rebase_onto_origin()/,/^}/p' "$ENTRYPOINT")"
+    origin="$tmp/origin.git"
+    git init --bare --quiet "$origin"
+    # shellcheck disable=SC2030,SC2034  # read by rebase_onto_origin, via the eval
+    FETCH_URL="$origin"
+    base_commit="$(make_commit "brave-bin/20260821-1-m.md" "_dashboard/data.json" "index.html")"
+    # Origin at the same commit: build on it.
+    git --git-dir="$repo" push --quiet "$origin" "$base_commit:refs/heads/$REPORTS_BRANCH" 2>/dev/null
+    if [[ "$(rebase_onto_origin "$repo" "$base_commit")" == "$base_commit" ]]; then
+        ok "origin at the reviewed commit: build on it"
+    else
+        bad "origin at the reviewed commit should build on it"
+    fi
+    # Origin ahead by a page rebuild only: build on origin's head.
+    rm -f "$tmp/index"
+    GIT_INDEX_FILE="$tmp/index" git --git-dir="$repo" read-tree "$base_commit"
+    page="$(printf 'new page' | git --git-dir="$repo" hash-object -w --stdin)"
+    GIT_INDEX_FILE="$tmp/index" git --git-dir="$repo" update-index --add --cacheinfo "100644,${page},index.html"
+    GIT_INDEX_FILE="$tmp/index" git --git-dir="$repo" update-index --add --cacheinfo "100644,${page},_dashboard/review.json"
+    tree="$(GIT_INDEX_FILE="$tmp/index" git --git-dir="$repo" write-tree)"
+    rebuilt="$(GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t \
+        git --git-dir="$repo" commit-tree "$tree" -p "$base_commit" -m rebuild)"
+    git --git-dir="$repo" push --quiet -f "$origin" "$rebuilt:refs/heads/$REPORTS_BRANCH" 2>/dev/null
+    if [[ "$(rebase_onto_origin "$repo" "$base_commit")" == "$rebuilt" ]]; then
+        ok "origin ahead by a page rebuild: build on origin's head"
+    else
+        bad "origin ahead by a page rebuild should build on origin's head"
+    fi
+    # Origin ahead by a report: refuse.
+    GIT_INDEX_FILE="$tmp/index" git --git-dir="$repo" update-index --add --cacheinfo "100644,${page},other-pkg/20260821-2-m.md"
+    tree="$(GIT_INDEX_FILE="$tmp/index" git --git-dir="$repo" write-tree)"
+    foreign="$(GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t \
+        git --git-dir="$repo" commit-tree "$tree" -p "$rebuilt" -m reports)"
+    git --git-dir="$repo" push --quiet -f "$origin" "$foreign:refs/heads/$REPORTS_BRANCH" 2>/dev/null
+    if rebase_onto_origin "$repo" "$base_commit" >/dev/null; then
+        bad "origin ahead by a report should refuse"
+    else
+        ok "origin ahead by a report: refused"
+    fi
+    # Origin behind (we have more): build on ours.
+    git --git-dir="$repo" push --quiet -f "$origin" "$base_commit:refs/heads/$REPORTS_BRANCH" 2>/dev/null
+    if [[ "$(rebase_onto_origin "$repo" "$rebuilt")" == "$rebuilt" ]]; then
+        ok "origin behind: build on ours"
+    else
+        bad "origin behind should build on ours"
+    fi
+)
+
 echo "== the pin ties a publish to the commit its review approved =="
 # In a subshell: check_expected_head needs its own log(), and defining one out
 # here would replace the harness's for every check after this.

@@ -632,6 +632,39 @@ check_expected_head() {
     return 1
 }
 
+# Fetch origin's branch into the throwaway repository and decide what to build
+# on. Prints the commit to build on: SHA itself when origin is at or behind
+# it, origin's head when origin is ahead only by commits that touch paths
+# this stage rewrites (index.html, .nojekyll, _dashboard/*). Fails when origin
+# holds anything else. Fetches over FETCH_URL, which needs no credential.
+# Stdout is the answer, so no logging here.
+rebase_onto_origin() {
+    local repo="$1" sha="$2" origin path
+    if ! git --git-dir="$repo" fetch --quiet "$FETCH_URL" \
+            "+refs/heads/$REPORTS_BRANCH:refs/remotes/origin/$REPORTS_BRANCH" 2>/dev/null; then
+        # No network, or no branch on origin yet: build on what we have and let
+        # the push say what it thinks.
+        printf '%s\n' "$sha"
+        return 0
+    fi
+    origin="$(git --git-dir="$repo" rev-parse --verify --quiet "refs/remotes/origin/$REPORTS_BRANCH" || true)"
+    if [[ -z "$origin" || "$origin" == "$sha" ]] \
+            || git --git-dir="$repo" merge-base --is-ancestor "$origin" "$sha"; then
+        printf '%s\n' "$sha"
+        return 0
+    fi
+    if ! git --git-dir="$repo" merge-base --is-ancestor "$sha" "$origin"; then
+        return 1
+    fi
+    while IFS= read -r -d '' path; do
+        case "$path" in
+            index.html|.nojekyll|_dashboard/*) ;;
+            *) return 1 ;;
+        esac
+    done < <(git --git-dir="$repo" diff --name-only -z "$sha" "$origin")
+    printf '%s\n' "$origin"
+}
+
 # --- publish ------------------------------------------------------------------
 
 do_publish() {
@@ -661,11 +694,28 @@ do_publish() {
     validate_reports_tree "$pub" "$sha" \
         || die "refusing to publish $REPORTS_BRANCH; see the disallowed paths above"
 
+    # Where origin is now. Every publish adds a page-rebuild commit on top of
+    # the reviewed one, and the store only learns of it at the next prepare;
+    # a second publish before then would build on the old head and be
+    # rejected as non-fast-forward. So: if origin is ahead by commits that
+    # touch only the paths this stage rewrites anyway, build on origin's head
+    # (the reports are identical, so the review still covers it). If origin
+    # has anything else, someone pushed reports this store has not seen, and
+    # that is for a prepare to reconcile, not for this stage to guess at.
+    local base
+    base="$(rebase_onto_origin "$pub" "$sha")" \
+        || die "refusing to publish: origin holds reports this store has not seen; run a prepare (any run) and review again"
+    if [[ "$base" != "$sha" ]]; then
+        log "origin is ahead by a page rebuild only; building on ${base:0:12}"
+    fi
+
     local rewritten
-    rewritten="$(rewrite_dashboard_html "$pub" "$sha")"
-    if [[ "$rewritten" != "$sha" ]]; then
+    rewritten="$(rewrite_dashboard_html "$pub" "$base")"
+    if [[ "$rewritten" != "$base" ]]; then
         log "Rebuilt index.html from this image; $REPORTS_BRANCH is now $rewritten"
         sha="$rewritten"
+    else
+        sha="$base"
     fi
 
     if [[ "$PUBLISH_DRY_RUN" == "true" ]]; then
