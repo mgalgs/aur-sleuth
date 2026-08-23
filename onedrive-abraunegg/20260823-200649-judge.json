@@ -1,0 +1,33 @@
+{
+  "package": "onedrive-abraunegg",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The 'unsafe' verdict was based on a false positive in an init script that doesn't execute during makepkg. The file in question is not referenced in PKGBUILD functions and poses no build-time risk.",
+  "disagreement_analysis": "qwen incorrectly flagged init script quoting as malicious, while deepseek missed reviewing the file entirely due to coverage gap.",
+  "coverage_issues": [
+    "deepseek failed to review src/onedrive-2.5.11/contrib/init.d/onedrive_service.sh",
+    "Both models skipped v2.5.11.tar.gz source audit (though acceptable for binary)"
+  ],
+  "false_positives": [
+    "qwen's 'malformed quotes' finding: Normal shell quoting mistaken for obfuscation in non-build script"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Improve file prioritization: Focus on PKGBUILD-referenced files over contrib/init.d scripts",
+    "Enhance shell script interpretation: Reduce false positives on common quoting patterns",
+    "Implement cross-report validation: Flag when critical files are missed by some models",
+    "Clarify scope rules in prompt: Emphasize that non-build scripts don't affect safety verdict"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 6182,
+    "completion_tokens": 2371,
+    "cost": 0.0102549
+  },
+  "audits_judged": [
+    "20260823-192819-qwen-qwen3-235b-a22b-2507.md",
+    "20260823-192810-deepseek-deepseek-v4-flash.md"
+  ]
+}

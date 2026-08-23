@@ -1,0 +1,35 @@
+{
+  "package": "portprotonqt",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "All flagged 'unsafe' findings occur outside package build/install scope. AppImage execution in install.sh isn't triggered by PKGBUILD, HTTP telemetry in app.py runs post-install, and desktop file behavior is user-initiated.",
+  "disagreement_analysis": "qwen over-scoped application runtime behavior as package risks; deepseek correctly focused on build/install execution context.",
+  "coverage_issues": [
+    "Both models missed verifying if AppImage scripts are referenced in PKGBUILD (they aren't)"
+  ],
+  "false_positives": [
+    "install.sh: Execution requires manual user action, not part of makepkg",
+    "app.py: HTTP call occurs during application runtime, not package installation",
+    "Install_PortProtonQt.desktop: Desktop file execution is user-triggered",
+    "portprotonqt-appimage.sh: Build-aux script unused in PKGBUILD functions"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Improve scope enforcement: Exclude application runtime behavior from AUR audits",
+    "Enhance PKGBUILD dependency tracing: Verify script references before flagging",
+    "Clarify prompt: Emphasize 'executed during makepkg' as primary threat surface",
+    "Add file-context analysis: Distinguish between build-time vs runtime scripts automatically"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 13520,
+    "completion_tokens": 2064,
+    "cost": 0.014624000000000002
+  },
+  "audits_judged": [
+    "20260823-190718-qwen-qwen3-235b-a22b-2507.md",
+    "20260823-190739-deepseek-deepseek-v4-flash.md"
+  ]
+}

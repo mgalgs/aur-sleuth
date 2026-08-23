@@ -1,0 +1,33 @@
+{
+  "package": "onedrive-abraunegg",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The flagged init script isn't executed during AUR build/install and shows no malicious intent. Malformed quotes appear to be an encoding artifact rather than obfuscation.",
+  "disagreement_analysis": "qwen incorrectly flagged non-executed init script due to HTML-encoded quotes; deepseek correctly ignored it as irrelevant.",
+  "coverage_issues": [
+    "deepseek missed reviewing contrib/init.d/onedrive_service.sh",
+    "Both models skipped source tarball audit (v2.5.11.tar.gz)"
+  ],
+  "false_positives": [
+    "qwen's 'malformed quotes' finding: Script isn't used in PKGBUILD/build process and quotes appear to be encoding artifact"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Prioritize files referenced in PKGBUILD (prepare/build/package) and .install hooks",
+    "Improve context-awareness: Non-executed contrib scripts shouldn't trigger unsafe verdicts",
+    "Handle encoding artifacts better to prevent false tampering alerts",
+    "Add binary/source tarball scanning capability"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 6180,
+    "completion_tokens": 1266,
+    "cost": 0.007491
+  },
+  "audits_judged": [
+    "20260823-192819-qwen-qwen3-235b-a22b-2507.md",
+    "20260823-192810-deepseek-deepseek-v4-flash.md"
+  ]
+}

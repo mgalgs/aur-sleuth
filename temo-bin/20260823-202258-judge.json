@@ -1,0 +1,31 @@
+{
+  "package": "temo-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The README.md installation command flagged as unsafe is documentation-only and not executed during makepkg. PKGBUILD safely handles verified binary installation.",
+  "disagreement_analysis": "qwen incorrectly treated README.md's curl|bash command as a package execution risk, while deepseek correctly recognized it as non-executed documentation.",
+  "coverage_issues": [
+    "Both models skipped binary payload audit (temo-x86_64-0.1.0.tgz, src/temo) - expected for bin packages"
+  ],
+  "false_positives": [
+    "qwen: README.md curl|bash command (documentation, not executed during package build/install)"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Improve file prioritization: Focus exclusively on PKGBUILD/.install scripts for execution risks",
+    "Enhance context awareness: Documentation files should never trigger unsafe verdicts unless executed by package hooks",
+    "Clarify scope: Explicitly exclude non-executed files (READMEs, CI configs) from security assessment"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 4669,
+    "completion_tokens": 1714,
+    "cost": 0.007553300000000001
+  },
+  "audits_judged": [
+    "20260823-184917-qwen-qwen3-235b-a22b-2507.md",
+    "20260823-184912-deepseek-deepseek-v4-flash.md"
+  ]
+}

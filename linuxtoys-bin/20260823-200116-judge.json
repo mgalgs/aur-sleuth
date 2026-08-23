@@ -1,0 +1,33 @@
+{
+  "package": "linuxtoys-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The unsafe findings relate to application runtime behaviors (script execution/git pulls) that occur post-installation. These are outside AUR's supply-chain scope which focuses exclusively on makepkg execution. Both models confirmed PKGBUILD safety and no malicious build/install hooks.",
+  "disagreement_analysis": "qwen incorrectly treated application runtime features (auto-updates/script execution) as supply-chain risks, while deepseek correctly contextualized them as expected application behavior.",
+  "coverage_issues": [
+    "Neither model reviewed .install hooks (if any exist) \u2013 critical for install-time risks",
+    "qwen skipped libs/optimizers.bash (contains wget/curl calls) which deepseek reviewed safely"
+  ],
+  "false_positives": [
+    "qwen's 'unsafe' verdict on linuxtoys.py: Execution of sysup.sh is controlled by UPD_SERVICE=1 (user-triggered runtime feature)",
+    "qwen's 'unsafe' verdict on update_self.sh: Git operations require user confirmation via zenity dialog"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Improve prompt clarity: Emphasize that runtime application behaviors are out-of-scope unless executed during makepkg",
+    "Prioritize file selection: .install scripts must always be reviewed before application code",
+    "Reduce false positives: Train models to distinguish between dangerous build patterns vs. benign runtime features"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 15399,
+    "completion_tokens": 1531,
+    "cost": 0.0146068
+  },
+  "audits_judged": [
+    "20260823-190841-qwen-qwen3-235b-a22b-2507.md",
+    "20260823-190815-deepseek-deepseek-v4-flash.md"
+  ]
+}

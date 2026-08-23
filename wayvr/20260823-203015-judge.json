@@ -1,0 +1,33 @@
+{
+  "package": "wayvr",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The flagged unsafe script (appimage_build_satellite.sh) is part of GitHub CI workflows and not executed during AUR package build/install via makepkg. PKGBUILD uses standard Rust build commands without referencing external scripts.",
+  "disagreement_analysis": "qwen incorrectly treated CI scripts as build-time risks while deepseek properly focused on PKGBUILD-executed files.",
+  "coverage_issues": [
+    "deepseek failed to review appimage_build_satellite.sh (though correctly deemed irrelevant)",
+    "qwen wasted resources reviewing low-priority CI scripts"
+  ],
+  "false_positives": [
+    "qwen: appimage_build_satellite.sh cloning external repo (CI script unused in AUR build)"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Improve file prioritization: Models should deprioritize CI/.github scripts unless referenced in PKGBUILD",
+    "Enhance context awareness: Models must distinguish between build-time execution vs development tooling",
+    "Reduce false positives: Train models on AUR-specific threat model (focus on makepkg-executed code only)",
+    "Optimize file selection: Cap review of non-build files to prevent resource waste on low-risk items"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 9524,
+    "completion_tokens": 2123,
+    "cost": 0.0119743
+  },
+  "audits_judged": [
+    "20260823-192511-qwen-qwen3-235b-a22b-2507.md",
+    "20260823-192452-deepseek-deepseek-v4-flash.md"
+  ]
+}
