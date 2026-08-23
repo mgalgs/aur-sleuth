@@ -6,15 +6,6 @@ let currentFilter = 'all';
 let searchTerm = '';
 const detailCache = {};
 
-const RESULT_COLORS = {
-    safe: '#22c55e',
-    unsafe: '#ef4444',
-    inconclusive: '#f59e0b',
-    contested: '#f59e0b',
-    skipped: '#6b7280',
-    unknown: '#6b7280',
-};
-
 const DANGER_SCORE = {unsafe: 3, contested: 2, inconclusive: 1, unknown: 0, safe: 0};
 
 function dangerScore(pkg) {
@@ -30,7 +21,7 @@ async function init() {
         DATA = await resp.json();
     } catch (e) {
         document.getElementById('package-table').innerHTML =
-            '<tr><td colspan="7" class="px-4 py-8 text-center text-slate-400">Failed to load data. Are you serving from the audit-reports branch root?</td></tr>';
+            '<tr><td colspan="7" class="empty">Failed to load data. Are you serving from the audit-reports branch root?</td></tr>';
         return;
     }
     renderSummary();
@@ -92,7 +83,7 @@ function applyFilter(name) {
     document.querySelectorAll('.filter-btn').forEach(b =>
         b.classList.toggle('active', b.dataset.filter === name));
     renderTable();
-    document.getElementById('package-table').closest('.bg-slate-800')
+    document.getElementById('package-table').closest('.table-wrap')
         .scrollIntoView({behavior: 'smooth', block: 'start'});
 }
 
@@ -116,20 +107,20 @@ function renderActivity() {
     // nothing: show the totals and leave the breakdown out.
     const counted = Object.prototype.hasOwnProperty.call(p, 'confirmed');
     document.getElementById('activity-packages').innerHTML =
-        '<span class="text-2xl font-bold text-white">' + Number(p.updated || 0).toLocaleString() + '</span>' +
+        '<span class="num-big">' + Number(p.updated || 0).toLocaleString() + '</span>' +
         ' packages audited' +
-        '<span class="text-slate-400 text-base"> (' + Number(p.new || 0) + ' new)</span>' +
+        '<span class="week-new"> (' + Number(p.new || 0) + ' new)</span>' +
         (!counted ? '' :
-        '<br><span class="text-sm">' +
-        countLink('clean', Number(p.green || 0) + ' clean', 'result-safe font-semibold') +
-        '<span class="text-slate-500"> &middot; </span>' +
-        countLink('unknown', Number(p.unknown || 0) + ' no verdict', 'text-slate-400') +
-        '<span class="text-slate-500"> &middot; </span>' +
-        countLink('look', Number(p.look || 0) + ' worth a closer look', 'text-slate-300') +
-        '<span class="text-slate-500"> &middot; </span>' +
+        '<br><span class="small">' +
+        countLink('clean', Number(p.green || 0) + ' clean', 'result-safe strong') +
+        '<span class="sep"> &middot; </span>' +
+        countLink('unknown', Number(p.unknown || 0) + ' no verdict', 'muted') +
+        '<span class="sep"> &middot; </span>' +
+        countLink('look', Number(p.look || 0) + ' worth a closer look', 'text') +
+        '<span class="sep"> &middot; </span>' +
         (confirmed
-            ? countLink('confirmed', confirmed + ' confirmed malicious', 'result-unsafe font-semibold')
-            : '<span class="result-safe font-semibold">none confirmed malicious</span>') +
+            ? countLink('confirmed', confirmed + ' confirmed malicious', 'result-unsafe strong')
+            : '<span class="result-safe strong">none confirmed malicious</span>') +
         '</span>');
 
     const parts = Object.entries(wk.by_model || {}).slice(0, 6)
@@ -152,12 +143,12 @@ function renderActivity() {
     label.textContent = flagged.length ? 'Flagged this week:' : '';
     document.getElementById('activity-recent').innerHTML = flagged.map(r => {
         const d = String(r.date || '').split('T')[0];
-        return '<span class="chip inline-flex items-center gap-1.5 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs" ' +
+        return '<span class="chip" ' +
             'data-pkg="' + escapeAttr(r.package || '') + '" ' +
             'title="' + escapeAttr(WHAT[r.state] + ' • ' + (r.date || '') + ' — open this package') + '">' +
             '<span class="block ' + DOT[r.state] + '" style="margin-right:0"></span>' +
-            '<span class="text-blue-300">' + escapeHtml(r.package || '') + '</span>' +
-            '<span class="text-slate-500">' + escapeHtml(d) + '</span>' +
+            '<span class="chip-name">' + escapeHtml(r.package || '') + '</span>' +
+            '<span class="chip-date">' + escapeHtml(d) + '</span>' +
             '</span>';
     }).join('');
 }
@@ -216,89 +207,73 @@ function renderSummary() {
     }
     const c = document.getElementById('stat-confirmed');
     c.innerHTML = countLink('confirmed', confirmed.toLocaleString(), confirmed ? 'result-unsafe' : 'result-safe');
-    document.getElementById('stat-look').innerHTML = countLink('look', look.toLocaleString(), look ? 'text-yellow-500' : 'text-slate-300');
+    document.getElementById('stat-look').innerHTML = countLink('look', look.toLocaleString(), look ? 'warn' : 'text');
 }
 
-function renderCharts() {
-    const s = DATA.summary;
 
-    // Verdicts per package, after the judge. Charting the raw per-report results would
-    // put verdicts the judge overturned into a headline figure; a package
-    // the judge cleared is simply clean here, and the audit that called it
-    // unsafe stays visible in its own row.
+// Both charts are drawn by hand -- an inline SVG ring and a row of HTML
+// bars -- so the page needs no chart library and no CDN. Every label and
+// number passes through the escapers like everything else on the page.
+function renderCharts() {
+    renderVerdictChart(DATA.summary);
+    renderModelCosts(DATA.summary);
+}
+
+// Verdicts per package, after the judge. Charting the raw per-report results
+// would put verdicts the judge overturned into a headline figure; a package
+// the judge cleared is simply clean here, and the audit that called it unsafe
+// stays visible in its own row.
+function renderVerdictChart(s) {
     const STATE_LABEL = {clean: 'Clean', look: 'Worth a closer look',
                          confirmed: 'Confirmed malicious', unknown: 'No verdict'};
     const STATE_COLOR = {clean: '#22c55e', look: '#f59e0b',
                          confirmed: '#ef4444', unknown: '#64748b'};
     const states = s.package_states
         || {unknown: Object.keys(DATA.packages || {}).length};
-    const stateKeys = ['clean', 'unknown', 'look', 'confirmed'].filter(k => states[k]);
-    const resultsCtx = document.getElementById('results-chart').getContext('2d');
-    new Chart(resultsCtx, {
-        type: 'doughnut',
-        data: {
-            labels: stateKeys.map(k => STATE_LABEL[k] || k),
-            datasets: [{
-                data: stateKeys.map(k => states[k]),
-                backgroundColor: stateKeys.map(k => STATE_COLOR[k] || '#6b7280'),
-                borderColor: '#1e293b',
-                borderWidth: 2,
-            }],
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    // Beside the ring where there is room; under it on a phone,
-                    // where beside it the labels were cut mid-word.
-                    position: window.innerWidth < 640 ? 'bottom' : 'right',
-                    labels: { color: '#94a3b8', font: { family: "'Courier New', monospace", size: 11 } },
-                },
-            },
-        },
-    });
+    const keys = ['clean', 'unknown', 'look', 'confirmed'].filter(k => states[k]);
+    const total = keys.reduce((n, k) => n + Number(states[k]), 0);
+    const box = document.getElementById('results-chart');
+    if (!total) { box.innerHTML = '<div class="empty">No verdicts yet.</div>'; return; }
 
-    // Model cost bar chart
-    const modelCtx = document.getElementById('model-chart').getContext('2d');
-    const modelEntries = Object.entries(s.by_model).filter(([, v]) => v.cost > 0);
-    const modelColors = ['#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#22c55e', '#06b6d4'];
-    new Chart(modelCtx, {
-        type: 'bar',
-        data: {
-            labels: modelEntries.map(([m]) => m.split('/').pop()),
-            datasets: [{
-                label: 'Cost ($)',
-                data: modelEntries.map(([, v]) => v.cost),
-                backgroundColor: modelEntries.map((_, i) => modelColors[i % modelColors.length]),
-                borderWidth: 0,
-                borderRadius: 4,
-            }],
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            indexAxis: 'y',
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    callbacks: {
-                        label: ctx => `$${ctx.raw.toFixed(4)} (${modelEntries[ctx.dataIndex][1].count} runs)`,
-                    },
-                },
-            },
-            scales: {
-                x: {
-                    ticks: { color: '#94a3b8', callback: v => '$' + v.toFixed(2) },
-                    grid: { color: '#334155' },
-                },
-                y: {
-                    ticks: { color: '#94a3b8', font: { family: "'Courier New', monospace", size: 10 } },
-                    grid: { display: false },
-                },
-            },
-        },
-    });
+    // One stroked circle per state; the dash pattern draws just its share of
+    // the circumference, offset to where the previous one ended. The ring
+    // starts at twelve o'clock and runs clockwise. A 2-unit gap between
+    // segments stands in for the border the old chart drew.
+    const R = 40, C = 2 * Math.PI * R, GAP = keys.length > 1 ? 2 : 0;
+    let offset = 0, arcs = '';
+    for (const k of keys) {
+        const n = Number(states[k]);
+        const len = C * n / total;
+        const drawn = Math.max(0, len - GAP);
+        arcs += `<circle r="${R}" cx="50" cy="50" fill="none" stroke="${STATE_COLOR[k]}" stroke-width="20"`
+            + ` stroke-dasharray="${drawn.toFixed(3)} ${(C - drawn).toFixed(3)}" stroke-dashoffset="${(-offset).toFixed(3)}">`
+            + `<title>${escapeHtml(STATE_LABEL[k])}: ${n.toLocaleString()}</title></circle>`;
+        offset += len;
+    }
+    const legend = keys.map(k =>
+        `<span><span class="swatch" style="background:${STATE_COLOR[k]}"></span>${escapeHtml(STATE_LABEL[k])}</span>`
+    ).join('');
+    box.innerHTML = `<div class="doughnut">`
+        + `<svg viewBox="0 0 100 100" role="img" aria-label="Verdicts per package">`
+        + `<g transform="rotate(-90 50 50)">${arcs}</g></svg>`
+        + `<div class="doughnut-legend">${legend}</div></div>`;
+}
+
+// What each model has cost, all time. Bars scale to the most expensive one.
+function renderModelCosts(s) {
+    const entries = Object.entries(s.by_model || {}).filter(([, v]) => Number(v.cost) > 0);
+    const box = document.getElementById('model-chart');
+    if (!entries.length) { box.innerHTML = '<div class="empty">No cost recorded.</div>'; return; }
+    const max = Math.max(...entries.map(([, v]) => Number(v.cost)));
+    const colors = ['#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#22c55e', '#06b6d4'];
+    box.innerHTML = entries.map(([m, v], i) => {
+        const cost = Number(v.cost);
+        const pct = Math.max(1, 100 * cost / max);
+        return `<div class="bar-row" title="${escapeAttr(m)}: $${cost.toFixed(4)} (${Number(v.count)} runs)">`
+            + `<span class="bar-label">${escapeHtml(shortModel(m))}</span>`
+            + `<span class="bar-track"><span class="bar-fill" style="width:${pct.toFixed(1)}%;background:${colors[i % colors.length]}"></span></span>`
+            + `<span class="bar-value">$${cost.toFixed(2)}</span></div>`;
+    }).join('');
 }
 
 // The same rule as package_state() in generate-dashboard.py. The headline
@@ -374,7 +349,7 @@ function getFilteredPackages() {
 // is dangerous, when what happened is that a model was wrong about it.
 function renderBlocks(items, type, judgeVerdict) {
     if (!items || items.length === 0) {
-        return '<span class="text-slate-600">—</span>';
+        return '<span class="dim">—</span>';
     }
     return items.map(item => {
         const value = type === 'audit' ? item.result : item.verdict;
@@ -412,20 +387,20 @@ function renderTable() {
         const date = pkg.latest_date ? pkg.latest_date.split('T')[0] : '—';
         const safeId = escapeAttr(name);
 
-        return `<tr class="border-b border-slate-700/50 hover:bg-slate-750 cursor-pointer pkg-row" data-pkg="${safeId}">
-            <td class="px-3 sm:px-4 py-2.5 font-medium text-blue-400 break-words">${escapeHtml(name)}
-                <div class="text-xs text-slate-500 font-normal sm:hidden">${escapeHtml(date)}</div></td>
-            <td class="px-4 py-2.5 text-slate-400 hidden md:table-cell">${escapeHtml(pkg.pkgver || '—')}</td>
-            <td class="px-3 sm:px-4 py-2.5"><span class="inline-flex items-center gap-0.5">${renderBlocks(pkg.audits, 'audit', pkg.judge_majority)}</span></td>
-            <td class="px-4 py-2.5 hidden sm:table-cell"><span class="inline-flex items-center gap-0.5">${renderBlocks(pkg.judges, 'judge')}</span></td>
-            <td class="px-4 py-2.5 text-right text-slate-400 hidden lg:table-cell">${pkg.files_reviewed === 0 && pkg.audits && pkg.audits.every(a => a.result === 'skipped' || a.result === 'inconclusive') ? '—' : escapeHtml(pkg.files_reviewed)}</td>
-            <td class="px-4 py-2.5 text-right text-slate-400 hidden lg:table-cell">$${pkg.total_cost.toFixed(4)}</td>
-            <td class="px-3 sm:px-4 py-2.5 text-slate-400 whitespace-nowrap">${escapeHtml(date)}</td>
+        return `<tr class="pkg-row" data-pkg="${safeId}">
+            <td class="pkg-name">${escapeHtml(name)}
+                <div class="pkg-date-sub">${escapeHtml(date)}</div></td>
+            <td class="col-md pkg-version">${escapeHtml(pkg.pkgver || '—')}</td>
+            <td><span class="blocks">${renderBlocks(pkg.audits, 'audit', pkg.judge_majority)}</span></td>
+            <td class="col-sm"><span class="blocks">${renderBlocks(pkg.judges, 'judge')}</span></td>
+            <td class="col-lg num">${pkg.files_reviewed === 0 && pkg.audits && pkg.audits.every(a => a.result === 'skipped' || a.result === 'inconclusive') ? '—' : escapeHtml(pkg.files_reviewed)}</td>
+            <td class="col-lg num">$${pkg.total_cost.toFixed(4)}</td>
+            <td class="pkg-date">${escapeHtml(date)}</td>
         </tr>
         <tr class="detail-row" id="detail-${safeId}">
-            <td colspan="7" class="p-0">
-                <div class="detail-box p-6 bg-slate-850 border-t border-slate-600">
-                    <div class="detail-content text-slate-400">Loading...</div>
+            <td colspan="7">
+                <div class="detail-box">
+                    <div class="detail-content">Loading...</div>
                 </div>
             </td>
         </tr>`;
@@ -457,7 +432,7 @@ async function toggleDetail(name) {
         detailCache[name] = data;
         content.innerHTML = renderDetail(name, data);
     } catch (e) {
-        content.innerHTML = '<p class="text-red-400">Failed to load package details.</p>';
+        content.innerHTML = '<p class="detail-error">Failed to load package details.</p>';
     }
 }
 
@@ -466,26 +441,26 @@ function renderDetail(name, data) {
 
     // Judge section
     if (data.judges && data.judges.length > 0) {
-        html += `<h3 class="text-sm font-semibold text-slate-300 uppercase tracking-wide mb-2">Judge Verdicts (${data.judges.length})</h3>`;
+        html += `<h3 class="detail-title">Judge Verdicts (${data.judges.length})</h3>`;
         for (const j of data.judges) {
             const d = j.data;
-            html += `<div class="bg-slate-800 rounded p-4 border border-slate-700 mb-3">
-                <div class="flex flex-wrap gap-x-4 gap-y-1 mb-3 text-sm">
-                    <span>Verdict: <span class="result-${escapeAttr(d.correct_verdict)} font-bold">${escapeHtml(d.correct_verdict)}</span></span>
+            html += `<div class="report">
+                <div class="report-head">
+                    <span>Verdict: <span class="result-${escapeAttr(d.correct_verdict)} strong">${escapeHtml(d.correct_verdict)}</span></span>
                     <span>Confidence: <strong>${escapeHtml(d.confidence)}</strong></span>
-                    <span>Model: <span class="text-slate-400">${escapeHtml((d._judge_usage || {}).model || '?')}</span></span>
-                    ${d.re_audit_recommended ? '<span class="text-yellow-500">&#x26a0; Re-audit recommended</span>' : ''}
+                    <span>Model: <span class="muted">${escapeHtml((d._judge_usage || {}).model || '?')}</span></span>
+                    ${d.re_audit_recommended ? '<span class="reaudit-flag">&#x26a0; Re-audit recommended</span>' : ''}
                 </div>
-                <p class="text-sm text-slate-300 whitespace-pre-wrap">${escapeHtml(d.reasoning || '')}</p>
-                ${d.coverage_issues && d.coverage_issues.length ? '<div class="mt-2 text-xs text-yellow-400">Coverage issues: ' + d.coverage_issues.map(escapeHtml).join(', ') + '</div>' : ''}
-                ${d.re_audit_focus && d.re_audit_focus.length ? '<div class="mt-1 text-xs text-yellow-400">Re-audit focus: ' + d.re_audit_focus.map(escapeHtml).join(', ') + '</div>' : ''}
+                <p class="report-text">${escapeHtml(d.reasoning || '')}</p>
+                ${d.coverage_issues && d.coverage_issues.length ? '<div class="report-note">Coverage issues: ' + d.coverage_issues.map(escapeHtml).join(', ') + '</div>' : ''}
+                ${d.re_audit_focus && d.re_audit_focus.length ? '<div class="report-note">Re-audit focus: ' + d.re_audit_focus.map(escapeHtml).join(', ') + '</div>' : ''}
             </div>`;
         }
     }
 
     // Audit reports
     if (data.audits && data.audits.length > 0) {
-        html += `<h3 class="text-sm font-semibold text-slate-300 uppercase tracking-wide mb-2">Audit Reports (${data.audits.length})</h3>`;
+        html += `<h3 class="detail-title">Audit Reports (${data.audits.length})</h3>`;
         for (const a of data.audits) {
             const fm = a.frontmatter;
             const result = fm.result || 'unknown';
@@ -493,31 +468,31 @@ function renderDetail(name, data) {
             const date = (fm.date || '').split('T')[0];
             const fv = fm.file_verdicts || [];
 
-            html += `<div class="bg-slate-800 rounded p-4 border border-slate-700 mb-3">
-                <div class="flex flex-wrap gap-4 text-sm mb-2">
-                    <span class="result-${escapeAttr(result)} font-bold">${escapeHtml(result)}</span>
-                    <span class="text-slate-400">${escapeHtml(model)}</span>
-                    <span class="text-slate-500">${escapeHtml(date)}</span>
-                    <span class="text-slate-500">${escapeHtml(fm.files_reviewed || 0)} files</span>
-                    <span class="text-slate-500">$${(parseFloat(fm.cost) || 0).toFixed(4)}</span>
-                    <span class="text-slate-500">${(parseFloat(fm.execution_time) || 0).toFixed(1)}s</span>
+            html += `<div class="report">
+                <div class="report-head">
+                    <span class="result-${escapeAttr(result)} strong">${escapeHtml(result)}</span>
+                    <span class="muted">${escapeHtml(model)}</span>
+                    <span class="sep">${escapeHtml(date)}</span>
+                    <span class="sep">${escapeHtml(fm.files_reviewed || 0)} files</span>
+                    <span class="sep">$${(parseFloat(fm.cost) || 0).toFixed(4)}</span>
+                    <span class="sep">${(parseFloat(fm.execution_time) || 0).toFixed(1)}s</span>
                 </div>`;
 
             if (fv.length > 0) {
-                html += `<table class="w-full text-xs mb-2 border-collapse">
-                    <thead><tr class="text-slate-500">
-                        <th class="text-left py-1 pr-3">File</th>
-                        <th class="text-left py-1 pr-3 whitespace-nowrap">Status</th>
-                        <th class="text-left py-1">Summary</th>
+                html += `<table class="verdicts">
+                    <thead><tr>
+                        <th>File</th>
+                        <th class="nowrap">Status</th>
+                        <th>Summary</th>
                     </tr></thead><tbody>`;
                 for (const v of fv) {
-                    html += `<tr class="border-t border-slate-700/50">
-                        <td class="py-1 pr-3 text-blue-300">${escapeHtml(v.file || '')}</td>
-                        <td class="py-1 pr-3 whitespace-nowrap result-${escapeAttr(v.status || 'unknown')}">${escapeHtml(v.status || '?')}</td>
-                        <td class="py-1 text-slate-400">${escapeHtml(v.summary || '')}</td>
+                    html += `<tr class="verdict">
+                        <td class="file">${escapeHtml(v.file || '')}</td>
+                        <td class="nowrap result-${escapeAttr(v.status || 'unknown')}">${escapeHtml(v.status || '?')}</td>
+                        <td class="summary">${escapeHtml(v.summary || '')}</td>
                     </tr>`;
                     if (v.evidence) {
-                        html += `<tr><td colspan="3" class="pb-1">${renderEvidence(v)}</td></tr>`;
+                        html += `<tr><td colspan="3" class="evidence-cell">${renderEvidence(v)}</td></tr>`;
                     }
                 }
                 html += '</tbody></table>';
@@ -525,13 +500,13 @@ function renderDetail(name, data) {
 
             const bodyId = 'body-' + name.replace(/[^a-zA-Z0-9-]/g, '_') + '-' + a.filename.replace(/[^a-zA-Z0-9]/g, '_');
             html += `<button onclick="document.getElementById('${bodyId}').classList.toggle('open')"
-                class="text-xs text-blue-400 hover:text-blue-300 mt-1">Toggle full report</button>
-                <pre id="${bodyId}" class="report-body mt-2 text-xs text-slate-400 whitespace-pre-wrap bg-slate-900 rounded p-3 border border-slate-700 max-h-96 overflow-y-auto">${escapeHtml(a.body || '')}</pre>
+                class="link-btn">Toggle full report</button>
+                <pre id="${bodyId}" class="report-body">${escapeHtml(a.body || '')}</pre>
             </div>`;
         }
     }
 
-    return html || '<p class="text-slate-500">No details available.</p>';
+    return html || '<p class="sep">No details available.</p>';
 }
 
 function escapeHtml(text) {
@@ -622,7 +597,7 @@ function renderEvidence(v) {
         return ln + highlightLine(line, lang);
     }).join('\n');
     const where = start ? `line ${start}` : 'quoted by the auditor; not matched to a line';
-    return `<div class="evidence-wrap"><div class="text-xs text-slate-500 mt-1">Evidence &middot; ${escapeHtml(where)}</div>
+    return `<div class="evidence-wrap"><div class="evidence-where">Evidence &middot; ${escapeHtml(where)}</div>
         <pre class="evidence">${body}</pre></div>`;
 }
 

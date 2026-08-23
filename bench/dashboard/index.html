@@ -4,117 +4,99 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AUR Sleuth Dashboard</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
     <link rel="stylesheet" href="app.css">
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        'slate': {
-                            850: '#172033',
-                        }
-                    }
-                }
-            }
-        }
-    </script>
 </head>
-<body class="bg-slate-900 text-slate-200 min-h-screen">
-    <div class="max-w-7xl mx-auto px-4 py-6">
+<body>
+    <div class="page">
         <!-- Header -->
-        <div class="flex items-center justify-between mb-6">
+        <header class="masthead">
             <div>
-                <h1 class="text-3xl font-bold text-blue-400">AUR Sleuth</h1>
-                <p class="text-slate-400 text-sm mt-1">Supply-chain audits of AUR packages</p>
+                <h1>AUR Sleuth</h1>
+                <p class="tagline">Supply-chain audits of AUR packages</p>
             </div>
-            <div class="text-right text-sm text-slate-500 shrink-0 whitespace-nowrap">
+            <div class="masthead-meta">
                 <span id="generated-at"></span>
                 <br>
-                <a href="https://github.com/mgalgs/aur-sleuth" class="text-blue-400 hover:text-blue-300">GitHub</a>
+                <a href="https://github.com/mgalgs/aur-sleuth">GitHub</a>
             </div>
-        </div>
+        </header>
 
         <!-- The answer first: how many packages, and how many are actually a
              finding. Each number filters the table. -->
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-            <div class="bg-slate-800 rounded-lg p-4 border border-slate-700">
-                <div class="text-slate-400 text-xs uppercase tracking-wide">Packages audited</div>
-                <div id="stat-packages" class="text-2xl font-bold text-white mt-1">—</div>
+        <div class="stats">
+            <div class="card stat">
+                <div class="stat-label">Packages audited</div>
+                <div id="stat-packages" class="stat-value">—</div>
             </div>
-            <div class="bg-slate-800 rounded-lg p-4 border border-slate-700">
-                <div class="text-slate-400 text-xs uppercase tracking-wide">Confirmed malicious</div>
-                <div id="stat-confirmed" class="text-2xl font-bold text-white mt-1">—</div>
+            <div class="card stat">
+                <div class="stat-label">Confirmed malicious</div>
+                <div id="stat-confirmed" class="stat-value">—</div>
             </div>
-            <div class="bg-slate-800 rounded-lg p-4 border border-slate-700">
-                <div class="text-slate-400 text-xs uppercase tracking-wide">Worth a closer look</div>
-                <div id="stat-look" class="text-2xl font-bold text-white mt-1">—</div>
+            <div class="card stat">
+                <div class="stat-label">Worth a closer look</div>
+                <div id="stat-look" class="stat-value">—</div>
             </div>
-            <div class="bg-slate-800 rounded-lg p-4 border border-slate-700">
-                <div class="text-slate-400 text-xs uppercase tracking-wide">Audit reports</div>
-                <div id="stat-reports" class="text-2xl font-bold text-white mt-1">—</div>
+            <div class="card stat">
+                <div class="stat-label">Audit reports</div>
+                <div id="stat-reports" class="stat-value">—</div>
             </div>
         </div>
 
         <!-- Verdicts, and this week -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-            <div class="bg-slate-800 rounded-lg p-4 border border-slate-700">
-                <h2 class="text-sm font-semibold text-slate-300 mb-3 uppercase tracking-wide">Verdicts</h2>
-                <div class="h-56 flex items-center justify-center">
-                    <canvas id="results-chart"></canvas>
-                </div>
+        <div class="two-col">
+            <div class="card">
+                <h2 class="card-title">Verdicts</h2>
+                <div id="results-chart" class="chart"></div>
             </div>
-            <div id="activity" class="bg-slate-800 rounded-lg p-4 border border-slate-700">
-                <h2 class="text-sm font-semibold text-slate-300 mb-3 uppercase tracking-wide">This week</h2>
-                <p id="activity-packages" class="text-slate-200"></p>
-                <p id="activity-audits" class="text-slate-500 text-xs mt-1"></p>
-                <div id="activity-recent-label" class="text-slate-400 text-xs mt-4 hidden"></div>
-                <div id="activity-recent" class="mt-2 flex flex-wrap gap-2"></div>
+            <div id="activity" class="card">
+                <h2 class="card-title">This week</h2>
+                <p id="activity-packages"></p>
+                <p id="activity-audits" class="fine"></p>
+                <div id="activity-recent-label" class="small muted hidden"></div>
+                <div id="activity-recent" class="chips"></div>
             </div>
         </div>
 
         <!-- The ask: what auditing every AUR update costs, against what this
              runs on. Hidden until data.json carries every number it needs. -->
-        <div id="funding" class="bg-slate-800 rounded-lg p-4 border border-slate-700 mb-6 hidden">
-            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div class="min-w-0 flex-1">
-                    <h2 class="text-sm font-semibold text-slate-300 mb-2 uppercase tracking-wide">Audit every update</h2>
-                    <p class="text-slate-200">
-                        <span id="funding-needed" class="text-2xl font-bold text-white"></span>
+        <div id="funding" class="card funding hidden">
+            <div class="funding-row">
+                <div class="funding-text">
+                    <h2 class="card-title">Audit every update</h2>
+                    <p>
+                        <span id="funding-needed" class="num-big"></span>
                         <span> a day to audit every AUR update.</span>
                     </p>
-                    <p id="funding-inputs" class="text-slate-400 text-sm mt-1"></p>
-                    <p id="funding-budget" class="text-slate-300 text-sm mt-3"></p>
-                    <div id="funding-track" class="mt-1.5 h-2 max-w-md bg-slate-900 rounded overflow-hidden" title="Share of the AUR's daily updates the current budget can audit">
-                        <div id="funding-bar" class="h-2 bg-blue-500" style="width:0"></div>
+                    <p id="funding-inputs" class="small muted"></p>
+                    <p id="funding-budget" class="small funding-budget"></p>
+                    <div id="funding-track" class="track" title="Share of the AUR's daily updates the current budget can audit">
+                        <div id="funding-bar" class="track-fill" style="width:0"></div>
                     </div>
                 </div>
                 <!-- Under the text on a phone, beside it where there is room. A
                      flex item, so no display class is needed (and ".block" is
-                     the legend dot in this page's own styles, not Tailwind's). -->
-                <a id="funding-link" class="hidden shrink-0 w-full sm:w-auto text-center bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded px-4 py-2" href="#" rel="noopener" target="_blank">Chip in</a>
+                     the legend dot in this page's own styles). -->
+                <a id="funding-link" class="btn-primary hidden" href="#" rel="noopener" target="_blank">Chip in</a>
             </div>
         </div>
 
         <!-- Filters -->
-        <div class="bg-slate-800 rounded-lg p-4 border border-slate-700 mb-4">
-            <div class="flex flex-wrap items-center gap-3">
-                <input id="search" type="text" placeholder="Search packages..."
-                    class="bg-slate-700 border border-slate-600 rounded px-3 py-1.5 text-sm text-slate-200 placeholder-slate-400 focus:outline-none focus:border-blue-500 w-full sm:w-64">
-                <div class="flex flex-wrap gap-1" id="filter-buttons">
-                    <button class="filter-btn active px-3 py-1 rounded text-xs font-medium bg-slate-700 text-slate-300" data-filter="all">All</button>
-                    <button class="filter-btn px-3 py-1 rounded text-xs font-medium bg-slate-700 text-slate-300" data-filter="clean">Clean</button>
-                    <button class="filter-btn px-3 py-1 rounded text-xs font-medium bg-slate-700 text-slate-300" data-filter="unknown">No verdict</button>
-                    <button class="filter-btn px-3 py-1 rounded text-xs font-medium bg-slate-700 text-slate-300" data-filter="look">Worth a closer look</button>
-                    <button class="filter-btn px-3 py-1 rounded text-xs font-medium bg-slate-700 text-slate-300 border border-red-800/50" data-filter="confirmed">Confirmed</button>
-                    <span class="border-l border-slate-600 mx-1"></span>
-                    <button class="filter-btn px-3 py-1 rounded text-xs font-medium bg-slate-700 text-slate-300" data-filter="overridden">Overridden by a judge</button>
-                    <button class="filter-btn px-3 py-1 rounded text-xs font-medium bg-slate-700 text-slate-300" data-filter="unjudged">Unjudged</button>
+        <div class="card filters">
+            <div class="toolbar">
+                <input id="search" type="text" placeholder="Search packages..." class="search">
+                <div class="filter-group" id="filter-buttons">
+                    <button class="filter-btn active" data-filter="all">All</button>
+                    <button class="filter-btn" data-filter="clean">Clean</button>
+                    <button class="filter-btn" data-filter="unknown">No verdict</button>
+                    <button class="filter-btn" data-filter="look">Worth a closer look</button>
+                    <button class="filter-btn danger" data-filter="confirmed">Confirmed</button>
+                    <span class="divider"></span>
+                    <button class="filter-btn" data-filter="overridden">Overridden by a judge</button>
+                    <button class="filter-btn" data-filter="unjudged">Unjudged</button>
                 </div>
-                <span id="result-count" class="text-xs text-slate-500 ml-auto"></span>
+                <span id="result-count" class="result-count"></span>
             </div>
-            <div class="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 text-xs text-slate-500">
+            <div class="legend">
                 <span><span class="block block-safe"></span>clean</span>
                 <span><span class="block block-flagged"></span>flagged, unconfirmed</span>
                 <span><span class="block block-unsafe"></span>confirmed by a judge</span>
@@ -128,17 +110,17 @@
         <!-- The narrow columns drop out on a phone rather than pushing the page
              sideways: package, its verdicts and when it was read are the point,
              and the rest is detail that fits on a wider screen. -->
-        <div class="bg-slate-800 rounded-lg border border-slate-700 overflow-x-auto">
-            <table class="w-full text-sm">
+        <div class="card table-wrap">
+            <table class="packages">
                 <thead>
-                    <tr class="bg-slate-750 border-b border-slate-700 text-left text-xs uppercase tracking-wide text-slate-400">
-                        <th class="px-3 sm:px-4 py-3" data-sort="name">Package</th>
-                        <th class="px-4 py-3 hidden md:table-cell" data-sort="version">Version</th>
-                        <th class="px-3 sm:px-4 py-3" data-sort="audits">Audits</th>
-                        <th class="px-4 py-3 hidden sm:table-cell" data-sort="judges">Judgements</th>
-                        <th class="px-4 py-3 text-right hidden lg:table-cell" data-sort="files">Files</th>
-                        <th class="px-4 py-3 text-right hidden lg:table-cell" data-sort="cost">Cost</th>
-                        <th class="px-3 sm:px-4 py-3" data-sort="date">Date</th>
+                    <tr>
+                        <th data-sort="name">Package</th>
+                        <th class="col-md" data-sort="version">Version</th>
+                        <th data-sort="audits">Audits</th>
+                        <th class="col-sm" data-sort="judges">Judgements</th>
+                        <th class="col-lg num" data-sort="files">Files</th>
+                        <th class="col-lg num" data-sort="cost">Cost</th>
+                        <th data-sort="date">Date</th>
                     </tr>
                 </thead>
                 <tbody id="package-table"></tbody>
@@ -146,27 +128,25 @@
         </div>
 
         <!-- For the curious: what the labels mean, and what this costs. -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
-            <div class="bg-slate-800 rounded-lg p-4 border border-slate-700">
-                <h2 class="text-sm font-semibold text-slate-300 mb-3 uppercase tracking-wide">How to read this page</h2>
-                <p class="text-slate-400 text-sm leading-relaxed">
+        <div class="two-col footer">
+            <div class="card">
+                <h2 class="card-title">How to read this page</h2>
+                <p class="small muted prose">
                     These audits look for one thing: code injected into the AUR packaging of a
                     package &mdash; in the <code>PKGBUILD</code>, an <code>.install</code> hook, or a patch.
                     They do not rate the application itself.
                 </p>
-                <ul class="text-slate-400 text-sm leading-relaxed mt-3 space-y-1">
-                    <li><span class="result-safe font-semibold">Clean</span> &mdash; nothing found, or a flag a judge overturned.</li>
-                    <li><span class="text-slate-300 font-semibold">No verdict</span> &mdash; no model reached an answer either way. Missing information, not a suspicion.</li>
-                    <li><span class="text-yellow-500 font-semibold">Worth a closer look</span> &mdash; something flagged it and nothing has settled it. Usually a false positive about behaviour the application is supposed to have; not a claim that it is malicious.</li>
-                    <li><span class="result-unsafe font-semibold">Confirmed malicious</span> &mdash; two independent audits said unsafe and a judge agreed.</li>
+                <ul class="small muted prose key">
+                    <li><span class="result-safe strong">Clean</span> &mdash; nothing found, or a flag a judge overturned.</li>
+                    <li><span class="text strong">No verdict</span> &mdash; no model reached an answer either way. Missing information, not a suspicion.</li>
+                    <li><span class="warn strong">Worth a closer look</span> &mdash; something flagged it and nothing has settled it. Usually a false positive about behaviour the application is supposed to have; not a claim that it is malicious.</li>
+                    <li><span class="result-unsafe strong">Confirmed malicious</span> &mdash; two independent audits said unsafe and a judge agreed.</li>
                 </ul>
-                <p class="text-slate-500 text-xs mt-3">Open a package to see every report, the files each one flagged, and the lines it quoted.</p>
+                <p class="fine">Open a package to see every report, the files each one flagged, and the lines it quoted.</p>
             </div>
-            <div class="bg-slate-800 rounded-lg p-4 border border-slate-700">
-                <h2 class="text-sm font-semibold text-slate-300 mb-3 uppercase tracking-wide">Cost by model <span id="stat-cost" class="normal-case text-slate-500 font-normal"></span></h2>
-                <div class="h-56 flex items-center justify-center">
-                    <canvas id="model-chart"></canvas>
-                </div>
+            <div class="card">
+                <h2 class="card-title">Cost by model <span id="stat-cost" class="card-title-note"></span></h2>
+                <div id="model-chart" class="bars"></div>
             </div>
         </div>
     </div>
