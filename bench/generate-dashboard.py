@@ -835,7 +835,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 
         if (llm.status === 'ok' || llm.status === 'partial') {
             let s = `Before that, ${escapeHtml(shortModel(llm.model || 'a model'))} read ${Number(llm.read) || 0} of the `
-                + `${Number(llm.of) || 0} report(s) that reached an unclear verdict, for one thing only: a leaked private `
+                + `${Number(llm.of) || 0} generated text(s) in the sweep, for one thing only: a leaked private `
                 + `detail of the operator (a credential, an internal hostname, a path on the machine that ran the audit). `
                 + `Anything it finds is handled before publishing and is not listed here.`;
             if (llm.status === 'partial') s += ' Part of that read did not complete.';

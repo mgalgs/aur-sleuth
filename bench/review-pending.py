@@ -37,8 +37,9 @@ import sys
 from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# Verdicts worth a model's attention: a report that claims danger, or one that
-# could not make up its mind. Both have text a person would want read.
+# Verdicts a person would want pointed out in the summary: a report that
+# claims danger, or one that could not make up its mind. (The model's read
+# covers every text regardless; see summarise().)
 FLAGGED = {"unsafe", "inconclusive"}
 
 # A skipped or unknown audit produced no findings to read, so sending one to a
@@ -60,8 +61,8 @@ _CUT_WORDS = re.compile(
     r"|mid-sentence|ends? (?:suddenly|early|prematurely)|trails? off",
     re.IGNORECASE,
 )
-# 0 means every flagged report. The read is advisory, and a report nobody read
-# is the one a problem hides in, so the default is to read them all.
+# 0 means every generated text in the sweep. The read is advisory, and a text
+# nobody read is the one a leak hides in, so the default is to read them all.
 DEFAULT_MAX_REVIEWS = 0
 # Reports per request. Batching is for the model's benefit, not the budget's: a
 # few reports at a time keeps each request inside a context the model can
@@ -134,6 +135,11 @@ def summarise(gitdir, head, base):
     verdicts = Counter()
     by_package = defaultdict(list)
     flagged = []
+    # Every generated text the push would publish: each audit report and each
+    # judge file. The model's read covers all of them, not only the flagged
+    # ones -- a package that talked the auditor into SAFE while getting it to
+    # write something out is exactly the report that would otherwise go unread.
+    texts = []
     degraded = 0
     for path in audits:
         text = git(gitdir, "show", f"{head}:{path}", check=False)
@@ -149,10 +155,22 @@ def summarise(gitdir, head, base):
             "text": text,
         }
         by_package[entry["package"]].append(entry)
+        texts.append(entry)
         if result in FLAGGED:
             flagged.append(entry)
         elif result in DEGRADED:
             degraded += 1
+    for path in judges:
+        raw = git(gitdir, "show", f"{head}:{path}", check=False)
+        model = "judge"
+        try:
+            model = str(((json.loads(raw).get("_judge_usage") or {}).get("model")) or "judge")
+        except (ValueError, AttributeError):
+            pass
+        texts.append({
+            "path": path, "package": path.split("/")[0], "model": f"{model} (judge)",
+            "result": "judge", "pkgver": "", "text": raw,
+        })
 
     commits = 0
     if base:
@@ -167,6 +185,7 @@ def summarise(gitdir, head, base):
         "judge_reports": len(judges),
         "verdicts": dict(verdicts),
         "flagged": flagged,
+        "texts": texts,
         "degraded": degraded,
     }
 
@@ -426,7 +445,7 @@ def main():
     ap.add_argument("--model", default=os.environ.get(
         "AUR_SLEUTH_REVIEW_MODEL", "deepseek/deepseek-v4-flash"))
     ap.add_argument("--max-reviews", type=int, default=DEFAULT_MAX_REVIEWS,
-                    help="cap on flagged reports to read; 0 (the default) reads all")
+                    help="cap on generated texts to read; 0 (the default) reads all")
     ap.add_argument("--batch-size", type=int, default=DEFAULT_BATCH,
                     help="reports per request")
     ap.add_argument("--workers", type=int, default=DEFAULT_WORKERS,
@@ -485,16 +504,18 @@ def main():
         print(f"  no findings:    {s['degraded']} report(s) skipped or errored")
 
     flagged = s["flagged"]
-    if not flagged:
+    if flagged:
+        print(f"\nReports worth a look ({len(flagged)}):")
+        for e in flagged[:40]:
+            print(f"  {e['result']:<13} {e['package']} [{e['model']}]")
+        if len(flagged) > 40:
+            print(f"  ... and {len(flagged) - 40} more")
+    else:
         print("\nNothing flagged: no report came back unsafe or inconclusive.")
+
+    texts = s["texts"]
+    if not texts:
         return finish(0)
-
-    print(f"\nReports worth a look ({len(flagged)}):")
-    for e in flagged[:40]:
-        print(f"  {e['result']:<13} {e['package']} [{e['model']}]")
-    if len(flagged) > 40:
-        print(f"  ... and {len(flagged) - 40} more")
-
     if args.no_llm:
         return finish(0)
 
@@ -503,14 +524,16 @@ def main():
         print("\nNo OPENAI_API_KEY: skipping the model's read.")
         return finish(0)
 
-    subset = flagged if args.max_reviews <= 0 else flagged[:args.max_reviews]
+    subset = texts if args.max_reviews <= 0 else texts[:args.max_reviews]
     nbatch = max(1, args.batch_size)
-    if len(flagged) > len(subset):
-        print(f"\nAsking {args.model} about the first {len(subset)}"
-              f" of {len(flagged)}, {nbatch} at a time...")
+    njudge = sum(1 for e in texts if e["result"] == "judge")
+    what = f"{len(texts) - njudge} audit report(s) and {njudge} judge file(s)"
+    if len(texts) > len(subset):
+        print(f"\nAsking {args.model} to read the first {len(subset)}"
+              f" of {what}, {nbatch} at a time, for operator leaks...")
     else:
-        print(f"\nAsking {args.model} about all {len(subset)},"
-              f" {nbatch} at a time...")
+        print(f"\nAsking {args.model} to read all {what},"
+              f" {nbatch} at a time, for operator leaks...")
 
     got = review_batches(
         subset, args.model,
@@ -518,7 +541,7 @@ def main():
         api_key, nbatch, args.workers,
     )
     out["llm"] = {"status": "ok", "model": args.model, "read": got["read"],
-                  "of": len(flagged), "concerns": got["concerns"],
+                  "of": len(texts), "concerns": got["concerns"],
                   "dismissed": len(got["dismissed"]),
                   "summary": "", "batches": got["batches"],
                   "batches_ok": got["batches_ok"]}
