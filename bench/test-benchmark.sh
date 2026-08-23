@@ -226,6 +226,21 @@ check("newest first within a group", names.index("ok9") < names.index("ok6"))
 check("a tiny size still fits", len(sample.select(pool, 2)) == 2)
 check("a size larger than the pool takes what there is", len(sample.select(pool, 100)) == 20)
 
+# --- the row splitter in benchmark.sh ----------------------------------------
+# bench_package and judge_package split a sample row into shell variables.
+# Tab is IFS whitespace, so an empty field (pkgver, reference_source) made
+# every later field shift left and the row was rejected after the audit was
+# paid for. The separator must be one that `read` does not collapse.
+src = open(os.path.join(bench, "benchmark.sh")).read()
+check("no row is split on tab", "IFS=$'\\t' read" not in src)
+sep = "\x1f"
+check("rows are joined on the unit separator", '"\\x1f".join' in src and "IFS=$'\\x1f' read" in src)
+probe = subprocess.run(
+    ["bash", "-c", "IFS=$'\\x1f' read -r a b c d <<< \"$1\"; printf '%s|%s|%s|%s' \"$a\" \"$b\" \"$c\" \"$d\"",
+     "_", sep.join(["x", "", "0", "y"])],
+    capture_output=True, text=True).stdout
+check("an empty field keeps its place", probe == "x||0|y")
+
 if fails:
     print(f"FAILED: {fails} check(s)")
     sys.exit(1)

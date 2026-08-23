@@ -180,12 +180,15 @@ bench_package() {
     local model="$1" line="$2" slug="${1//\//-}"
     local pkg reference ref_pkgver overridden
     local ref_source support
-    IFS=$'\t' read -r pkg reference ref_pkgver overridden ref_source support < <(printf '%s' "$line" | python3 -c '
+    # Split on the unit separator, not a tab: tab is IFS whitespace, so two
+    # tabs in a row collapse and every field after an empty one shifts left.
+    # pkgver and reference_source are legitimately empty for some rows.
+    IFS=$'\x1f' read -r pkg reference ref_pkgver overridden ref_source support < <(printf '%s' "$line" | python3 -c '
 import json, sys
 r = json.load(sys.stdin)
-print("\t".join([r["package"], r.get("reference", "unknown"), r.get("pkgver", ""),
-                 "1" if r.get("overridden") else "0", r.get("reference_source", ""),
-                 str(r.get("support", 0))]))')
+print("\x1f".join([r["package"], r.get("reference", "unknown"), r.get("pkgver", ""),
+                   "1" if r.get("overridden") else "0", r.get("reference_source", ""),
+                   str(r.get("support", 0))]))')
 
     local report_dir="$RUN_DIR/reports/$slug"
     local report="$report_dir/aur-sleuth-report-${pkg}.txt"
@@ -222,13 +225,14 @@ print("\t".join([r["package"], r.get("reference", "unknown"), r.get("pkgver", ""
 judge_package() {
     local model="$1" line="$2" slug="${1//\//-}"
     local pkg reference ref_pkgver overridden ref_source support paths
-    IFS=$'\t' read -r pkg reference ref_pkgver overridden ref_source support paths < <(printf '%s' "$line" | python3 -c '
+    # The unit separator, for the same reason as in bench_package.
+    IFS=$'\x1f' read -r pkg reference ref_pkgver overridden ref_source support paths < <(printf '%s' "$line" | python3 -c '
 import json, sys
 r = json.load(sys.stdin)
-print("\t".join([r["package"], r.get("reference", "unknown"), r.get("pkgver", ""),
-                 "1" if r.get("overridden") else "0", r.get("reference_source", ""),
-                 str(r.get("support", 0)),
-                 " ".join(b["path"] for b in r.get("branch") or [] if b.get("path"))]))')
+print("\x1f".join([r["package"], r.get("reference", "unknown"), r.get("pkgver", ""),
+                   "1" if r.get("overridden") else "0", r.get("reference_source", ""),
+                   str(r.get("support", 0)),
+                   " ".join(b["path"] for b in r.get("branch") or [] if b.get("path"))]))')
 
     local reports_dir="$RUN_DIR/reports/$slug/judge-input/$pkg"
     local judge_dir="$RUN_DIR/reports/$slug/judge"
