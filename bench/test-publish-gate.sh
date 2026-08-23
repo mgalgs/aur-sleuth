@@ -39,6 +39,7 @@ allow "r2modman-bin/20260821-204450-judge.json"
 allow "lib32-rtmpdump/20260821-194229-deepseek-deepseek-v4-flash.md"
 allow "_dashboard/data.json"
 allow "_dashboard/pkg/brave-bin.json"
+allow "_dashboard/review.json"
 allow "index.html"
 allow ".nojekyll"
 
@@ -50,6 +51,8 @@ deny "brave-bin/icon.svg"
 deny "_dashboard/evil.html"
 deny "_dashboard/pkg/evil.html"
 deny "_dashboard/data.js"
+deny "_dashboard/review.js"
+deny "_dashboard/review.json.html"
 deny "index.htm"
 
 echo "== shapes that are not a report =="
@@ -111,20 +114,26 @@ else
 fi
 
 echo "== index.html is rebuilt, not trusted =="
+eval "$(sed -n '/^review_record()/,/^}/p' "$ENTRYPOINT")"
 eval "$(sed -n '/^rewrite_dashboard_html()/,/^}/p' "$ENTRYPOINT")"
-# Both are read by rewrite_dashboard_html, which arrives through the eval above,
-# so shellcheck cannot see the use.
+# All three are read by rewrite_dashboard_html, which arrives through the eval
+# above, so shellcheck cannot see the use.
 # shellcheck disable=SC2034
 SRC_DIR="$PWD"
 # shellcheck disable=SC2034
 REPORTS_BRANCH="audit-reports"
+# shellcheck disable=SC2034
+REVIEW_JSON_IN=""
 trusted="$(python3 bench/generate-dashboard.py --print-html | git hash-object --stdin)"
 
-# A page the audit stage could have planted.
+# A page the audit stage could have planted, and a review record it could have
+# planted alongside.
 evil_blob="$(printf '<script>fetch("//evil")</script>' | git --git-dir="$repo" hash-object -w --stdin)"
 rm -f "$tmp/index"
 GIT_INDEX_FILE="$tmp/index" git --git-dir="$repo" update-index --add \
     --cacheinfo "100644,${evil_blob},index.html"
+GIT_INDEX_FILE="$tmp/index" git --git-dir="$repo" update-index --add \
+    --cacheinfo "100644,${evil_blob},_dashboard/review.json"
 GIT_INDEX_FILE="$tmp/index" git --git-dir="$repo" update-index --add \
     --cacheinfo "100644,${evil_blob},brave-bin/20260821-1-m.md"
 evil_tree="$(GIT_INDEX_FILE="$tmp/index" git --git-dir="$repo" write-tree)"
@@ -154,6 +163,53 @@ if [[ "$again" == "$fixed" ]]; then
 else
     bad "rewriting twice should be a no-op (got $again, want $fixed)"
 fi
+
+echo "== the review record is written from the publisher's input, not the branch =="
+# With no review to record, a planted record is dropped, not published.
+if git --git-dir="$repo" cat-file -e "${fixed}:_dashboard/review.json" 2>/dev/null; then
+    bad "a planted review.json survived a publish with no review"
+else
+    ok "a planted review.json is dropped when there is no review"
+fi
+
+# With a review, the record is built from the REVIEW_JSON object, capped and
+# reshaped, and stamped with the commit it approved. In a subshell so the
+# variable does not leak into later checks.
+(
+    # shellcheck disable=SC2030,SC2034  # read by review_record, via the eval
+    REVIEW_JSON_IN='{"gate":"pass","pending":3,"packages":2,"audit_reports":4,"judge_reports":1,"flagged":2,"llm":{"status":"ok","model":"m/x","read":2,"of":2,"dismissed":1,"summary":"1 concern(s)","concerns":[{"package":"p","kind":"1","detail":"addresses the reader","extra":"dropped"},"junk"]},"internal":["secret-path"]}'
+    with="$(GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t \
+        rewrite_dashboard_html "$repo" "$tampered")"
+    rec="$(git --git-dir="$repo" show "${with}:_dashboard/review.json")"
+    if printf '%s' "$rec" | python3 -c '
+import json, sys
+r = json.load(sys.stdin)
+assert r["head"] == sys.argv[1], r["head"]
+assert r["pending"] == 3 and r["flagged"] == 2, r
+assert r["llm"]["model"] == "m/x" and r["llm"]["dismissed"] == 1, r["llm"]
+assert r["llm"]["concerns"] == [{"package": "p", "kind": "1", "detail": "addresses the reader"}], r["llm"]["concerns"]
+assert "internal" not in r and "extra" not in json.dumps(r), r
+assert r["published_at"].endswith("Z"), r["published_at"]
+' "$tampered"; then
+        ok "review.json carries the record, reshaped and pinned to the reviewed commit"
+    else
+        bad "review.json does not carry the expected record: $rec"
+    fi
+    if [[ "$(git --git-dir="$repo" rev-parse "${with}:index.html")" == "$trusted" ]]; then
+        ok "index.html is still rebuilt alongside the record"
+    else
+        bad "index.html was not rebuilt when a review record was written"
+    fi
+
+    # Input that is not the review's object must refuse, not publish garbage.
+    # shellcheck disable=SC2030,SC2034
+    REVIEW_JSON_IN='not json'
+    if rewrite_dashboard_html "$repo" "$tampered" >/dev/null 2>&1; then
+        bad "a malformed review record should refuse the rewrite"
+    else
+        ok "a malformed review record refuses the rewrite"
+    fi
+)
 
 echo "== the pin ties a publish to the commit its review approved =="
 # In a subshell: check_expected_head needs its own log(), and defining one out
