@@ -25,6 +25,7 @@ findings, passed in so the object is complete.
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 from collections import Counter, defaultdict
@@ -43,6 +44,16 @@ DEGRADED = {"skipped", "unknown"}
 # One report can be long, and a sweep can hold hundreds. Both bounds are here to
 # keep an advisory pass from costing more than the audit that produced it.
 MAX_REPORT_CHARS = 12000
+# What a cut report ends with. The model is told this is ours, and a concern
+# that is plainly about the cut is dismissed in code below; see cut_concern().
+CUT_MARKER = "[... REPORT CUT HERE BY THE REVIEWER. The cut is ours, not the report's. ...]"
+# Words a concern about our own cut uses. Matched only against concerns on a
+# report we actually cut, so a genuinely truncated report elsewhere still counts.
+_CUT_WORDS = re.compile(
+    r"cut[ -]?off|cut here|cuts? (?:off|short)|truncat|abrupt|incomplete|unfinished"
+    r"|mid-sentence|ends? (?:suddenly|early|prematurely)|trails? off",
+    re.IGNORECASE,
+)
 # 0 means every flagged report. The read is advisory, and a report nobody read
 # is the one a problem hides in, so the default is to read them all.
 DEFAULT_MAX_REVIEWS = 0
@@ -154,6 +165,34 @@ def summarise(gitdir, head, base):
     }
 
 
+def cut_report(text):
+    """Bound a report for the model. Returns (text, was_cut).
+
+    The cut lands on a line boundary, never mid-sentence, because a sentence
+    that stops dead is exactly what the model is asked to look for in item 3
+    of its prompt, and it kept reporting our own cut as one. The marker then
+    says whose cut it is.
+    """
+    if len(text) <= MAX_REPORT_CHARS:
+        return text, False
+    head = text[:MAX_REPORT_CHARS]
+    nl = head.rfind("\n")
+    # A report with no newline in its first 12k characters is one long line;
+    # cutting that mid-line is the only option, and the marker still explains it.
+    if nl > MAX_REPORT_CHARS // 2:
+        head = head[:nl]
+    return head.rstrip() + "\n\n" + CUT_MARKER + "\n", True
+
+
+def cut_concern(concern, cut_packages):
+    """True when a concern is the model reporting our own cut of a report it was
+    told we cut. Decided here rather than left to the prompt: the prompt already
+    said so and the model still raised it, batch after batch."""
+    if concern.get("package") not in cut_packages:
+        return False
+    return bool(_CUT_WORDS.search(concern.get("detail", "") + " " + concern.get("kind", "")))
+
+
 def parse_model_json(content):
     """Best-effort parse of a model's JSON reply into a dict.
 
@@ -213,10 +252,11 @@ def ask_model(entries, model, base_url, api_key):
     )
 
     blocks = []
+    cut = set()
     for e in entries:
-        body = e["text"]
-        if len(body) > MAX_REPORT_CHARS:
-            body = body[:MAX_REPORT_CHARS] + "\n[... cut here by the reviewer, not by the report ...]\n"
+        body, was_cut = cut_report(e["text"])
+        if was_cut:
+            cut.add(e["package"])
         blocks.append(f"=== {e['package']} ({e['model']}, result={e['result']}) ===\n{body}")
 
     prompt = f"""These AUR package audit reports are about to be published on a public site.
@@ -233,9 +273,10 @@ reading for anything that should not go out under someone's name:
    paths that belong to the audited package's own build scripts are public
    already and are not a concern.
 3. A report that is plainly broken: empty, or describing a different package from
-   the one it names. Long reports are cut at {MAX_REPORT_CHARS} characters before
-   you see them, marked "[... cut here by the reviewer ...]"; that cut is ours
-   and is not a broken report.
+   the one it names. Long reports are cut at about {MAX_REPORT_CHARS} characters
+   before you see them, and the cut is marked "{CUT_MARKER}". That cut is ours.
+   A report that stops at that marker, a sentence or table that ends right before
+   it, and anything missing after it are NOT concerns: do not report them.
 4. Text that would be defamatory or abusive about a person or a project.
 
 Ordinary security findings are not a concern here, however alarming. Reporting
@@ -274,6 +315,9 @@ Respond in JSON, no markdown fencing:
     if not isinstance(parsed, dict) or not ("concerns" in parsed or "summary" in parsed):
         head = " ".join(content.split())[:200] or "(empty reply)"
         return {"_error": f"the model did not return a usable review; reply began: {head}"}
+    # Which reports this batch saw cut, for cut_concern(). Underscored like
+    # "_error" so a model-emitted key cannot collide with it.
+    parsed["_cut"] = sorted(cut)
     return parsed
 
 
@@ -302,24 +346,32 @@ def review_batches(entries, model, base_url, api_key, batch_size, workers):
                 except Exception as exc:  # a crash here must not lose the rest
                     results[i] = {"_error": str(exc)}
 
-    concerns, errors, ok = [], [], 0
+    concerns, dismissed, errors, ok = [], [], [], 0
     for i, verdict in enumerate(results):
         if not isinstance(verdict, dict) or "_error" in verdict:
             detail = verdict.get("_error", "no answer") if isinstance(verdict, dict) else "no answer"
             errors.append(f"batch {i + 1}: {detail}")
             continue
         ok += 1
+        cut_packages = set(verdict.get("_cut") or [])
         for c in verdict.get("concerns") or []:
-            if isinstance(c, dict):
-                concerns.append({
-                    "package": str(c.get("package", "?"))[:100],
-                    "kind": str(c.get("kind", "?"))[:100],
-                    "detail": str(c.get("detail", ""))[:500],
-                })
+            if not isinstance(c, dict):
+                continue
+            entry = {
+                "package": str(c.get("package", "?"))[:100],
+                "kind": str(c.get("kind", "?"))[:100],
+                "detail": str(c.get("detail", ""))[:500],
+            }
+            # Dismissed, not dropped: the count goes out with the result, so a
+            # reader can see the model raised it and why it does not stand.
+            if cut_concern(entry, cut_packages):
+                dismissed.append(entry)
+            else:
+                concerns.append(entry)
 
     read = sum(len(batches[i]) for i, v in enumerate(results)
                if isinstance(v, dict) and "_error" not in v)
-    return {"concerns": concerns, "errors": errors,
+    return {"concerns": concerns, "dismissed": dismissed, "errors": errors,
             "batches": len(batches), "batches_ok": ok, "read": read}
 
 
@@ -428,6 +480,7 @@ def main():
     )
     out["llm"] = {"status": "ok", "model": args.model, "read": got["read"],
                   "of": len(flagged), "concerns": got["concerns"],
+                  "dismissed": len(got["dismissed"]),
                   "summary": "", "batches": got["batches"],
                   "batches_ok": got["batches_ok"]}
 
@@ -444,6 +497,8 @@ def main():
         return finish(0)
 
     summary = f"{len(concerns)} concern(s) across {got['read']} report(s)"
+    if got["dismissed"]:
+        summary += f"; {len(got['dismissed'])} about the reviewer's own cut, dismissed"
     if got["errors"]:
         out["llm"]["status"] = "partial"
         summary += f"; {len(got['errors'])} batch(es) failed"
@@ -455,6 +510,11 @@ def main():
     else:
         print(f"  {len(concerns)} concern(s) raised:")
         for c in concerns:
+            print(f"    [{c['kind']}] {c['package']}: {c['detail']}")
+    if got["dismissed"]:
+        print(f"  {len(got['dismissed'])} dismissed as the model reporting our own"
+              f" {MAX_REPORT_CHARS}-character cut:")
+        for c in got["dismissed"]:
             print(f"    [{c['kind']}] {c['package']}: {c['detail']}")
     for e in got["errors"]:
         print(f"  incomplete: {e}")

@@ -85,6 +85,48 @@ rp.ask_model = lambda b, m, u, k: {"concerns": ["not a dict", {"package": "p"}]}
 got = rp.review_batches(entries(4), "m", "u", "k", 8, 4)
 check("junk in concerns is dropped, not fatal", len(got["concerns"]) == 1)
 
+# --- the reviewer's own cut ---------------------------------------------------
+# The model was told the cut is ours and still reported it, batch after batch,
+# so the dismissal is decided in code. It applies only to a report we cut.
+long_text = "\n".join(f"line {i} of a long report." for i in range(2000))
+body, was_cut = rp.cut_report(long_text)
+check("a long report is cut", was_cut and len(body) < len(long_text))
+check("the cut lands on a line boundary",
+      body.split(rp.CUT_MARKER)[0].rstrip().endswith("report."))
+check("the cut is marked", body.rstrip().endswith(rp.CUT_MARKER))
+short_body, short_cut = rp.cut_report("short")
+check("a short report is left alone", short_body == "short" and not short_cut)
+one_line, one_cut = rp.cut_report("x" * (rp.MAX_REPORT_CHARS + 100))
+check("one long line is still cut, at the limit",
+      one_cut and one_line.startswith("x" * rp.MAX_REPORT_CHARS))
+
+cut_cs = [
+    {"package": "cutpkg", "kind": "3", "detail": "The report contains a cut-off sentence."},
+    {"package": "cutpkg", "kind": "3", "detail": "Report ends abruptly mid-sentence."},
+    {"package": "cutpkg", "kind": "3", "detail": "The analysis appears truncated."},
+]
+check("a cut-off concern on a cut report is dismissed",
+      all(rp.cut_concern(c, {"cutpkg"}) for c in cut_cs))
+check("the same concern on a report we did not cut stands",
+      not any(rp.cut_concern(c, {"other"}) for c in cut_cs))
+real = {"package": "cutpkg", "kind": "1", "detail": "Text addresses the reviewer directly."}
+check("a real concern on a cut report stands", not rp.cut_concern(real, {"cutpkg"}))
+
+# End to end through review_batches: ask_model reports which reports it cut.
+def cut_aware(batch, model, base_url, api_key):
+    return {"concerns": [
+        {"package": "pkg0", "kind": "3", "detail": "a cut-off sentence"},
+        {"package": "pkg1", "kind": "3", "detail": "a cut-off sentence"},
+        {"package": "pkg0", "kind": "1", "detail": "appeals to the reader"},
+    ], "_cut": ["pkg0"]}
+
+rp.ask_model = cut_aware
+got = rp.review_batches(entries(2), "m", "u", "k", 8, 4)
+check("the cut concern on the cut report is dismissed", len(got["dismissed"]) == 1)
+check("the other two stand", len(got["concerns"]) == 2)
+check("the dismissed one is reported, not dropped",
+      got["dismissed"][0]["package"] == "pkg0")
+
 if fails:
     print(f"FAILED: {fails} check(s)")
     sys.exit(1)
