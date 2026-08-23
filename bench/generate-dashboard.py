@@ -23,6 +23,42 @@ def git(*args, **kwargs):
     return result.stdout
 
 
+_YAML_ESCAPES = {"n": "\n", "t": "\t", '"': '"', "\\": "\\"}
+
+
+def yaml_scalar(value):
+    """Read one inline YAML value as aur-sleuth's _yaml_escape() writes it.
+
+    The tool quotes a value only when it has to (a colon, a newline, a tab, a
+    quote...), so a value arrives either bare or double-quoted with backslash
+    escapes. Anything else is not something the tool emits, and it is left
+    alone rather than guessed at.
+    """
+    value = value.strip()
+    if len(value) >= 2 and value[0] == '"' and value[-1] == '"':
+        out = []
+        i = 1
+        while i < len(value) - 1:
+            c = value[i]
+            if c == "\\" and i + 1 < len(value) - 1:
+                out.append(_YAML_ESCAPES.get(value[i + 1], "\\" + value[i + 1]))
+                i += 2
+            else:
+                out.append(c)
+                i += 1
+        return "".join(out)
+    return value
+
+
+# The keys one file_verdicts entry may carry, and how to read each.
+_VERDICT_KEYS = {
+    "status": yaml_scalar,
+    "summary": yaml_scalar,
+    "evidence": yaml_scalar,
+    "evidence_line": lambda v: safe_int(yaml_scalar(v), 0) or None,
+}
+
+
 def parse_frontmatter(raw):
     """Parse YAML frontmatter from a markdown report, including file_verdicts."""
     if not raw.startswith("---\n"):
@@ -44,11 +80,7 @@ def parse_frontmatter(raw):
             if stripped.startswith("- file:"):
                 if current_verdict:
                     file_verdicts.append(current_verdict)
-                current_verdict = {"file": stripped[7:].strip()}
-            elif stripped.startswith("status:") and current_verdict:
-                current_verdict["status"] = stripped[7:].strip()
-            elif stripped.startswith("summary:") and current_verdict:
-                current_verdict["summary"] = stripped[8:].strip()
+                current_verdict = {"file": yaml_scalar(stripped[7:])}
             elif not line.startswith(" ") and not line.startswith("\t") and stripped:
                 in_verdicts = False
                 if current_verdict:
@@ -56,14 +88,21 @@ def parse_frontmatter(raw):
                     current_verdict = {}
                 m = re.match(r"^(\w[\w_]*):\s*(.*)", line)
                 if m:
-                    fm[m.group(1)] = m.group(2).strip()
+                    fm[m.group(1)] = yaml_scalar(m.group(2))
+            elif current_verdict:
+                key, sep, value = stripped.partition(":")
+                reader = _VERDICT_KEYS.get(key) if sep else None
+                if reader:
+                    parsed = reader(value)
+                    if parsed is not None:
+                        current_verdict[key] = parsed
         else:
             if line.strip() == "file_verdicts:":
                 in_verdicts = True
                 continue
             m = re.match(r"^(\w[\w_]*):\s*(.*)", line)
             if m:
-                fm[m.group(1)] = m.group(2).strip()
+                fm[m.group(1)] = yaml_scalar(m.group(2))
 
     if current_verdict:
         file_verdicts.append(current_verdict)
@@ -537,6 +576,34 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         .count-link:hover, .count-link:focus-visible { text-decoration: underline; }
         .chip { cursor: pointer; }
         .chip:hover { border-color: #64748b; }
+        /* The quoted problem code under a flagged file. The gutter carries real
+           line numbers when the quote was found in the file as written. */
+        .evidence { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+                    font-size: 0.75rem; line-height: 1.35; overflow-x: auto;
+                    background: #0b1220; border: 1px solid #7f1d1d; border-radius: 4px;
+                    padding: 0.5rem 0.75rem; margin: 0.25rem 0 0.5rem; }
+        /* width:0 + min-width:100% keeps a long quoted line from widening the
+           verdict table (an auto-layout table grows to fit a cell's content;
+           this makes the cell's intrinsic width zero, so the pre scrolls instead). */
+        .evidence-wrap { width: 0; min-width: 100%; }
+        /* Same trick one level up: an open detail (judge reasoning, the verdict
+           table) must wrap to the package table's width on a phone, not widen it
+           and push the reasoning off the right edge. */
+        .detail-box { width: 0; min-width: 100%; box-sizing: border-box; overflow-wrap: anywhere; }
+        /* The header rows (verdict, model, date...) wrap as whole items, never
+           mid-word: "anywhere" would otherwise let a flex item shrink to a letter. */
+        .detail-box .flex > span { white-space: nowrap; }
+        .evidence .ln { display: inline-block; min-width: 3ch; margin-right: 1ch;
+                        text-align: right; color: #475569; user-select: none; }
+        .evidence .ln.unplaced { visibility: hidden; }
+        .tok-c { color: #64748b; font-style: italic; }
+        .tok-s { color: #a5d6a7; }
+        .tok-k { color: #93c5fd; }
+        .tok-v { color: #fcd34d; }
+        .tok-d { color: #f87171; font-weight: 600; }
+        .tok-add { color: #86efac; }
+        .tok-del { color: #fca5a5; }
+        .tok-hunk { color: #67e8f9; }
     </style>
     <script>
         tailwind.config = {
@@ -711,6 +778,11 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         renderCharts();
         renderTable();
         setupEventListeners();
+        // A shareable link to one package: #pkg=<name>.
+        const m = /^#pkg=(.+)$/.exec(location.hash);
+        if (m) {
+            try { openPackage(decodeURIComponent(m[1])); } catch (e) { /* bad hash: ignore */ }
+        }
     }
 
     function shortModel(m) {
@@ -744,6 +816,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         row.scrollIntoView({behavior: 'smooth', block: 'center'});
         const detail = document.getElementById('detail-' + name);
         if (detail && !detail.classList.contains('open')) toggleDetail(name);
+        history.replaceState(null, '', '#pkg=' + encodeURIComponent(name));
     }
 
     // Package names are restricted by the AUR, but this goes into a selector, so
@@ -1049,7 +1122,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             </tr>
             <tr class="detail-row" id="detail-${safeId}">
                 <td colspan="7" class="p-0">
-                    <div class="p-6 bg-slate-850 border-t border-slate-600">
+                    <div class="detail-box p-6 bg-slate-850 border-t border-slate-600">
                         <div class="detail-content text-slate-400">Loading...</div>
                     </div>
                 </td>
@@ -1095,7 +1168,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             for (const j of data.judges) {
                 const d = j.data;
                 html += `<div class="bg-slate-800 rounded p-4 border border-slate-700 mb-3">
-                    <div class="flex gap-4 mb-3 text-sm">
+                    <div class="flex flex-wrap gap-x-4 gap-y-1 mb-3 text-sm">
                         <span>Verdict: <span class="result-${escapeAttr(d.correct_verdict)} font-bold">${escapeHtml(d.correct_verdict)}</span></span>
                         <span>Confidence: <strong>${escapeHtml(d.confidence)}</strong></span>
                         <span>Model: <span class="text-slate-400">${escapeHtml((d._judge_usage || {}).model || '?')}</span></span>
@@ -1132,15 +1205,18 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                     html += `<table class="w-full text-xs mb-2 border-collapse">
                         <thead><tr class="text-slate-500">
                             <th class="text-left py-1 pr-3">File</th>
-                            <th class="text-left py-1 pr-3">Status</th>
+                            <th class="text-left py-1 pr-3 whitespace-nowrap">Status</th>
                             <th class="text-left py-1">Summary</th>
                         </tr></thead><tbody>`;
                     for (const v of fv) {
                         html += `<tr class="border-t border-slate-700/50">
                             <td class="py-1 pr-3 text-blue-300">${escapeHtml(v.file || '')}</td>
-                            <td class="py-1 pr-3 result-${escapeAttr(v.status || 'unknown')}">${escapeHtml(v.status || '?')}</td>
+                            <td class="py-1 pr-3 whitespace-nowrap result-${escapeAttr(v.status || 'unknown')}">${escapeHtml(v.status || '?')}</td>
                             <td class="py-1 text-slate-400">${escapeHtml(v.summary || '')}</td>
                         </tr>`;
+                        if (v.evidence) {
+                            html += `<tr><td colspan="3" class="pb-1">${renderEvidence(v)}</td></tr>`;
+                        }
                     }
                     html += '</tbody></table>';
                 }
@@ -1160,6 +1236,92 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    }
+
+    // --- Evidence snippets ---------------------------------------------------
+    // The quote is model output over attacker-controlled input. Every token
+    // passes through escapeHtml; the highlighter only decides which class wraps
+    // it. No external library: the page must stay self-contained.
+
+    function langForFile(name) {
+        const base = (name || '').split('/').pop();
+        const ext = base.includes('.') ? base.split('.').pop().toLowerCase() : '';
+        if (base === 'PKGBUILD' || base === 'Makefile' || base === 'configure') return 'bash';
+        if (['sh', 'bash', 'zsh', 'install', 'bashrc', 'profile'].includes(ext)) return 'bash';
+        if (ext === 'py') return 'python';
+        if (['patch', 'diff'].includes(ext)) return 'diff';
+        if (['js', 'mjs', 'cjs', 'ts'].includes(ext)) return 'js';
+        if (ext === '') return 'bash';   // rel, bump, update: maintainer scripts
+        return 'plain';
+    }
+
+    // Rules are tried in order at each position; the sticky flag anchors them.
+    const LANG_RULES = {
+        bash: [
+            ['c', /#[^\n]*/y],
+            ['s', /"(?:\\.|[^"\\])*"|'[^']*'/y],
+            ['v', /\$\{[^}\n]*\}|\$\(|\$[A-Za-z_@#?*0-9][A-Za-z0-9_]*/y],
+            ['d', /\b(?:curl|wget|eval|base64|xxd|openssl|nc|ncat|socat|chmod|chown|sudo|dd|nohup|exec|python[0-9.]*|perl|bash|sh|setsid|crontab|systemctl)\b/y],
+            ['k', /\b(?:if|then|else|elif|fi|for|while|until|do|done|case|esac|in|function|return|exit|local|export|declare|readonly|set|unset|source|cd|mkdir|install|cp|mv|rm|ln|echo|printf|cat|sed|awk|grep|tar|git|make|cmake|meson|ninja|cargo|npm|pip|true|false)\b/y],
+        ],
+        python: [
+            ['c', /#[^\n]*/y],
+            ['s', /"{3}[\s\S]*?"{3}|'{3}[\s\S]*?'{3}|"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'/y],
+            ['d', /\b(?:eval|exec|compile|__import__|subprocess|os\.system|os\.popen|urllib|requests|socket|base64|marshal|pickle|ctypes|zlib)\b/y],
+            ['k', /\b(?:import|from|def|class|return|if|elif|else|for|while|try|except|finally|with|as|lambda|yield|pass|raise|in|not|and|or|is|None|True|False|open|print)\b/y],
+        ],
+        js: [
+            ['c', /\/\/[^\n]*|\/\*[\s\S]*?\*\//y],
+            ['s', /`(?:\\.|[^`\\])*`|"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'/y],
+            ['d', /\b(?:eval|Function|child_process|exec|execSync|spawn|fetch|require|atob|Buffer|XMLHttpRequest|WebSocket)\b/y],
+            ['k', /\b(?:const|let|var|function|return|if|else|for|while|do|switch|case|break|continue|new|class|import|export|from|async|await|try|catch|finally|throw|typeof|instanceof|this|null|undefined|true|false)\b/y],
+        ],
+    };
+
+    function highlightLine(line, lang) {
+        if (lang === 'diff') {
+            const cls = /^(\+\+\+|---|@@)/.test(line) ? 'tok-hunk'
+                : line.startsWith('+') ? 'tok-add'
+                : line.startsWith('-') ? 'tok-del' : '';
+            return cls ? `<span class="${cls}">${escapeHtml(line)}</span>` : escapeHtml(line);
+        }
+        const rules = LANG_RULES[lang];
+        if (!rules) return escapeHtml(line);
+        const word = /[A-Za-z0-9_]+|[\s\S]/y;
+        let out = '', i = 0;
+        while (i < line.length) {
+            let matched = false;
+            for (const [cls, re] of rules) {
+                re.lastIndex = i;
+                const m = re.exec(line);
+                if (m && m[0].length) {
+                    out += `<span class="tok-${cls}">${escapeHtml(m[0])}</span>`;
+                    i += m[0].length;
+                    matched = true;
+                    break;
+                }
+            }
+            if (!matched) {
+                word.lastIndex = i;
+                const m = word.exec(line);
+                out += escapeHtml(m[0]);
+                i += m[0].length;
+            }
+        }
+        return out;
+    }
+
+    function renderEvidence(v) {
+        const lang = langForFile(v.file);
+        const lines = String(v.evidence).split('\n');
+        const start = Number(v.evidence_line) || 0;
+        const body = lines.map((line, n) => {
+            const ln = start ? `<span class="ln">${start + n}</span>` : '<span class="ln unplaced">0</span>';
+            return ln + highlightLine(line, lang);
+        }).join('\n');
+        const where = start ? `line ${start}` : 'quoted by the auditor; not matched to a line';
+        return `<div class="evidence-wrap"><div class="text-xs text-slate-500 mt-1">Evidence &middot; ${escapeHtml(where)}</div>
+            <pre class="evidence">${body}</pre></div>`;
     }
 
     function escapeAttr(text) {
