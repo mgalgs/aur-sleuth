@@ -1,0 +1,34 @@
+{
+  "package": "t3code-nightly-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Both models consistently verified PKGBUILD as standard AppImage packaging with proper source validation and safe installation routines. LICENSE file contains no executable content. No evidence of malicious behavior in packaging scripts.",
+  "disagreement_analysis": null,
+  "coverage_issues": [
+    "Both models skipped auditing the AppImage binary payload (T3-Code-*.AppImage), which is expected for binary packages but remains a trust-on-first-use risk",
+    "No review of potential .install hooks or other package lifecycle scripts (none present in this case)"
+  ],
+  "false_positives": [],
+  "false_negatives": [
+    "Potential risk: AppImage extraction uses '--appimage-extract' which could theoretically hide malicious payloads, but models correctly noted this is standard practice",
+    "Models didn't verify if 'chrome-sandbox' setuid (chmod 4755) is strictly necessary \u2013 though likely safe, could be flagged for minimal privilege review"
+  ],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Prioritize PKGBUILD and .install scripts over static files like LICENSE in binary packages",
+    "Improve binary package handling: add warnings about unauditable payloads in final report",
+    "Enhance detection of security-sensitive operations (e.g., setuid) even when 'standard'",
+    "Optimize model focus: reduce LICENSE analysis depth unless referenced in install hooks"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 3555,
+    "completion_tokens": 1414,
+    "cost": 0.0060235
+  },
+  "audits_judged": [
+    "20260823-190646-qwen-qwen3-235b-a22b-2507.md",
+    "20260823-190616-deepseek-deepseek-v4-flash.md"
+  ]
+}
