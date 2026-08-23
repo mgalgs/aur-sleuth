@@ -1,0 +1,33 @@
+{
+  "package": "visual-studio-code-insiders-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "All AUR-controlled files (PKGBUILD, .install, wrapper script) are safe. The inconclusive file is upstream code not executed during packaging. No malicious patterns found in build/install hooks.",
+  "disagreement_analysis": null,
+  "coverage_issues": [
+    "Models reviewed unnecessary upstream files (extension code) while skipping critical build artifacts like .deb archives",
+    "Failed to audit 215 compiled/archived files including control.tar.xz and data.tar.xz"
+  ],
+  "false_positives": [
+    "Copilot CLI shim flagged for curl|bash pattern - this is upstream behavior in official VS Code and not AUR-controlled",
+    "Tokenizer worker's network access to Azure - normal upstream functionality, not executed during packaging"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Improve file prioritization: Focus exclusively on PKGBUILD, install hooks, and build artifacts. Skip upstream source code in -bin packages",
+    "Handle large files better: Implement chunking for oversized JS files to avoid 413 errors during audit",
+    "Enforce AUR scope rules: Models should explicitly state when stopping after PKGBUILD/.install review for binary packages",
+    "Improve error handling: Treat 413 errors as technical failures rather than security inconclusives"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 7760,
+    "completion_tokens": 987,
+    "cost": 0.0078995
+  },
+  "audits_judged": [
+    "20260822-035715-deepseek-deepseek-v4-flash.md"
+  ]
+}
