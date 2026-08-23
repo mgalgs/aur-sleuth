@@ -98,7 +98,13 @@ check("a failed synthetic is recorded", not misser["synthetics"]["all_pass"])
 pricey = report.score("pricey", rows, synth)
 check("inconclusive is counted and not scored", pricey["inconclusive"] == 1 and pricey["scored"] == 4)
 check("a timeout is an error, not a verdict", pricey["errors"] == 1)
-check("a perfect model agrees 100%", pricey["agreement"] == 1.0)
+check("agreement over answers alone can still read 100%", pricey["agreement"] == 1.0)
+# The abstention reward, closed: a shrug or an error on a settled package
+# counts against effective agreement, which is what the ranking uses.
+check("effective agreement counts every asked package",
+      pricey["asked"] == 6 and pricey["effective_agreement"] == 0.667)
+check("a model that answered everything keeps its score",
+      report.score("cheap", rows, synth)["effective_agreement"] == 0.75)
 
 # A miss against a verdict only the pipeline settled is a disagreement, not a
 # disqualification: the reference may be the false positive.
@@ -136,8 +142,12 @@ last = proc.stdout.strip().split("\n")[-1]
 check("the last line is BENCH_JSON", last.startswith("BENCH_JSON "))
 obj = json.loads(last[len("BENCH_JSON "):])
 order = [m["model"] for m in obj["models"]]
-check("perfect sorts above a false flag, the human miss last",
-      order == ["pricey", "cheap", "absent", "misser"])
+# cheap answered everything (3/4 asked right); pricey answered only 4 of 6
+# and sorts below it despite a 100% score over its answers. Sitting out the
+# hard calls stopped being a winning strategy when icaclient's judge
+# benchmark showed every "100%" model had simply dodged the one hard call.
+check("engagement-adjusted accuracy first; the human miss last",
+      order == ["cheap", "pricey", "absent", "misser"])
 with open(rows_path, "w") as f:
     f.write("\n".join(json.dumps(r) for r in rows2) + "\n")
 proc2 = subprocess.run(

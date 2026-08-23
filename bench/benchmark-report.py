@@ -145,6 +145,13 @@ def score(model, rows, synth):
 
     scored = [r for r in mine if r.get("reference") in ("safe", "unsafe")
               and r.get("result") in ("safe", "unsafe")]
+    # Everything with a settled reference is a question the model was asked.
+    # A non-answer (inconclusive, an error, a timeout) is not scored, but it
+    # is not free either: agreement over `scored` alone let a model that sat
+    # out the hard calls outrank one that engaged them all -- the abstention
+    # reward. effective_agreement counts non-answers against the candidate,
+    # and the ranking uses it.
+    asked = [r for r in mine if r.get("reference") in ("safe", "unsafe")]
     agree = sum(1 for r in scored if r["result"] == r["reference"])
     # The two ways to be wrong, named for what they cost: a false flag on a
     # clean package is the accusation the threat model warns about; a miss on
@@ -199,8 +206,10 @@ def score(model, rows, synth):
         "pipeline": pipeline,
         "sample": len(mine),
         "scored": len(scored),
+        "asked": len(asked),
         "agree": agree,
         "agreement": round(agree / len(scored), 3) if scored else None,
+        "effective_agreement": round(agree / len(asked), 3) if asked else None,
         "false_flags": false_flags,
         "of_safe": ref_safe,
         "hard_flags": hard_flags,
@@ -243,7 +252,7 @@ def money(v):
 
 
 def table(models):
-    head = (f"{'model':<36} {'synth':>6} {'agree':>6} {'human f/m':>10} {'pipe f/m':>9} "
+    head = (f"{'model':<36} {'synth':>6} {'acc':>6} {'agree':>6} {'human f/m':>10} {'pipe f/m':>9} "
             f"{'hard':>6} {'inc':>4} {'$/pkg':>8} {'$':>8} {'s/pkg':>6}")
     lines = [head, "-" * len(head)]
     for m in models:
@@ -252,7 +261,7 @@ def table(models):
         h, p = m["human"], m["pipeline"]
         name = m["model"] + (" *" if m["incumbent"] else "")
         lines.append(
-            f"{name:<36} {synth:>6} {pct(m['agreement']):>6} "
+            f"{name:<36} {synth:>6} {pct(m['effective_agreement']):>6} {pct(m['agreement']):>6} "
             f"{h['false_flags']}/{h['of_safe']} {h['misses']}/{h['of_unsafe']:<4} "
             f"{p['false_flags']}/{p['of_safe']} {p['misses']}/{p['of_unsafe']:<3} "
             f"{m['hard_flags']}/{m['of_hard']:<4} {m['inconclusive']:>4} "
@@ -260,9 +269,13 @@ def table(models):
             f"{'—' if m['mean_seconds'] is None else m['mean_seconds']:>6}"
         )
     lines.append("")
+    lines.append("Sorted best first: accuracy, then cost; a failed synthetic or a hand-settled")
+    lines.append("miss sinks a model to the bottom at any price.")
     lines.append("* = a current model, scored from its own reports on the branch (its verdicts")
     lines.append("helped settle the pipeline references, so its agreement is an upper bound; its")
-    lines.append("cost is real). synth: fixtures passed. agree: matches over everything scored.")
+    lines.append("cost is real). synth: fixtures passed. acc: matches over everything ASKED --")
+    lines.append("an error or a shrug on a settled package counts against it; the ranking uses")
+    lines.append("this. agree: matches over everything scored (answers only).")
     lines.append("human f/m: false flags / misses against hand-settled verdicts -- a miss")
     lines.append("here disqualifies. pipe f/m: the same against verdicts the pipeline's own")
     lines.append("models settled -- a disagreement, which may be right. hard: false flags on")
@@ -325,12 +338,16 @@ def main():
             names.append(m)
 
     models = [score(m, rows, synth) for m in names]
-    # Cheapest acceptable first: a model that fails a synthetic or misses a
-    # confirmed package is not a candidate at any price, so it sorts last.
+    # Best candidate first: accuracy, then cost. A model that fails a
+    # synthetic or misses a hand-settled package is not a candidate at any
+    # price, so it sorts last. Accuracy is effective_agreement -- non-answers
+    # on settled packages count against it -- so a model that sat out the
+    # hard calls cannot outrank one that engaged them all.
     models.sort(key=lambda m: (
         not (m["synthetics"]["all_pass"] or m["synthetics"]["run"] == 0),
         m["human"]["misses"] > 0,
         m["scored"] == 0,
+        -(m["effective_agreement"] or 0),
         -(m["agreement"] or 0),
         m["cost_per_package"] or 0,
     ))
