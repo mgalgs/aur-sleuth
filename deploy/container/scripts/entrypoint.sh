@@ -27,6 +27,12 @@
 #   bundle    Write the audit-reports branch to a git bundle instead of pushing
 #             it. Needs no credential. Lets reports accumulate on the volume and
 #             be reviewed elsewhere, so no write credential need exist here.
+#   benchmark Re-audit a sample of settled packages with candidate models and
+#             score them against the verdicts on the branch. Writes only under
+#             $DATA_DIR/bench/, never to the branch. Needs the LLM route. THIS
+#             STAGE EXECUTES UNTRUSTED CODE, exactly like audit: it runs
+#             `makepkg` on real AUR packages, so it must run under the same
+#             protections (egress gate, no credential, proxied LLM key).
 #
 # The split exists so the git write credential never shares a process, an
 # environment, or a filesystem with a hostile PKGBUILD. See deploy/container/README.md.
@@ -283,6 +289,62 @@ do_audit() {
     log "Starting pipeline: $*"
     exec bash bench/pipeline.sh --no-push "$@" \
         ${AUDIT_ENV_FLAGS[@]+"${AUDIT_ENV_FLAGS[@]}"}
+}
+
+# --- benchmark ----------------------------------------------------------------
+
+# Candidate models against the settled verdicts: the synthetic fixtures, then
+# a sample of real packages, scored by bench/benchmark-report.py. Every knob
+# arrives as AUR_SLEUTH_BENCH_* and is checked here, at the boundary, before
+# anything is spent. The models list is the one value with no default: a
+# benchmark of nothing is a mistake, not a run.
+do_benchmark() {
+    [[ -n "${OPENAI_API_KEY:-}" ]] || die "OPENAI_API_KEY is not set"
+    [[ -d "$GIT_STORE" ]] || die "$GIT_STORE missing; run the prepare stage first"
+    cd "$SRC_DIR"
+
+    local models="${AUR_SLEUTH_BENCH_MODELS:-}"
+    [[ -n "$models" ]] || die "AUR_SLEUTH_BENCH_MODELS is not set"
+    [[ "$models" =~ ^[A-Za-z0-9._/-]+(,[A-Za-z0-9._/-]+)*$ ]] \
+        || die "AUR_SLEUTH_BENCH_MODELS is not a comma-separated model list, got '$models'"
+
+    local flags=(--models "$models")
+    local spec var flag kind value rest
+    local specs=(
+        "AUR_SLEUTH_BENCH_SAMPLE:--sample:int"
+        "AUR_SLEUTH_BENCH_BUDGET:--budget:num"
+        "AUR_SLEUTH_BENCH_JOBS:--jobs:int"
+        "AUR_SLEUTH_BENCH_RUN_ID:--run-id:id"
+        "AUR_SLEUTH_BENCH_PACKAGES:--packages:packages"
+        "AUR_SLEUTH_AUDIT_TIMEOUT:--audit-timeout:int"
+    )
+    for spec in "${specs[@]}"; do
+        var="${spec%%:*}"
+        rest="${spec#*:}"
+        flag="${rest%%:*}"
+        kind="${rest#*:}"
+        value="${!var:-}"
+        [[ -n "$value" ]] || continue
+        case "$kind" in
+            int) [[ "$value" =~ ^[0-9]+$ ]] || die "$var must be a whole number, got '$value'" ;;
+            num) [[ "$value" =~ ^[0-9]+(\.[0-9]+)?$ ]] || die "$var must be a number, got '$value'" ;;
+            id)  [[ "$value" =~ ^[A-Za-z0-9._-]+$ ]] || die "$var is not a run id, got '$value'" ;;
+            packages)
+                # AUR package names: lowercase letters, digits, @ . _ + -
+                [[ "$value" =~ ^[a-z0-9@._+-]+(,[a-z0-9@._+-]+)*$ ]] \
+                    || die "$var is not a comma-separated package list, got '$value'" ;;
+        esac
+        flags+=("$flag" "$value")
+        log "from the environment: $flag $value"
+    done
+    case "${AUR_SLEUTH_BENCH_SYNTHETICS:-true}" in
+        true|1|yes) ;;
+        false|0|no) flags+=(--no-synthetics) ;;
+        *) die "AUR_SLEUTH_BENCH_SYNTHETICS must be true or false" ;;
+    esac
+
+    log "Starting benchmark: ${flags[*]}"
+    exec bash bench/benchmark.sh "${flags[@]}"
 }
 
 # --- reading the shared store safely ------------------------------------------
@@ -875,7 +937,8 @@ case "$MODE" in
     quarantine) do_quarantine ;;
     publish)    do_publish ;;
     bundle)     do_bundle ;;
+    benchmark)  do_benchmark ;;
     *)          die "unknown stage '$MODE'" \
                     "(want prepare, audit, review, dashboard, quarantine," \
-                    "publish or bundle)" ;;
+                    "publish, bundle or benchmark)" ;;
 esac

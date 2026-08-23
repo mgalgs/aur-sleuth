@@ -20,8 +20,11 @@ The pipeline runs untrusted code by design. `makepkg --nobuild` sources arbitrar
 | `audit` | LLM API key | read-write | **yes** |
 | `publish` | git deploy key | **read-only** | no |
 | `bundle` | none | **read-only** | no |
+| `benchmark` | LLM API key | read-write | **yes** |
 
 `prepare` creates or refreshes the git object store on the volume and prunes old state. `audit` runs the whole pipeline with `--no-push`, so every commit stays local. `publish` pushes the `audit-reports` branch.
+
+`benchmark` is an on-demand stage, not part of the scheduled sequence: it re-audits a sample of packages whose verdict is already settled on the branch with candidate models, and scores each candidate (synthetic fixtures, agreement with the settled verdicts, the two kinds of disagreement, cost). It runs `makepkg` on real packages, so it needs every protection `audit` has and must never overlap with it. It writes only under `$DATA_DIR/bench/<run-id>/` — never to the branch — and records its spend in the same daily ledger. `AUR_SLEUTH_BENCH_MODELS` names the candidates; `AUR_SLEUTH_BENCH_SAMPLE`, `AUR_SLEUTH_BENCH_BUDGET`, `AUR_SLEUTH_BENCH_SYNTHETICS`, `AUR_SLEUTH_BENCH_PACKAGES` and `AUR_SLEUTH_BENCH_RUN_ID` are the knobs, each checked at the boundary. The result is `result.json` in the run directory and a `BENCH_JSON` line at the end of the log.
 
 `bundle` is the alternative to `publish`, for anyone unwilling to keep a write credential next to a stage that runs untrusted code. It writes the commits `origin` does not have to a git bundle (`AUR_SLEUTH_BUNDLE_PATH`, default `/out/audit-reports.bundle`) and needs no credential at all. Mount something at `/out` that outlives the container, copy the file out, `git fetch` it into a clone that has the published history, review the commits, and push from somewhere that already has push rights:
 
@@ -122,6 +125,10 @@ Set as environment variables on the container.
 | `AUR_SLEUTH_SSH_KEY` | publish | `/secrets/git/ssh-privatekey` | Mounted deploy key |
 | `AUR_SLEUTH_KNOWN_HOSTS` | publish | `/etc/ssh/ssh_known_hosts` | Baked in at build time |
 | `AUR_SLEUTH_PUBLISH_DRY_RUN` | publish | `false` | Report the ref instead of pushing |
+| `AUR_SLEUTH_EXPECT_HEAD` | publish | — | The commit a review approved; publish refuses if the branch has moved |
+| `AUR_SLEUTH_REVIEW_JSON` | publish | — | The review's `REVIEW_JSON` object, written to the branch as `_dashboard/review.json` |
+| `AUR_SLEUTH_BENCH_MODELS` | benchmark | — | Required; comma-separated candidate models |
+| `AUR_SLEUTH_BENCH_SAMPLE` / `_BUDGET` / `_SYNTHETICS` / `_PACKAGES` / `_RUN_ID` | benchmark | `20` / `2.00` / `true` / — / timestamp | See above |
 | `AUR_SLEUTH_BUNDLE_PATH` | bundle | `/out/audit-reports.bundle` | Where the bundle is written; its directory must be writable |
 | `AUR_SLEUTH_SPEND_LOG_RETENTION_DAYS` | prepare | `30` | Nothing else prunes the ledger |
 | `AUR_SLEUTH_MAKEPKG_TIMEOUT` | audit | `600` | Seconds for one `makepkg` invocation; its download agents have no timeout of their own |
