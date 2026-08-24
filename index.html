@@ -227,6 +227,12 @@ code { font-family: var(--mono); }
     content: ''; position: absolute; inset: 3.5px;
     background: var(--bg); border-radius: 1px;
 }
+/* An advisory report: information, not a vote. One hollow, muted style
+   whatever it said, so a free model's "unsafe" never reads as a flag. */
+.sq-advisory {
+    background: transparent;
+    border: 1.5px dashed var(--none);
+}
 /* An audit verdict the judge overturned: struck through and faded, so a
    square that stays amber for the record does not read as a live finding. */
 .sq-overridden { opacity: 0.45; }
@@ -600,7 +606,7 @@ code { font-family: var(--mono); }
                 <div class="head"><h2>How to read this page</h2></div>
                 <p class="prose">These audits look for one thing: code injected into the AUR packaging of a package &mdash; the <code>PKGBUILD</code>, an <code>.install</code> hook, or a patch. They do not rate the application itself. Each square is one report: two cheap models audit every package, and a judge &mdash; a stronger model &mdash; reads the reports when they disagree or flag something.</p>
                 <dl class="key">
-                    <dt class="st-clean">Clean</dt><dd>nothing found, or a flag a judge overturned.</dd>
+                    <dt class="st-clean">Clean</dt><dd>nothing found, or a flag a judge or a later review overturned.</dd>
                     <dt class="st-unknown">No verdict</dt><dd>no model reached an answer either way. Missing information, not a suspicion.</dd>
                     <dt class="st-look">Worth a closer look</dt><dd>something flagged it and nothing has settled it. Usually a false positive about behaviour the application is supposed to have; not a claim that it is malicious.</dd>
                     <dt class="st-confirmed">Confirmed malicious</dt><dd>two independent audits said unsafe and a judge agreed.</dd>
@@ -889,9 +895,10 @@ function matchesPreset(pkg, preset) {
             return packageState(pkg) === preset;
         case 'overridden':
             // The judge disagreed with an audit that called it unsafe. Worth
-            // its own view: these are the false positives being caught.
+            // its own view: these are the false positives being caught. An
+            // advisory report is not a vote, so it cannot be overridden.
             return pkg.judge_majority === 'safe'
-                && (pkg.audits || []).some(a => a.result === 'unsafe' || a.result === 'inconclusive');
+                && (pkg.audits || []).some(a => !a.advisory && (a.result === 'unsafe' || a.result === 'inconclusive'));
         case 'unjudged':
             return !pkg.judges || pkg.judges.length === 0;
         default: return true;
@@ -963,6 +970,11 @@ function renderSquares(items, type, pkg) {
     return '<span class="sqs">' + items.map(item => {
         const value = (type === 'audit' ? item.result : item.verdict) || 'unknown';
         const model = shortModel(item.model || 'unknown');
+        // An advisory report is information, not a vote: one muted style
+        // whatever it said, so a free model's "unsafe" never reads as a flag.
+        if (item.advisory) {
+            return '<span class="sq sq-advisory" title="' + escapeAttr(model + ': ' + value + ' (advisory — informational only, not a vote)') + '"></span>';
+        }
         const label = item.reaudit ? 'second audit' : type;
         const cls = squareClass(value, type, pkg) + (item.reaudit ? ' sq-reaudit' : '');
         return '<span class="sq ' + cls + '" title="' + escapeAttr(model + ': ' + value + ' (' + label + ')' + squareNote(value, type, pkg)) + '"></span>';
@@ -982,8 +994,9 @@ function renderTable() {
     tbody.innerHTML = entries.map(([name, pkg]) => {
         const date = pkg.latest_date ? pkg.latest_date.split('T')[0] : '—';
         const safeId = escapeAttr(name);
-        const skippedAll = pkg.files_reviewed === 0 && pkg.audits
-            && pkg.audits.every(a => a.result === 'skipped' || a.result === 'inconclusive');
+        const realAudits = (pkg.audits || []).filter(a => !a.advisory);
+        const skippedAll = pkg.files_reviewed === 0 && realAudits.length > 0
+            && realAudits.every(a => a.result === 'skipped' || a.result === 'inconclusive');
         const sub = [pkg.pkgver, date.slice(5)].filter(Boolean).join(' · ');
         return '<tr class="pkg-row" data-pkg="' + safeId + '">'
             + '<td><span class="pkg-name">' + escapeHtml(name) + '</span><div class="pkg-sub">' + escapeHtml(sub) + '</div></td>'
@@ -1037,7 +1050,14 @@ async function toggleDetail(name) {
 // from the counts the state rule used. Nothing a model wrote goes in here.
 function explainState(pkg) {
     const state = packageState(pkg);
-    const audits = pkg.audits || [];
+    if (pkg.human) {
+        return (pkg.human.by || 'A reviewer') + ' reviewed the evidence'
+            + (pkg.human.since ? ' on ' + pkg.human.since : '')
+            + (pkg.human.verdict === 'safe' ? ' and cleared it.' : ' and confirmed it.');
+    }
+    // Advisory reports are information, not votes: the explanation counts
+    // only the audits the state rule counted.
+    const audits = (pkg.audits || []).filter(a => !a.advisory);
     const judges = pkg.judges || [];
     const unsafe = audits.filter(a => a.result === 'unsafe').length;
     const word = n => ['No', 'One', 'Two', 'Three', 'Four', 'Five'][n] || String(n);
@@ -1071,6 +1091,7 @@ function renderDetail(name, data) {
         String((b.frontmatter || {}).date || '').localeCompare(String((a.frontmatter || {}).date || '')));
     const judges = data.judges || [];
     const judgeSafe = pkg.judge_majority === 'safe';
+    const humanSafe = !!(pkg.human && pkg.human.verdict === 'safe');
     const confirmedCls = state === 'confirmed' ? ' confirmed' : '';
 
     let html = '<div class="detail-state">'
@@ -1079,6 +1100,15 @@ function renderDetail(name, data) {
         + '<a class="detail-link" href="#pkg=' + escapeAttr(encodeURIComponent(name)) + '">#pkg=' + escapeHtml(name) + '</a>'
         + '</div>';
 
+    // A settled verdict, and why. This outranks everything below it.
+    if (pkg.human && pkg.human.note) {
+        html += '<div class="detail-section"><div class="finding"><div class="head">'
+            + '<span class="file">Reviewed by ' + escapeHtml(pkg.human.by || 'a reviewer') + '</span>'
+            + (pkg.human.since ? '<span class="where">' + escapeHtml(pkg.human.since) + '</span>' : '')
+            + '<span class="summary">' + escapeHtml(pkg.human.note) + '</span>'
+            + '</div></div></div>';
+    }
+
     // What was flagged, first. Every file a report called unsafe, with the
     // lines the auditor quoted when it quoted any. Newest report first. Two
     // reports that quote the same lines of the same file share one block,
@@ -1086,6 +1116,10 @@ function renderDetail(name, data) {
     const findings = new Map();
     for (const a of audits) {
         const fm = a.frontmatter || {};
+        // Advisory reports never put a file in the flagged list: "flagged
+        // by" is a claim about votes, and an advisory report has none. Its
+        // full text still folds out under Reports below.
+        if (fm.advisory === 'true') continue;
         const model = shortModel(fm.model || 'unknown');
         for (const v of fm.file_verdicts || []) {
             if (v.status !== 'unsafe') continue;
@@ -1103,7 +1137,7 @@ function renderDetail(name, data) {
             return '<div class="finding"><div class="head">'
                 + '<span class="file">' + escapeHtml(v.file || '') + '</span>'
                 + (start ? '<span class="where">line ' + start + '</span>' : '')
-                + '<span class="tag">flagged by ' + escapeHtml(joinNicely(f.models)) + (judgeSafe ? ', overturned by the judge' : '') + '</span>'
+                + '<span class="tag">flagged by ' + escapeHtml(joinNicely(f.models)) + (humanSafe ? ', overturned on review' : judgeSafe ? ', overturned by the judge' : '') + '</span>'
                 + f.summaries.map(s => '<span class="summary">' + escapeHtml(s) + '</span>').join('')
                 + '</div>'
                 + (v.evidence ? renderEvidence(v, state) : '')
@@ -1141,7 +1175,9 @@ function renderDetail(name, data) {
                 // like this one; it is used when the two line up.
                 const summary = (pkg.audits || []).length === audits.length ? pkg.audits[i] : null;
                 const reaudit = summary ? !!summary.reaudit : !!fm.triggered_by;
-                const cls = squareClass(result, 'audit', pkg) + (reaudit ? ' sq-reaudit' : '');
+                const advisory = fm.advisory === 'true' || !!(summary && summary.advisory);
+                const cls = advisory ? 'sq-advisory'
+                    : squareClass(result, 'audit', pkg) + (reaudit ? ' sq-reaudit' : '');
                 const bodyId = 'report-' + name.replace(/[^a-zA-Z0-9-]/g, '_') + '-' + i;
                 const meta = [shortModel(fm.model || 'unknown'), String(fm.date || '').split('T')[0],
                     fmtNum(fm.files_reviewed || 0) + ' files', '$' + (parseFloat(fm.cost) || 0).toFixed(4),
@@ -1157,7 +1193,9 @@ function renderDetail(name, data) {
                 full += '<pre class="report-body">' + escapeHtml(a.body || '') + '</pre>';
                 return '<div class="report"><div class="line">'
                     + '<span class="sq ' + cls + '"></span>'
-                    + '<span class="verdict result-' + escapeAttr(result) + confirmedCls + '">' + escapeHtml(result) + '</span>'
+                    + (advisory
+                        ? '<span class="verdict dim">' + escapeHtml(result) + '</span><span class="meta">advisory — informational only, not a vote</span>'
+                        : '<span class="verdict result-' + escapeAttr(result) + confirmedCls + '">' + escapeHtml(result) + '</span>')
                     + (reaudit ? '<span class="meta">second audit</span>' : '')
                     + '<span class="meta">' + escapeHtml(meta) + '</span>'
                     + '<button type="button" class="link-btn" data-toggle="' + escapeAttr(bodyId) + '">Full report</button>'
