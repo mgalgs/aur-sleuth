@@ -801,6 +801,7 @@ main() {
         # Step 4: Audit in parallel batches
         local audited_n=0
         local batch=()
+        local dry_batches=0
 
         while IFS= read -r pkg; do
             if is_over_budget "$AUDIT_BUDGET"; then
@@ -822,7 +823,37 @@ main() {
                     wait "$pid" || true
                 done
                 audited_n=$(( audited_n + ${#batch[@]} ))
+
+                # Free-tier circuit breaker, advisory runs only. An audit
+                # always leaves a report unless every one of its LLM calls
+                # failed, so a whole batch with no report means the free tier
+                # is refusing everything -- a spent daily cap, not a blip
+                # (blips are retried inside each audit). Two dry batches in a
+                # row, and the rest of the list would only hammer the same
+                # wall for an hour; one scheduled run died on its deadline
+                # doing exactly that.
+                if [[ "$ADVISORY" == "true" ]]; then
+                    local produced=false p m
+                    for p in "${batch[@]}"; do
+                        for m in "${MODEL_LIST[@]}"; do
+                            if [[ -f "$DATA_DIR/bulk-reports/${m//\//-}/aur-sleuth-report-${p}.txt" ]]; then
+                                produced=true
+                                break 2
+                            fi
+                        done
+                    done
+                    if $produced; then
+                        dry_batches=0
+                    else
+                        dry_batches=$(( dry_batches + 1 ))
+                    fi
+                fi
                 batch=()
+
+                if (( dry_batches >= 2 )); then
+                    log "Two audit batches produced no report at all; the free tier looks exhausted -- stopping after $audited_n package(s)"
+                    break
+                fi
 
                 # Push periodically
                 if (( audited_n % 20 == 0 )); then

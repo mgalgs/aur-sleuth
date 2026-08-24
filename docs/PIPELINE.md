@@ -106,9 +106,14 @@ coverage extends the paid run's reach down the updated list. The child's
 audited index counts advisory coverage too, so the six daily sweeps do not
 re-read the same updates; its audits run with extra retries
 (`AUR_SLEUTH_LLM_RETRIES=5`) so the free tier's per-minute throttle is
-ridden through, while the daily cap still fails soft. Shaped runs (named
-packages, counts, escalation, a manual budget) never sweep, and a sweep
-failure never fails the run that carried it. The public page draws advisory
+ridden through, while the daily cap still fails soft. "Soft" is literal: an
+audit whose every LLM call failed withdraws its report and leaves nothing —
+no audited mark, no error transcript — so the package returns next sweep.
+Two consecutive batches that leave no report trip a circuit breaker and end
+the sweep: that only happens when the daily cap is spent, and grinding down
+the rest of the list would hold the Job past its deadline for nothing.
+Shaped runs (named packages, counts, escalation, a manual budget) never
+sweep, and a sweep failure never fails the run that carried it. The public page draws advisory
 reports as hollow dashed squares labeled "informational only, not a vote",
 keeps their findings out of the flagged list, and counts them nowhere.
 
