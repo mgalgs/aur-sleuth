@@ -1,0 +1,36 @@
+{
+  "package": "azerothcore-wotlk-git",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The only substantive disagreement concerns acore_mod, which qwen flagged as unsafe for symlinking user-provided modules from /usr/src/acore-modules/ into the build tree. This is a false positive: the script is a legitimate module compilation helper whose stated purpose is to integrate user-supplied modules. The threat model concerns code injected by a malicious AUR maintainer, not the application's designed behavior when processing user-provided local files. The script does not fetch from untrusted hosts, execute downloaded content, or exfiltrate data. Two other models (deepseek, openrouter) correctly identified this as safe. The two inconclusive reports failed due to API errors (403/429), not security concerns.",
+  "disagreement_analysis": "Qwen misapplied the threat model by treating the script's legitimate feature (processing user-provided modules from a designated directory) as a supply-chain vulnerability. The concern that 'an attacker who can write to /usr/src/acore-modules' could inject code describes upstream application behavior, not AUR packaging injection. Deepseek and openrouter correctly recognized this as expected functionality for a module management tool.",
+  "coverage_issues": [
+    "thinkingmachines/inkling:free failed with 403 API error - no verdict signal",
+    "z-ai/glm-5.2:free failed with 429 rate limit error - no verdict signal",
+    "openrouter/free had parsing error on jemalloc.patch but correctly assessed all critical files"
+  ],
+  "false_positives": [
+    "qwen's acore_mod finding: flagged legitimate module helper functionality as 'untrusted code injection'. The script symlinks from /usr/src/acore-modules/ which is its documented purpose for user-supplied modules. This is upstream application behavior, not AUR maintainer injection. No network fetches, no execution of downloaded content, no exfiltration."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models conflate 'application processes user-provided files' with 'supply-chain injection'. The audit prompt should more explicitly distinguish: (1) does the packaging fetch/execute untrusted remote content, vs (2) does the installed application legitimately process local user-provided files as a feature.",
+    "Helper scripts that manage user dropzones (like /usr/src/acore-modules/) are common in complex server packages. The audit tool should recognize that writing to a designated local directory is not equivalent to fetching from an untrusted network source.",
+    "When a script's behavior matches its documented purpose and operates only on local files the user explicitly provides, this should not trigger unsafe verdicts unless it also fetches/executes remote content or modifies files outside its stated scope."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 15397,
+    "completion_tokens": 1431,
+    "cost": 0.006758719999999999
+  },
+  "audits_judged": [
+    "20260824-072559-qwen-qwen3-235b-a22b-2507.md",
+    "20260824-073054-deepseek-deepseek-v4-flash.md",
+    "20260824-033417-thinkingmachines-inkling:free.md",
+    "20260824-033427-z-ai-glm-5.2:free.md",
+    "20260824-034447-openrouter-free.md"
+  ]
+}
