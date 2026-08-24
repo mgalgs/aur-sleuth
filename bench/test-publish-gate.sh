@@ -499,13 +499,20 @@ make_commit_content() {
     fi
     while (( $# )); do
         path="$1"; content="$2"; shift 2
+        # "@rm" as the content deletes the path instead (via index-info: the
+        # --remove family insists on a work tree, and this store is bare).
+        if [[ "$content" == "@rm" ]]; then
+            printf '0 0000000000000000000000000000000000000000\t%s\n' "$path" \
+                | GIT_INDEX_FILE="$idx" git --git-dir="$repo" update-index --index-info
+            continue
+        fi
         blob="$(printf '%b' "$content" | git --git-dir="$repo" hash-object -w --stdin)"
         GIT_INDEX_FILE="$idx" git --git-dir="$repo" update-index --add \
             --cacheinfo "100644,${blob},${path}"
     done
     tree="$(GIT_INDEX_FILE="$idx" git --git-dir="$repo" write-tree)"
-    GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t \
-        git --git-dir="$repo" commit-tree "$tree" ${parent:+-p "$parent"} -m t
+    GIT_AUTHOR_NAME="${MC_AUTHOR:-t}" GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t \
+        git --git-dir="$repo" commit-tree "$tree" ${parent:+-p "$parent"} -m "${MC_MSG:-t}"
 }
 
 published="$(make_commit_content "" "pkg-a/1.md" '---\nresult: safe\n---\nclean\n')"
@@ -595,7 +602,7 @@ quarantine() (
     # All read by do_quarantine, which arrives through the eval above; scoped
     # to this subshell on purpose.
     # shellcheck disable=SC2030,SC2031,SC2034
-    GIT_STORE="$qstore" DATA_DIR="$tmp/data" SRC_DIR="$tmp/src" MODE=quarantine \
+    GIT_STORE="${1:-$qstore}" DATA_DIR="$tmp/data" SRC_DIR="$tmp/src" MODE=quarantine \
         FETCH_URL=https://example.invalid/r.git
     # shellcheck disable=SC2329  # both called by do_quarantine
     die() { echo "die: $*"; exit 1; }
@@ -671,6 +678,66 @@ if [[ "$(GIT_STORE="$qstore" review_status)" == "0" ]]; then
     ok "review passes after quarantine"
 else
     bad "review should pass after quarantine"
+fi
+
+echo "== quarantine's replay engine: mixed commits, deletes, metadata =="
+# A range shaped like a real incident, on top of the earlier history: a commit
+# adding a poisoned and a clean report together keeps its clean half; one that
+# only modifies the poisoned path prunes away; a delete of a clean report is
+# replayed faithfully; a commit adding only poison prunes; and authorship,
+# messages, and order survive the rewrite.
+d1="$(MC_AUTHOR=bob MC_MSG=mixed make_commit_content "$tip" \
+    "pkg-d/1.md" 'poison: gateway.default.svc.cluster.local\n' "pkg-e/1.md" 'clean-e\n')"
+d2="$(MC_AUTHOR=carl MC_MSG=modbad make_commit_content "$d1" \
+    "pkg-d/1.md" 'poison again: gateway.default.svc.cluster.local\n')"
+d3="$(MC_AUTHOR=dana MC_MSG=delgood make_commit_content "$d2" "pkg-a/1.md" "@rm")"
+d4="$(MC_AUTHOR=erin MC_MSG=onlybad make_commit_content "$d3" \
+    "pkg-f/1.md" 'poison: gateway.default.svc.cluster.local\n')"
+
+qwt2="$tmp/qstore2"
+git init --quiet "$qwt2"
+qstore2="$qwt2/.git"
+git --git-dir="$qstore2" fetch --quiet "$repo" "$d4:refs/heads/audit-reports"
+git --git-dir="$qstore2" update-ref refs/remotes/origin/audit-reports "$published"
+printf 'gitdir: %s\n' "$qstore2" > "$tmp/src/.git"
+
+out="$(quarantine "$qstore2")"
+if grep -q 'exit=0' <<< "$out"; then
+    ok "quarantine exits 0 on the richer range"
+else
+    bad "quarantine failed: $out"
+fi
+qhead2="$(git --git-dir="$qstore2" rev-parse refs/heads/audit-reports)"
+if [[ -z "$(internal_string_paths "$qstore2" "$qhead2")" ]]; then
+    ok "the branch head carries no internal string"
+else
+    bad "internal strings remain at $qhead2"
+fi
+if git --git-dir="$qstore2" cat-file -e "$qhead2:pkg-e/1.md" 2>/dev/null \
+   && ! git --git-dir="$qstore2" cat-file -e "$qhead2:pkg-d/1.md" 2>/dev/null \
+   && ! git --git-dir="$qstore2" cat-file -e "$qhead2:pkg-f/1.md" 2>/dev/null; then
+    ok "a mixed commit keeps its clean half; pure poison is gone"
+else
+    bad "mixed-commit filtering is wrong at $qhead2"
+fi
+if ! git --git-dir="$qstore2" cat-file -e "$qhead2:pkg-a/1.md" 2>/dev/null; then
+    ok "the delete of a clean report is replayed"
+else
+    bad "the deleted report came back"
+fi
+# Kept: tip (pkg-c), mixed (its clean half), delgood, plus the dashboard
+# rebuild. Pruned: leaky, modbad, onlybad.
+n2="$(git --git-dir="$qstore2" rev-list --count "$published..$qhead2")"
+if [[ "$n2" == "4" ]]; then
+    ok "emptied commits pruned, the rest kept (4 remain)"
+else
+    bad "expected 4 commits after the rewrite, got $n2"
+fi
+meta="$(git --git-dir="$qstore2" log --format='%an %s' "$published..$qhead2" | tr '\n' '|')"
+if [[ "$meta" == *"dana delgood|bob mixed|"* ]]; then
+    ok "authors, messages, and order survive the rewrite"
+else
+    bad "metadata after the rewrite: $meta"
 fi
 
 echo "== publish applies the content check itself, dry run included =="

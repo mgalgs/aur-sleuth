@@ -1040,12 +1040,85 @@ do_quarantine() {
     work="$(mktemp -d)/rewrite.git"
     git init --bare --quiet "$work"
     printf '%s\n' "$GIT_STORE/objects" > "$work/objects/info/alternates"
-    git --git-dir="$work" update-ref "refs/heads/$REPORTS_BRANCH" "$head"
-    FILTER_BRANCH_SQUELCH_WARNING=1 git --git-dir="$work" filter-branch -f --prune-empty \
-        --index-filter "git rm -q --cached --ignore-unmatch --pathspec-from-file=$list" \
-        -- "$base..refs/heads/$REPORTS_BRANCH" >/dev/null
+    # One linear plumbing pass, not filter-branch. An archive commit adds one
+    # report, so this rewrite is "replay each commit's diff, minus the dropped
+    # paths, onto one long-lived index, and prune the commits left empty" --
+    # O(changes). filter-branch re-filtered the whole ~7k-file index against
+    # every dropped path for every commit, and at incident scale (1880
+    # commits, 1889 paths) that ran past the Job's own 900s deadline, so a
+    # large quarantine could never finish.
     local rewritten
-    rewritten="$(git --git-dir="$work" rev-parse "refs/heads/$REPORTS_BRANCH")"
+    rewritten="$(REWRITE_GIT_DIR="$work" REWRITE_BASE="$base" REWRITE_HEAD="$head" \
+        REWRITE_DROP_FILE="$list" python3 <<'PY'
+import os, subprocess, sys
+
+gd = os.environ["REWRITE_GIT_DIR"]
+base = os.environ["REWRITE_BASE"]
+head = os.environ["REWRITE_HEAD"]
+with open(os.environ["REWRITE_DROP_FILE"]) as f:
+    drop = {line.rstrip("\n") for line in f if line.strip()}
+
+def git(*args, env=None, data=None):
+    r = subprocess.run(["git", "--git-dir", gd, *args], input=data,
+                       capture_output=True, text=True, errors="backslashreplace",
+                       env=env)
+    if r.returncode != 0:
+        sys.stderr.write(r.stderr)
+        sys.exit(f"git {' '.join(args[:2])} failed on the rewrite")
+    return r.stdout
+
+# Oldest first, with parents, in one call. The archive history is linear by
+# construction (every writer holds the archive lock), and this replay only
+# knows how to follow one parent -- anything else needs a human.
+rows = git("rev-list", "--reverse", "--topo-order", "--parents",
+           f"{base}..{head}").split("\n")
+commits = []
+for row in rows:
+    parts = row.split()
+    if not parts:
+        continue
+    if len(parts) != 2:
+        sys.exit(f"{parts[0][:12]} does not have exactly one parent; "
+                 "this branch should be linear -- needs a human")
+    commits.append((parts[0], parts[1]))
+
+ienv = dict(os.environ, GIT_INDEX_FILE=os.path.join(gd, "rewrite-index"))
+git("read-tree", base, env=ienv)
+cur_tree = git("rev-parse", f"{base}^{{tree}}").strip()
+
+new = base
+for commit, parent in commits:
+    entries = []
+    for line in git("diff-tree", "-r", "--no-commit-id", parent, commit).splitlines():
+        # :oldmode newmode oldsha newsha status\tpath
+        meta, path = line.split("\t", 1)
+        _, new_mode, _, new_sha, status = meta.lstrip(":").split(" ")
+        if path in drop:
+            continue
+        if status == "D":
+            entries.append(f"0 {'0' * 40}\t{path}")
+        else:
+            entries.append(f"{new_mode} {new_sha}\t{path}")
+    if not entries:
+        continue
+    git("update-index", "--index-info", env=ienv, data="\n".join(entries) + "\n")
+    tree = git("write-tree", env=ienv).strip()
+    if tree == cur_tree:
+        continue
+    an, ae, ad, cn, ce, cd, msg = git(
+        "log", "-1", "--date=raw",
+        "--format=%an%x00%ae%x00%ad%x00%cn%x00%ce%x00%cd%x00%B", commit,
+    ).split("\x00", 6)
+    cenv = dict(os.environ, GIT_AUTHOR_NAME=an, GIT_AUTHOR_EMAIL=ae,
+                GIT_AUTHOR_DATE=ad, GIT_COMMITTER_NAME=cn,
+                GIT_COMMITTER_EMAIL=ce, GIT_COMMITTER_DATE=cd)
+    new = git("commit-tree", tree, "-p", new, "-m", msg, env=cenv).strip()
+    cur_tree = tree
+
+print(new)
+PY
+)"
+    git --git-dir="$work" update-ref "refs/heads/$REPORTS_BRANCH" "$rewritten"
     "${g[@]}" fetch --quiet "$work" "+refs/heads/$REPORTS_BRANCH:refs/heads/$REPORTS_BRANCH"
     rm -rf "$(dirname "$work")"
 
