@@ -408,6 +408,12 @@ updated_count = int(os.environ.get("UPDATED_COUNT", "0"))
 seed_count = int(os.environ.get("SEED_COUNT", "0"))
 if seed_count > 0:
     seed_top = seed_count
+elif updated_count > 0:
+    # A sized updated stream with no sized seed means exactly those packages.
+    # Without this, the seed still rode along as a fallback tail, and the
+    # advisory sweep -- whose $0 audits never trip the budget -- audited the
+    # whole tail: a 40-package sweep became 500.
+    seed_top = 0
 audited_index = os.environ["AUDITED_INDEX"]
 
 # Load audited versions
