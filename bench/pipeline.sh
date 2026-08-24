@@ -641,7 +641,11 @@ run_advisory_sweep() {
         --jobs "$JOBS" --audit-timeout "$AUDIT_TIMEOUT" --seed-top "$SEED_TOP")
     $NO_PUSH && sweep_flags+=(--no-push)
     $SKIP_DASHBOARD && sweep_flags+=(--skip-dashboard)
-    bash bench/pipeline.sh "${sweep_flags[@]}" 2>&1 \
+    # Free tiers throttle per minute; a sweep is in no hurry, so its audits
+    # retry through the blips (the client's exponential backoff) instead of
+    # failing the file. The daily free-request cap still fails soft.
+    AUR_SLEUTH_LLM_RETRIES="${AUR_SLEUTH_LLM_RETRIES:-5}" \
+        bash bench/pipeline.sh "${sweep_flags[@]}" 2>&1 \
         || log "WARNING: the advisory sweep failed; the run that carried it is already complete"
 }
 

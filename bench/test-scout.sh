@@ -163,6 +163,59 @@ else
     bad "--probe-free without a key must leave the free list alone"
 fi
 
+echo "== a fresh probe is reused instead of respent =="
+# The probe costs real free-tier requests from the same daily allowance the
+# advisory audits use, so measurements under 20h old are carried forward.
+# The previous out file below says free/model answered in 800ms; the re-run
+# must attach that to the CURRENT list without touching the network -- the
+# base URL points at a closed local port, so an attempted probe would come
+# back empty and fail the assertions.
+cat > "$tmp/out4.json" <<JSON
+{"generated": $(( NOW - 3600 )),
+ "free_probe": {"probed": 2, "answered": 1},
+ "free": [{"id":"free/model","probe_ms":800,"served":"nvidia/nemotron:free"}]}
+JSON
+if OPENAI_API_KEY=dummy OPENAI_BASE_URL=http://127.0.0.1:1 \
+    python3 bench/scout.py --catalog "$tmp/catalog.json" \
+    --out "$tmp/out4.json" --now "$NOW" --probe-free \
+    --seats "audit=seat/audit" >/dev/null 2>&1 \
+    && python3 - "$tmp/out4.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+assert d["free_probe"]["reused_from"], d["free_probe"]
+assert [f["id"] for f in d["free"]] == ["free/model"]
+assert d["free"][0]["probe_ms"] == 800
+assert d["free"][0]["served"] == "nvidia/nemotron:free"
+PY
+then
+    ok "fresh measurements ride again; the stale-listed model is dropped"
+else
+    bad "a fresh probe should be reused, not respent"
+fi
+# A stale previous probe forces a real one; against a dead endpoint every
+# model fails, which must come back as an empty list, not a crash.
+cat > "$tmp/out5.json" <<JSON
+{"generated": $(( NOW - 30 * 3600 )),
+ "free_probe": {"probed": 2, "answered": 1},
+ "free": [{"id":"free/model","probe_ms":800}]}
+JSON
+if OPENAI_API_KEY=dummy OPENAI_BASE_URL=http://127.0.0.1:1 \
+    python3 bench/scout.py --catalog "$tmp/catalog.json" \
+    --out "$tmp/out5.json" --now "$NOW" --probe-free \
+    --seats "audit=seat/audit" >/dev/null 2>&1 \
+    && python3 - "$tmp/out5.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+assert "reused_from" not in d["free_probe"], d["free_probe"]
+assert d["free_probe"]["answered"] == 0
+assert d["free"] == []
+PY
+then
+    ok "a stale probe re-probes, and a dead endpoint yields an empty list, no crash"
+else
+    bad "the stale-probe path is wrong"
+fi
+
 echo "== a missing catalog is quiet, not an error =="
 if python3 bench/scout.py --catalog "$tmp/nope.json" --out "$tmp/none.json" --now "$NOW" 2>/dev/null; then
     ok "exit 0 with no catalog"

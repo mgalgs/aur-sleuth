@@ -89,10 +89,12 @@ leads. This is how an untrusted (usually free) model contributes without
 being able to escalate anything. An advisory run cannot combine with
 escalation, which exists to force a ruling.
 
-The scout probes the free catalog each run: a one-token completion per free
-model ($0 by definition), so the operations page's free list holds models
-that actually answered, fastest first, with who served them behind a router
-id.
+The scout probes the free catalog: a one-token completion per free model
+($0 in money, but real requests from the free tier's daily allowance), so
+the operations page's free list holds models that actually answered,
+fastest first, with who served them behind a router id. Measurements are
+reused for 20 hours — one probe a day, so the allowance goes to advisory
+audits, not probes.
 
 The **advisory sweep** (`AUR_SLEUTH_ADVISORY_SWEEP` on the settings page)
 makes the advisory tier recurring: after each scheduled full run — including

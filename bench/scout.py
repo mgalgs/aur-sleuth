@@ -145,6 +145,43 @@ def spend_shares(data_dir, now, days=7):
     }
 
 
+def reuse_probe(out_path, free, now, max_age=20 * 3600):
+    """Yesterday's probe measurements, when they are fresh enough.
+
+    The probe spends real free-tier requests -- up to the cap per run, six
+    runs a day -- out of the same daily allowance the advisory audits live
+    on. Availability does not change by the hour, so one probe a day is
+    plenty: reuse the measured latencies against the CURRENT free list (the
+    catalog and scores stay fresh), and only an all-dead result forces a
+    re-probe, so a bad day is not remembered for twenty hours."""
+    try:
+        with open(out_path, encoding="utf-8") as f:
+            prev = json.load(f)
+    except (OSError, ValueError):
+        return None
+    stats = prev.get("free_probe")
+    gen = prev.get("generated")
+    if not isinstance(stats, dict) or not isinstance(gen, int):
+        return None
+    if now - gen >= max_age or not stats.get("answered"):
+        return None
+    measured = {p.get("id"): p for p in prev.get("free") or [] if "probe_ms" in p}
+    kept = []
+    for entry in free:
+        got = measured.get(entry["id"])
+        if not got:
+            continue
+        out = dict(entry)
+        out["probe_ms"] = got["probe_ms"]
+        if got.get("served"):
+            out["served"] = got["served"]
+        kept.append(out)
+    if not kept:
+        return None
+    kept.sort(key=lambda f: f["probe_ms"])
+    return kept, {**stats, "reused_from": gen}
+
+
 def probe_free(free, timeout=12, workers=8, cap=40):
     """One tiny completion against each free model, through the same route
     the audits use, so the free list holds models that actually answer --
@@ -336,7 +373,11 @@ def main():
     free.sort(key=lambda f: -f["created"])
     probe_stats = None
     if args.probe_free:
-        free, probe_stats = probe_free(free)
+        reused = reuse_probe(args.out, free, now)
+        if reused:
+            free, probe_stats = reused
+        else:
+            free, probe_stats = probe_free(free)
     out = {
         "generated": now,
         "catalog_size": len(catalog),
