@@ -546,6 +546,15 @@ if [[ "$(INTERNAL_STRINGS=nope internal_string_paths "$repo" "$apitip")" == "pkg
 else
     bad "the built-in API-error needle did not match: $(INTERNAL_STRINGS=nope internal_string_paths "$repo" "$apitip" | tr '\n' ' ')"
 fi
+# The same body under a different prefix: the top-level handler wrote it as
+# "An unexpected error occurred:", and the openai body signature catches it.
+rawtip="$(make_commit_content "$tip" "pkg-e/1.md" \
+    "---\nresult: inconclusive\n---\nAn unexpected error occurred: Error code: 402 - {'error': {'message': 'Insufficient credits', 'code': 402, 'metadata': {'user_id': 'user_secret'}}}\n")"
+if [[ "$(INTERNAL_STRINGS=nope internal_string_paths "$repo" "$rawtip")" == "pkg-e/1.md" ]]; then
+    ok "a raw API error body is flagged whatever prefix wrote it"
+else
+    bad "the body-signature needle did not match: $(INTERNAL_STRINGS=nope internal_string_paths "$repo" "$rawtip" | tr '\n' ' ')"
+fi
 
 git --git-dir="$repo" rev-parse "$tip" > "$store/refs/heads/audit-reports"
 git --git-dir="$repo" rev-parse "$published" > "$store/refs/remotes/origin/audit-reports"
