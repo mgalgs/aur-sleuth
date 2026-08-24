@@ -140,6 +140,10 @@ class LLMClient:
         self.prompt_tokens: Dict[str, int] = defaultdict(lambda: 0)
         self.completion_tokens: Dict[str, int] = defaultdict(lambda: 0)
         self.total_cost: Dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
+        # What actually answered, per the API's own response.model. A router
+        # id like openrouter/free hides its author; this is where the real
+        # one surfaces, and the report records it when it differs.
+        self.served_models: set[str] = set()
         self.pricing: Dict[str, ModelPricingParams] = dict()  # model => pricing
         self._fetch_pricing_info()
 
@@ -212,6 +216,13 @@ class LLMClient:
         response = self.openai_client.chat.completions.create(*args, **kwargs)
 
         model_name = kwargs["model"]
+
+        # The response names the model that actually answered. Behind a
+        # router (openrouter/free) that is the only place the true author
+        # appears, and one audit's calls may be served by several.
+        served = getattr(response, "model", None)
+        if served:
+            self.served_models.add(str(served))
 
         # Track token usage
         if response.usage:
@@ -2716,6 +2727,15 @@ def _write_report_frontmatter(
         triggered_by = os.environ.get("AUR_SLEUTH_TRIGGERED_BY", "")
         reaudit_line = f"triggered_by: {_yaml_escape(triggered_by)}\n" if triggered_by else ""
 
+        # Behind a router id, the models that actually answered. Recorded
+        # only when they differ from what was requested, so ordinary reports
+        # do not change; the judge reads the frontmatter, so "two reports
+        # from the same model are one opinion" can see through a router.
+        served = sorted(getattr(llm_client, "served_models", set()) - {model})
+        served_line = (
+            f"served_models: {_yaml_escape(','.join(served))}\n" if served else ""
+        )
+
         frontmatter = (
             f"---\n"
             f"package: {_yaml_escape(package_name)}\n"
@@ -2723,6 +2743,7 @@ def _write_report_frontmatter(
             f"pkgrel: {_yaml_escape(source_info.get('pkgrel', ''))}\n"
             f"result: {overall_status.name.lower()}\n"
             f"model: {model}\n"
+            f"{served_line}"
             f"provider: {provider}\n"
             f"aur_sleuth_rev: {sleuth_rev}\n"
             f"{reaudit_line}"
