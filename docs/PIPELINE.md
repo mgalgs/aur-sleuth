@@ -94,6 +94,18 @@ model ($0 by definition), so the operations page's free list holds models
 that actually answered, fastest first, with who served them behind a router
 id.
 
+The **advisory sweep** (`AUR_SLEUTH_ADVISORY_SWEEP` on the settings page)
+makes the advisory tier recurring: after each scheduled full run — including
+one that exits on an exhausted budget, since the sweep spends nothing — the
+pipeline runs a child advisory pass over N popular packages with the sweep
+models (default `openrouter/free`). The child's audited index counts
+advisory coverage too, so each sweep digs deeper into the popular set
+instead of re-covering the same head. Shaped runs (named packages, counts,
+escalation, a manual budget) never sweep, and a sweep failure never fails
+the run that carried it. The public page draws advisory reports as hollow
+dashed squares labeled "informational only, not a vote", keeps their
+findings out of the flagged list, and counts them nowhere.
+
 Seats are set on the operations page's Models tab (a ConfigMap override; git
 holds the baseline). `bench/benchmark.sh` scores candidates against the
 settled verdicts — synthetics first for audit-seat runs — and the results
