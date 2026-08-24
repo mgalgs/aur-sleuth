@@ -1,0 +1,38 @@
+{
+  "package": "eden-nightly-bin",
+  "correct_verdict": "safe",
+  "confidence": "medium",
+  "reasoning": "PKGBUILD demonstrates safe practices (HTTPS source, pinned checksum, standard installation hooks), but critical executable (AppImage) was skipped in audit.",
+  "disagreement_analysis": null,
+  "coverage_issues": [
+    "Both models skipped Eden-Linux-*.AppImage \u2013 the primary executable containing all runtime behavior. This is a critical coverage gap."
+  ],
+  "false_positives": [],
+  "false_negatives": [
+    "AppImage may contain: 1) Network calls during execution 2) Filesystem access outside package scope 3) Dynamic code loading \u2013 all unverified due to skipped audit."
+  ],
+  "re_audit_recommended": true,
+  "re_audit_focus": [
+    "Eden-Linux-*.AppImage (extract/analyze contents)",
+    "AppImage runtime behavior (sandboxed execution traces)"
+  ],
+  "learnings": [
+    "File selection: Prioritize executable binaries in -bin packages. Implement AppImage extraction for content audit.",
+    "Assessment quality: Models correctly assessed PKGBUILD but failed to flag binary-skip as critical risk.",
+    "Failure mode: Binary skipping creates false negatives. Require explicit risk acknowledgment for skipped executables."
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 3344,
+    "completion_tokens": 1738,
+    "cost": 0.0066858
+  },
+  "audits_judged": [
+    "20260823-044541-qwen-qwen3-235b-a22b-2507.md",
+    "20260823-044547-deepseek-deepseek-v4-flash.md"
+  ],
+  "reaudit_date": "2026-08-24T09:42:01Z",
+  "reaudit_model": "anthropic/claude-sonnet-4.6",
+  "reaudit_result": "safe",
+  "reaudit_report": "eden-nightly-bin/20260824-094201-anthropic-claude-sonnet-4.6.md"
+}
