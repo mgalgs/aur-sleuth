@@ -1,0 +1,37 @@
+{
+  "package": "command-code",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Both models confirmed PKGBUILD uses trusted npm sources with verified checksums, safe installation practices (--ignore-scripts), and benign wrapper scripts. LICENSE and package.json contain no executable risks. The inconclusive status stems solely from technical errors auditing cli.mjs, which isn't executed during makepkg.",
+  "disagreement_analysis": null,
+  "coverage_issues": [
+    "Both models failed to audit src/package/dist/cli.mjs due to HTTP 413 errors (file too large)",
+    "Prebuilt binaries (command-code-1.32.1.tgz, commandcode-vscode.vsix) were skipped per audit policy"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": true,
+  "re_audit_focus": [
+    "src/package/dist/cli.mjs"
+  ],
+  "learnings": [
+    "Implement file chunking for large files to prevent HTTP 413 errors during model submission",
+    "Prioritize build/install hooks over distribution artifacts when selecting files",
+    "Add size-based file filtering: warn when files exceed model context limits",
+    "Improve error handling for API failures during file audits"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 5841,
+    "completion_tokens": 2064,
+    "cost": 0.0092487
+  },
+  "audits_judged": [
+    "20260822-233334-qwen-qwen3-235b-a22b-2507.md",
+    "20260822-233346-deepseek-deepseek-v4-flash.md"
+  ],
+  "reaudit_date": "2026-08-24T09:41:24Z",
+  "reaudit_model": "anthropic/claude-sonnet-4.6",
+  "reaudit_result": "inconclusive",
+  "reaudit_report": "command-code/20260824-094124-anthropic-claude-sonnet-4.6.md"
+}
