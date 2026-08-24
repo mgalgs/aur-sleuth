@@ -911,7 +911,13 @@ do_publish() {
     # until a prepare fetches. The reports commit is the store's own object;
     # the page commit is not (it was written into this stage's repo, which
     # only borrows the store's objects), so that ref waits for the fetch.
-    git --git-dir="$GIT_STORE" update-ref "refs/remotes/origin/$REPORTS_BRANCH" "$sha"
+    # Best-effort: a publish started from the ops UI runs with the volume
+    # read-only -- a Job holding the deploy key must not be able to write the
+    # store -- and there the next prepare is what moves the ref. The push
+    # already happened; nothing after it may fail the stage.
+    if ! git --git-dir="$GIT_STORE" update-ref "refs/remotes/origin/$REPORTS_BRANCH" "$sha" 2>/dev/null; then
+        log "The store is read-only here; it learns of this push at its next prepare"
+    fi
 }
 
 # --- review -------------------------------------------------------------------

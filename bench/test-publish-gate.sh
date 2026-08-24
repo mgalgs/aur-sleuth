@@ -848,6 +848,17 @@ if [[ "$(git --git-dir="$qstore" rev-parse refs/remotes/origin/audit-reports)" =
 else
     bad "the store still thinks origin is at $(git --git-dir="$qstore" rev-parse --short refs/remotes/origin/audit-reports)"
 fi
+# From the ops UI the volume is read-only. The push must still count as a
+# success: it already happened, and a failed Job would say it did not.
+git --git-dir="$qstore" update-ref refs/remotes/origin/audit-reports "$published"
+chmod a-w "$qstore/refs/remotes/origin"
+out="$(publish_live "$qstore")"
+chmod u+w "$qstore/refs/remotes/origin"
+if grep -q 'exit=0' <<< "$out" && grep -q 'read-only here' <<< "$out"; then
+    ok "a store that cannot be written does not fail the publish"
+else
+    bad "a read-only store should not fail a publish that pushed: $out"
+fi
 
 echo
 fails="$(wc -l < "$FAILS")"
