@@ -1,0 +1,41 @@
+{
+  "package": "stripe-cli-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Both models consistently verified PKGBUILD downloads official Stripe binaries via HTTPS with checksums, installs cleanly, and contains no malicious patterns. .nvchecker.toml is inert config.",
+  "disagreement_analysis": null,
+  "coverage_issues": [
+    "Both models skipped auditing the prebuilt binary (stripe_1.50.4_linux_x86_64.tar.gz) which executes at runtime. This is a critical gap for binary packages.",
+    "No review of potential .install hooks (none present, but verification missing)"
+  ],
+  "false_positives": [],
+  "false_negatives": [
+    "Binary payload risk: Neither model flagged the unaudited executable which handles sensitive payment data and network access.",
+    "Install hook gap: Models didn't confirm absence of .install scripts that execute post-installation."
+  ],
+  "re_audit_recommended": true,
+  "re_audit_focus": [
+    "Binary analysis (stripe executable) for backdoors/credential harvesting",
+    "Verification of no .install scripts present"
+  ],
+  "learnings": [
+    "Prioritize executable binaries in file selection for prebuilt packages",
+    "Add explicit check for .install scripts in coverage gap detection",
+    "Improve binary risk awareness in prompts (network/sensitive data handling)",
+    "Implement warnings when critical runtime components are skipped"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 3400,
+    "completion_tokens": 1846,
+    "cost": 0.0069949999999999995
+  },
+  "audits_judged": [
+    "20260823-040424-qwen-qwen3-235b-a22b-2507.md",
+    "20260823-040420-deepseek-deepseek-v4-flash.md"
+  ],
+  "reaudit_date": "2026-08-24T09:56:21Z",
+  "reaudit_model": "anthropic/claude-sonnet-4.6",
+  "reaudit_result": "safe",
+  "reaudit_report": "stripe-cli-bin/20260824-095620-anthropic-claude-sonnet-4.6.md"
+}
