@@ -482,6 +482,7 @@ fi
 
 echo "== a report that names the deployment's own infrastructure is refused =="
 eval "$(sed -n '/^INTERNAL_STRINGS=/p' "$ENTRYPOINT")"
+eval "$(sed -n '/^internal_string_needles()/,/^}/p' "$ENTRYPOINT")"
 eval "$(sed -n '/^internal_string_paths()/,/^}/p' "$ENTRYPOINT")"
 eval "$(sed -n '/^internal_string_working_files()/,/^}/p' "$ENTRYPOINT")"
 eval "$(sed -n '/^sanitize_store()/,/^}/p' "$ENTRYPOINT")"
@@ -527,6 +528,16 @@ if [[ "$(INTERNAL_STRINGS=nope,gateway.default internal_string_paths "$repo" "$t
     ok "a configured string is matched"
 else
     bad "AUR_SLEUTH_INTERNAL_STRINGS was not honoured"
+fi
+# The raw form of an LLM API error is a built-in needle: its body quotes the
+# operator's account id back, and it is matched whatever INTERNAL_STRINGS
+# says -- including a needle with spaces, which the env var cannot carry.
+apitip="$(make_commit_content "$tip" "pkg-d/1.md" \
+    '---\nresult: inconclusive\n---\nLLM audit error for PKGBUILD: Audit error: Error code: 429 - {"user_id": "user_secret"}\n')"
+if [[ "$(INTERNAL_STRINGS=nope internal_string_paths "$repo" "$apitip")" == "pkg-d/1.md" ]]; then
+    ok "a raw LLM API error body is flagged regardless of INTERNAL_STRINGS"
+else
+    bad "the built-in API-error needle did not match: $(INTERNAL_STRINGS=nope internal_string_paths "$repo" "$apitip" | tr '\n' ' ')"
 fi
 
 git --git-dir="$repo" rev-parse "$tip" > "$store/refs/heads/audit-reports"

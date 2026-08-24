@@ -131,21 +131,37 @@ EOF
 # here is a pattern.
 INTERNAL_STRINGS="${AUR_SLEUTH_INTERNAL_STRINGS:-svc.cluster.local}"
 
+# Every needle, one per line: the configured internal strings, then the
+# built-in ones every deployment shares. "Audit error: Error code:" is the
+# raw form of an LLM API error -- openai's own str() -- whose body quotes
+# provider chatter and the operator's account id back into the report.
+# aur-sleuth sanitizes these now, so a report that still carries one
+# predates the sanitizer and must not be published. Built in rather than
+# configured because, unlike a site's hostnames, it is never site-specific
+# -- and it needs the spaces the env var's word-splitting cannot carry.
+internal_string_needles() {
+    local needle
+    for needle in ${INTERNAL_STRINGS//,/ }; do
+        printf '%s\n' "$needle"
+    done
+    printf '%s\n' "Audit error: Error code:"
+}
+
 # Print every path at REF in REPO whose content contains an internal string,
 # one per line, sorted and unique. Prints nothing when there are none.
 internal_string_paths() {
     local repo="$1" ref="$2" needle
-    for needle in ${INTERNAL_STRINGS//,/ }; do
+    while IFS= read -r needle; do
         git --git-dir="$repo" grep -l -F -e "$needle" "$ref" -- 2>/dev/null || true
-    done | sed "s/^[^:]*://" | sort -u
+    done < <(internal_string_needles) | sed "s/^[^:]*://" | sort -u
 }
 
 # The same, for the working copies the pipeline keeps on the volume.
 internal_string_working_files() {
     local needle
-    for needle in ${INTERNAL_STRINGS//,/ }; do
+    while IFS= read -r needle; do
         grep -l -F -e "$needle" "$DATA_DIR"/bulk-reports/*/aur-sleuth-report-*.txt 2>/dev/null || true
-    done | sort -u
+    done < <(internal_string_needles) | sort -u
 }
 
 # --- prepare ------------------------------------------------------------------
