@@ -82,6 +82,41 @@ SAMPLE_FILE="$RUN_DIR/sample.jsonl"
 
 log() { echo "[$(date '+%H:%M:%S')] $*"; }
 
+# --- baseline seat holder ---------------------------------------------------
+# Cost and accuracy deltas need a same-run baseline: the incumbent's
+# branch-derived numbers come from old rulings over old report sets, and the
+# one time a seat holder was re-run fresh it disagreed markedly with its own
+# branch figure. So the holder of the seat this run auditions for (judge for
+# a judge run, re-audit otherwise) always answers the sample beside the
+# candidates. Prepended, not appended: a budget that truncates the run
+# should cost a candidate its tail, never the baseline every delta is
+# measured against. Resolution mirrors the ops page: the settings override
+# first, else what the last scheduled run recorded.
+seat_holder() {
+    local key="AUR_SLEUTH_REAUDIT_MODEL"
+    [[ "$ROLE" == "judge" ]] && key="AUR_SLEUTH_JUDGE_MODEL"
+    local holder="${!key:-}"
+    if [[ -z "$holder" && -f "$PIPELINE_DIR/effective.json" ]]; then
+        holder="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get(sys.argv[2], ""))' \
+            "$PIPELINE_DIR/effective.json" "$key" 2>/dev/null || true)"
+    fi
+    printf '%s' "$holder"
+}
+
+HOLDER="$(seat_holder)"
+if [[ -n "$HOLDER" ]]; then
+    holder_present=false
+    for m in "${MODEL_LIST[@]}"; do
+        [[ "$m" == "$HOLDER" ]] && holder_present=true
+    done
+    if ! $holder_present; then
+        MODEL_LIST=("$HOLDER" "${MODEL_LIST[@]}")
+        log "Baseline: $HOLDER, the current seat holder, joins the run so every delta is same-sample; it spends its share of the budget first"
+    fi
+else
+    log "WARNING: no seat holder known (no setting, no effective.json); deltas will fall back to branch-derived numbers, which are approximate"
+fi
+
 # --- spend ------------------------------------------------------------------
 # The pipeline's own ledger, so --daily-budget in the next scheduled run counts
 # what this spent. The run's own --budget is tracked separately, from the rows.

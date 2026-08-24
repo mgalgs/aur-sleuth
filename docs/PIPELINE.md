@@ -119,7 +119,12 @@ keeps their findings out of the flagged list, and counts them nowhere.
 
 Seats are set on the operations page's Models tab (a ConfigMap override; git
 holds the baseline). `bench/benchmark.sh` scores candidates against the
-settled verdicts — synthetics first for audit-seat runs — and the results
+settled verdicts — synthetics first for audit-seat runs — and always seats
+the current holder of the targeted seat beside the candidates (prepended,
+so a truncating budget costs a candidate its tail, never the baseline):
+cost and accuracy deltas are then paired measurements on the identical
+sample, where a ratio against the holder's old branch rulings proved to
+mix measurement bases. The results
 page ranks best-first: accuracy over everything *asked* (a shrug or an error
 on a settled package counts against, so sitting out hard calls cannot win),
 then cost. Promotion is always a person's click.

@@ -32,6 +32,13 @@ the benchmark as the one experiment runner.
    settles it. This is the honest form of "A/B in the regular pipeline":
    same machinery, no second pipeline, experiments still never write the
    reports branch.
+5. **Cost forecast confidence interval** (queued 2026-08-24). The seat
+   holder now always answers the sample beside the candidates, so every
+   package carries a paired cost measurement — candidate and baseline on
+   identical work. The per-package ratios give the forecast an empirical
+   spread for free; showing "$1.00 → $0.85 ± $0.02" would let the Pipeline
+   $ cell state its own precision instead of implying it. The rows already
+   hold per-package, per-model cost; the work is aggregation and display.
 
 ## SleuthBench: the trust gate (queued 2026-08-23)
 
