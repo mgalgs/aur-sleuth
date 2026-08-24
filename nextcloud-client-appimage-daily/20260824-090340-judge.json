@@ -1,0 +1,34 @@
+{
+  "package": "nextcloud-client-appimage-daily",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Two models (qwen3-235b and deepseek-v4-flash) successfully audited the PKGBUILD and found it safe. Both correctly identified this as a standard AppImage repackaging package that downloads from the official Nextcloud domain (download.nextcloud.com) with a pinned SHA256 checksum. The PKGBUILD performs routine operations: extracting icons/desktop files with 7z, installing the AppImage to /opt/appimages/, and creating a symlink. No malicious code execution, no unexpected network requests, no data exfiltration. The three inconclusive reports all failed due to tool errors (403, 429, parsing error) and provide no security signal.",
+  "disagreement_analysis": null,
+  "coverage_issues": [
+    "thinkingmachines/inkling:free failed with 403 error (model only available on agentic harnesses)",
+    "z-ai/glm-5.2:free failed with 429 rate limit error",
+    "openrouter/free failed to parse model response"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models correctly skip binary files (AppImage) when checksum is pinned in PKGBUILD - this is appropriate behavior",
+    "Tool infrastructure errors (403, 429, parsing failures) should be tracked separately from security findings to avoid polluting verdict statistics",
+    "For AppImage repackaging packages, the primary audit focus should be on: (1) source URL legitimacy, (2) checksum verification (not SKIP), (3) prepare/package function operations - all of which were correctly assessed"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 6758,
+    "completion_tokens": 1059,
+    "cost": 0.00351808
+  },
+  "audits_judged": [
+    "20260824-084603-qwen-qwen3-235b-a22b-2507.md",
+    "20260824-084609-deepseek-deepseek-v4-flash.md",
+    "20260824-051938-thinkingmachines-inkling:free.md",
+    "20260824-051949-z-ai-glm-5.2:free.md",
+    "20260824-051940-openrouter-free.md"
+  ]
+}
