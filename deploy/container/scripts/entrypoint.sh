@@ -826,10 +826,11 @@ do_publish() {
     fi
 
     # Where origin is now. The reports push must be a fast-forward: origin at
-    # or behind the reviewed commit. The store learns of the push at its next
-    # prepare, and since the page no longer goes on this branch, origin never
-    # holds a commit the store lacks unless someone pushed reports from
-    # elsewhere -- which is for a prepare to reconcile, not this stage.
+    # or behind the reviewed commit. A successful push is written back to the
+    # store's own origin ref below, and since the page no longer goes on this
+    # branch, origin never holds a commit the store lacks unless someone
+    # pushed reports from elsewhere -- which is for a prepare to reconcile,
+    # not this stage.
     local online=true
     if ! fetch_origin_branch "$pub" "$REPORTS_BRANCH"; then
         online=false
@@ -904,6 +905,13 @@ do_publish() {
         "$sha:refs/heads/$REPORTS_BRANCH" \
         "$site:refs/heads/$SITE_BRANCH"
     log "Pushed $sha to $REPORTS_BRANCH and $site to $SITE_BRANCH"
+
+    # The store's picture of origin, so the next review counts only what this
+    # push did not carry instead of re-reading every report just published
+    # until a prepare fetches. The reports commit is the store's own object;
+    # the page commit is not (it was written into this stage's repo, which
+    # only borrows the store's objects), so that ref waits for the fetch.
+    git --git-dir="$GIT_STORE" update-ref "refs/remotes/origin/$REPORTS_BRANCH" "$sha"
 }
 
 # --- review -------------------------------------------------------------------

@@ -810,6 +810,45 @@ else
     bad "a pin off the branch should refuse: $out"
 fi
 
+echo "== a real push moves the store's picture of origin =="
+# A local bare origin holding what the store believes origin holds. The push
+# goes over a path, so the deploy key and host file only need to exist.
+origin="$tmp/live-origin.git"
+git init --bare --quiet "$origin"
+git --git-dir="$qstore" push --quiet "$origin" "$published:refs/heads/audit-reports"
+touch "$tmp/deploy-key"
+echo "host key" > "$tmp/known-hosts"
+publish_live() (
+    set +e
+    # shellcheck disable=SC2030,SC2031,SC2034
+    GIT_STORE="$1" DATA_DIR="$tmp/data" SRC_DIR="$tmp/src" MODE=publish \
+        FETCH_URL="$origin" PUSH_URL="$origin" PUBLISH_DRY_RUN=false \
+        SSH_KEY="$tmp/deploy-key" KNOWN_HOSTS="$tmp/known-hosts" HOME="$tmp/home" \
+        GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t \
+        EXPECT_HEAD="" REVIEW_JSON_IN="" FUNDING_URL="" SITE_BRANCH=site \
+        AUR_METADATA_URL="file://$tmp/no-such-dump"
+    # shellcheck disable=SC2329
+    die() { echo "die: $*"; exit 1; }
+    # shellcheck disable=SC2329
+    log() { echo "$*"; }
+    (do_publish) 2>&1
+    echo "exit=$?"
+)
+qtip="$(git --git-dir="$qstore" rev-parse refs/heads/audit-reports)"
+out="$(publish_live "$qstore")"
+if grep -q 'exit=0' <<< "$out" \
+   && [[ "$(git --git-dir="$origin" rev-parse refs/heads/audit-reports)" == "$qtip" ]] \
+   && git --git-dir="$origin" rev-parse --verify --quiet refs/heads/site >/dev/null; then
+    ok "the reports and the page are pushed"
+else
+    bad "the push did not land: $out"
+fi
+if [[ "$(git --git-dir="$qstore" rev-parse refs/remotes/origin/audit-reports)" == "$qtip" ]]; then
+    ok "and the store's origin ref now points at what was pushed"
+else
+    bad "the store still thinks origin is at $(git --git-dir="$qstore" rev-parse --short refs/remotes/origin/audit-reports)"
+fi
+
 echo
 fails="$(wc -l < "$FAILS")"
 if (( fails > 0 )); then
