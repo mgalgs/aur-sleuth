@@ -214,7 +214,15 @@ mkdir -p "$PIPELINE_DIR" "$DATA_DIR/bulk-reports" "$DATA_DIR/judge"
 # The configuration this run resolved to, for anything that wants to know
 # what is actually in use: the models come from defaults in this file unless
 # a flag overrode them, and nothing outside this process can see that
-# otherwise. The ops page reads this to name the models in each seat.
+# otherwise. The ops page reads this to name the models in each seat --
+# and calls it "the default", so ONLY an unshaped run may write it. A
+# shaped run (named packages, counts, escalation, advisory, a manual
+# budget) carries one-off overrides; recording those here once made the
+# ops page present a single free-model test run as the standing audit
+# seat, which read as "something changed the default".
+if [[ "$ADVISORY" != "true" && -z "$PACKAGES" && -z "$PACKAGES_FILE" \
+      && -z "$ESCALATE" && "$ESCALATE_PENDING" != "true" && -z "$RUN_BUDGET" \
+      && "$UPDATED_COUNT" -eq 0 && "$SEED_COUNT" -eq 0 ]]; then
 PIPE_AUDIT_MODELS="$AUDIT_MODELS" PIPE_JUDGE_MODEL="$JUDGE_MODEL" PIPE_REAUDIT_MODEL="$REAUDIT_MODEL" \
 PIPE_DAILY_BUDGET="$DAILY_BUDGET" PIPE_JOBS="$JOBS" PIPE_OUT="$PIPELINE_DIR/effective.json" \
 python3 - <<'PY'
@@ -233,6 +241,7 @@ with open(tmp, "w") as f:
     json.dump(out, f, separators=(",", ":"), sort_keys=True)
 os.replace(tmp, e["PIPE_OUT"])
 PY
+fi
 
 log() { echo "[$(date '+%H:%M:%S')] $*"; }
 

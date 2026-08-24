@@ -255,6 +255,32 @@ for shaped in 'RUN_BUDGET=2' 'PACKAGES=foo' 'PACKAGES_FILE=/dev/null' \
     fi
 done
 
+echo "== only an unshaped run writes the effective config =="
+# The ops page presents pipeline/effective.json as "the default, as of the
+# last run". A shaped run carries one-off overrides; recording them once
+# made a single free-model test run read as the standing audit seat.
+edir="$tmp/edata-shaped"
+mkdir -p "$edir"
+AUR_SLEUTH_DATA_DIR="$edir" bash bench/pipeline.sh --packages-file /dev/null \
+    --dry-run --skip-judge --skip-dashboard --no-push >/dev/null 2>&1 || true
+if [[ -e "$edir/pipeline/effective.json" ]]; then
+    bad "a shaped run wrote effective.json: its overrides would read as the default"
+else
+    ok "a shaped (packages-file) run leaves effective.json alone"
+fi
+# An unshaped run writes it even when the day's budget is spent: the file is
+# written before the gate, so the page's view of the defaults stays fresh.
+edir="$tmp/edata-full"
+mkdir -p "$edir/pipeline"
+echo "999" > "$edir/pipeline/spend-$(date +%Y-%m-%d).log"
+AUR_SLEUTH_DATA_DIR="$edir" bash bench/pipeline.sh \
+    --dry-run --skip-judge --skip-dashboard --no-push >/dev/null 2>&1 || true
+if [[ -e "$edir/pipeline/effective.json" ]]; then
+    ok "an unshaped run records the resolved defaults, spent day included"
+else
+    bad "the unshaped run should have written effective.json"
+fi
+
 echo "== MIN_VOTES is a hard floor on the updated stream =="
 got="$(run_discover "$tmp/a.json.gz" "$tmp/a.tsv" 5 3 0.8)"
 # U4 (3 votes) and U5 (1 vote) fall below the floor and drop out.
