@@ -165,20 +165,18 @@ check_triggers() {
 
     [[ ${#reports[@]} -ge 1 ]] || return 1
 
-    # Already judged: the working copies outlive the judgment, so without this
-    # a package with a standing disagreement is re-judged on every run that
-    # has budget. A new audit gets a new date, so it is judged again.
-    if ! $FORCE && already_judged "$pkg" "${reports[@]}"; then
-        return 2
-    fi
-
-    # Collect the REAL results upfront. A failed audit -- result unknown or
-    # skipped, or a cost of zero (rate-limited, quota-walled, crashed before
-    # a single call) -- is soft: it is absence, not a ruling. It must not
-    # trigger a paid judge read, and it must not smuggle a cost-0
-    # "inconclusive" into the agreed-warning check below. This is what lets
-    # a free model sit in an audit seat: present when the pipes are open,
-    # costless in every sense when they are not.
+    # Collect the REAL results upfront. Two kinds of report carry no vote:
+    #
+    # - A failed audit -- result unknown or skipped, or a cost of zero
+    #   (rate-limited, quota-walled, crashed before a single call) -- is
+    #   soft: absence, not a ruling.
+    # - An advisory report (frontmatter advisory: true) is data from a model
+    #   that has not earned a vote. It never triggers anything; when a judge
+    #   convenes on the real reports' own merits, it is in the pile the
+    #   judge reads, as context. Simply informational.
+    #
+    # Neither may trigger a paid judge read, and neither may smuggle a
+    # cost-0 "inconclusive" into the agreed-warning check below.
     local results=()
     local real_reports=()
     for r in "${reports[@]}"; do
@@ -189,15 +187,28 @@ check_triggers() {
         if [[ -z "$res" || "$res" == "unknown" || "$res" == "skipped" || "$cost" == "0" ]]; then
             continue
         fi
+        if [[ "$(fm "$r" advisory)" == "true" ]]; then
+            continue
+        fi
         results+=("$res")
         real_reports+=("$r")
     done
 
-    # Nothing real to judge: every report failed or was skipped. The package
-    # stays out of the audited index (bench/audited-index.py applies the
-    # same rule), so discovery retries it next run instead of never.
+    # Nothing real to judge: every report failed, was skipped, or is
+    # advisory. The package stays out of the audited index
+    # (bench/audited-index.py applies the same rule), so discovery retries
+    # it next run instead of never.
     if (( ${#results[@]} == 0 )); then
         return 1
+    fi
+
+    # Already judged: the working copies outlive the judgment, so without
+    # this a package with a standing disagreement is re-judged on every run
+    # that has budget. The fingerprint is the REAL reports only: an advisory
+    # report arriving later must not re-summon a judge through the back
+    # door -- it waits in the pile for the next real event.
+    if ! $FORCE && already_judged "$pkg" "${real_reports[@]}"; then
+        return 2
     fi
 
     # Disagreement: different result values across models
@@ -348,7 +359,12 @@ executing fetched content, or fetching from a host the package has no stated
 relationship with.
 
 Weigh the reports; do not count them:
-- Two reports from the same model are one opinion, not corroboration.
+- A report whose frontmatter says "advisory: true" is context from a model
+  that has not earned a vote: read it for leads, never count it toward
+  agreement or disagreement.
+- Two reports from the same model are one opinion, not corroboration. A
+  "served_models" line names who actually answered behind a router id; use
+  it when deciding what counts as the same model.
 - A report that ended in a tool error (a crash, a timeout, a symlink loop)
   carries no verdict signal. Treat it as missing and note the failure under
   coverage_issues.

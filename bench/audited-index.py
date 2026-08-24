@@ -25,7 +25,9 @@ def main():
         if not pkgver:
             continue
         audits = pkg.get("audits") or []
-        if not any(a.get("result") in REAL for a in audits):
+        # Advisory reports are informational, not audits: a package that has
+        # only advisory looks stays a candidate for the real seats.
+        if not any(a.get("result") in REAL and not a.get("advisory") for a in audits):
             continue
         pkgrel = pkg.get("pkgrel", "")
         print(f"{name}\t{pkgver}-{pkgrel}" if pkgrel else f"{name}\t{pkgver}")

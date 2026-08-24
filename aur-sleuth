@@ -2727,6 +2727,15 @@ def _write_report_frontmatter(
         triggered_by = os.environ.get("AUR_SLEUTH_TRIGGERED_BY", "")
         reaudit_line = f"triggered_by: {_yaml_escape(triggered_by)}\n" if triggered_by else ""
 
+        # An advisory report is data, never a verdict: recorded and shown,
+        # but excluded from judge triggers, package state, and the audited
+        # index. It is how an untrusted model runs against real packages
+        # without ever being able to summon a judge or flip a state.
+        advisory_line = (
+            "advisory: true\n"
+            if os.environ.get("AUR_SLEUTH_ADVISORY", "") == "true" else ""
+        )
+
         # Behind a router id, the models that actually answered. Recorded
         # only when they differ from what was requested, so ordinary reports
         # do not change; the judge reads the frontmatter, so "two reports
@@ -2747,6 +2756,7 @@ def _write_report_frontmatter(
             f"provider: {provider}\n"
             f"aur_sleuth_rev: {sleuth_rev}\n"
             f"{reaudit_line}"
+            f"{advisory_line}"
             f"prompt_tokens: {prompt_tokens}\n"
             f"completion_tokens: {completion_tokens}\n"
             f"total_tokens: {prompt_tokens + completion_tokens}\n"

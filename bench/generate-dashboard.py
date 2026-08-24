@@ -400,6 +400,9 @@ def build_index_data(audits, judges, now=None, funding_inputs=None, human=None):
             "pkgrel": fm.get("pkgrel", ""),
             "file_verdicts": fm.get("file_verdicts", []),
             "triggered_by": fm.get("triggered_by", ""),
+            # Advisory reports are data, never verdicts: shown, and excluded
+            # from every piece of state math below.
+            "advisory": fm.get("advisory", "") == "true",
         })
 
     # Build set of re-audit filenames from judge data for backward compat
@@ -442,9 +445,12 @@ def build_index_data(audits, judges, now=None, funding_inputs=None, human=None):
         total_cost = sum(a["cost"] for a in pkg_audits)
         total_cost += sum(j["cost"] for j in pkg_data["judges"])
 
-        # Re-audits count double in majority calculation
+        # Re-audits count double in majority calculation. Advisory reports
+        # count zero: they are context for a judge, never a vote.
         audit_results = []
         for a in pkg_audits:
+            if a.get("advisory"):
+                continue
             audit_results.append(a["result"])
             if a.get("triggered_by"):
                 audit_results.append(a["result"])
@@ -459,14 +465,17 @@ def build_index_data(audits, judges, now=None, funding_inputs=None, human=None):
             "audit_count": len(pkg_audits),
             "files_reviewed": latest.get("files_reviewed", 0),
             "audits": [
-                {"result": a["result"], "model": a["model"], "reaudit": bool(a.get("triggered_by"))}
+                {"result": a["result"], "model": a["model"], "reaudit": bool(a.get("triggered_by")),
+                 **({"advisory": True} if a.get("advisory") else {})}
                 for a in pkg_audits
             ],
             "judges": [{"verdict": j["correct_verdict"], "model": j.get("model", "unknown")} for j in pkg_data["judges"]],
             "audit_majority": compute_majority(audit_results),
             "judge_majority": compute_majority(judge_verdicts),
-            # Reports that said unsafe, each counted once: what "agree" rests on.
-            "unsafe_audits": sum(1 for a in pkg_audits if a["result"] == "unsafe"),
+            # Reports that said unsafe, each counted once: what "agree" rests
+            # on. Advisory reports never count here.
+            "unsafe_audits": sum(1 for a in pkg_audits
+                                 if a["result"] == "unsafe" and not a.get("advisory")),
         }
         # A human-settled verdict rides on the summary so package_state()
         # and the drill-down both see it.

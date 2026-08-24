@@ -13,6 +13,7 @@
 #                     [--packages LIST] [--escalate LIST]
 #                     [--escalate-pending true|false] [--run-budget USD]
 #                     [--free-models LIST] [--free-timeout SECONDS]
+#                     [--advisory true|false]
 #
 # State is derived from the audit-reports branch (no local state files needed).
 # Daily spend is tracked in $DATA_DIR/pipeline/spend-YYYY-MM-DD.log.
@@ -67,6 +68,13 @@ REAUDIT_MODEL="anthropic/claude-sonnet-4.6"
 # hold a batch the way a real audit may.
 FREE_MODELS=""
 FREE_TIMEOUT=180
+# An advisory run records reports that are data, never verdicts: marked in
+# their frontmatter, excluded from judge triggers, package state and the
+# audited index, and the run itself skips the judge and escalation phases.
+# The way to point an untrusted model at real packages with a guarantee
+# that it cannot summon a judge, escalate, or flip a state -- now or in any
+# later run.
+ADVISORY="false"
 PACKAGES_FILE=""
 # Sized runs: cap each discovery stream instead of letting the budget cut the
 # interleaved list. 0 means uncapped -- the full-run default.
@@ -122,12 +130,26 @@ while [[ $# -gt 0 ]]; do
         --run-budget) RUN_BUDGET="$2"; shift 2 ;;
         --free-models) FREE_MODELS="$2"; shift 2 ;;
         --free-timeout) FREE_TIMEOUT="$2"; shift 2 ;;
+        --advisory) ADVISORY="$2"; shift 2 ;;
         *) echo "Unknown arg: $1" >&2; exit 1 ;;
     esac
 done
 
 [[ "$ESCALATE_PENDING" =~ ^(true|false)$ ]] \
     || { echo "--escalate-pending must be true or false, got '$ESCALATE_PENDING'" >&2; exit 1; }
+[[ "$ADVISORY" =~ ^(true|false)$ ]] \
+    || { echo "--advisory must be true or false, got '$ADVISORY'" >&2; exit 1; }
+if [[ "$ADVISORY" == "true" ]]; then
+    # Advisory reports are marked by the auditor itself (frontmatter), and
+    # the run holds no court: no judge, no escalation. Later runs' judges
+    # will find the reports in the pile as context, never as triggers.
+    export AUR_SLEUTH_ADVISORY=true
+    SKIP_JUDGE=true
+    if [[ -n "$ESCALATE" || "$ESCALATE_PENDING" == "true" ]]; then
+        echo "--advisory cannot combine with escalation: an advisory run holds no court" >&2
+        exit 1
+    fi
+fi
 # A positive number; zero would be a run that cannot start. Interpolated into
 # python3 -c strings below, so the shape check is the security check too.
 [[ -z "$RUN_BUDGET" || "$RUN_BUDGET" =~ ^(0*[1-9][0-9]*(\.[0-9]+)?|0*\.[0-9]*[1-9][0-9]*)$ ]] \
@@ -599,6 +621,9 @@ main() {
     log "Models: ${MODEL_LIST[*]} | Judge: $JUDGE_MODEL | Re-audit: $REAUDIT_MODEL"
     if [[ ${#FREE_MODEL_LIST[@]} -gt 0 ]]; then
         log "Free voices: ${FREE_MODEL_LIST[*]} (best effort, ${FREE_TIMEOUT}s deadline, failures are soft)"
+    fi
+    if [[ "$ADVISORY" == "true" ]]; then
+        log "ADVISORY RUN: reports are informational only -- no judge, no escalation, no state changes, now or later"
     fi
     log "Daily spend so far: \$$(get_daily_spent)"
 

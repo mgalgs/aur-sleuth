@@ -137,6 +137,18 @@ if bash bench/pipeline.sh --escalate '-rf' --dry-run --skip-judge \
 else
     ok "refused an escalation list starting with a hyphen"
 fi
+if bash bench/pipeline.sh --advisory true --escalate pkg --dry-run \
+        --skip-dashboard --no-push >/dev/null 2>&1; then
+    bad "should have refused --advisory with --escalate"
+else
+    ok "refused an advisory escalation: an advisory run holds no court"
+fi
+if bash bench/pipeline.sh --advisory maybe --dry-run --skip-judge \
+        --skip-dashboard --no-push >/dev/null 2>&1; then
+    bad "should have refused --advisory maybe"
+else
+    ok "refused a non-boolean --advisory"
+fi
 
 echo "== a package whose every audit failed stays eligible =="
 # The audited index is what discovery skips. The soft-failure rule: a
@@ -147,13 +159,15 @@ got="$(python3 bench/audited-index.py <<'JSON' | sort
  "good":{"pkgver":"1.0","pkgrel":"1","audits":[{"result":"safe"}]},
  "half":{"pkgver":"2.0","pkgrel":"1","audits":[{"result":"unknown"},{"result":"inconclusive"}]},
  "failed":{"pkgver":"3.0","pkgrel":"2","audits":[{"result":"unknown"},{"result":"skipped"}]},
- "norel":{"pkgver":"4.0","pkgrel":"","audits":[{"result":"unsafe"}]}
+ "norel":{"pkgver":"4.0","pkgrel":"","audits":[{"result":"unsafe"}]},
+ "advonly":{"pkgver":"5.0","pkgrel":"1","audits":[{"result":"safe","advisory":true}]},
+ "advplus":{"pkgver":"6.0","pkgrel":"1","audits":[{"result":"safe","advisory":true},{"result":"safe"}]}
 }}
 JSON
 )"
-want=$'good\t1.0-1\nhalf\t2.0-1\nnorel\t4.0'
+want=$'advplus\t6.0-1\ngood\t1.0-1\nhalf\t2.0-1\nnorel\t4.0'
 if [[ "$got" == "$want" ]]; then
-    ok "only real verdicts mark a package audited; all-failed stays a candidate"
+    ok "only real verdicts mark a package audited; all-failed and advisory-only stay candidates"
 else
     bad "audited index wrong"
     printf '    want: %s\n' "$(echo "$want" | tr '\n' ' ')"

@@ -148,6 +148,47 @@ else
     bad "expected the trigger after a new report, got: $got"
 fi
 
+echo "== an advisory report is information, never a trigger =="
+# advreport MODEL PKG RESULT COST -- like report, plus advisory: true.
+advreport() {
+    local model="$1" pkg="$2" result="$3" cost="$4"
+    mkdir -p "$REPORTS_DIR/$model"
+    printf -- '---\npackage: %s\nmodel: %s\ndate: 2026-08-23T11:00:00Z\nresult: %s\ncost: %s\nfiles_reviewed: 5\nadvisory: true\n---\nbody\n' \
+        "$pkg" "$model" "$result" "$cost" \
+        > "$REPORTS_DIR/$model/aur-sleuth-report-${pkg}.txt"
+}
+# An advisory unsafe beside an agreed-safe pair: no disagreement, no warning.
+# The advisory voice has not earned a vote; it waits in the pile as context.
+report a pkg-adv safe 0.01
+report b pkg-adv safe 0.02
+advreport freeadv pkg-adv unsafe 0.0001
+got="$(trigger pkg-adv)"
+if [[ "$got" == "1 " ]]; then
+    ok "an advisory unsafe cannot out-vote agreed safe reports"
+else
+    bad "expected no trigger beside real agreement, got: $got"
+fi
+# A package with only advisory reports has not been audited at all.
+advreport freeadv pkg-advonly unsafe 0.0001
+got="$(trigger pkg-advonly)"
+if [[ "$got" == "1 " ]]; then
+    ok "advisory-only is absence: nothing to judge"
+else
+    bad "expected no trigger for advisory-only, got: $got"
+fi
+# The judged fingerprint covers real reports only, so an advisory report
+# arriving later must not re-summon the judge through the back door.
+report a pkg-advlate unsafe 0.01
+report b pkg-advlate unsafe 0.02
+printf '{"audits_judged": ["20260823-100000-a.md", "20260823-100000-b.md"]}\n' > "$JUDGE_DIR/pkg-advlate.json"
+advreport freeadv pkg-advlate safe 0.0001
+got="$(trigger pkg-advlate)"
+if [[ "$got" == "2 " ]]; then
+    ok "a new advisory report leaves 'already judged' standing"
+else
+    bad "expected rc 2 despite the late advisory report, got: $got"
+fi
+
 echo "== the main loop does not turn rc 2 into a routine review =="
 # The --all branch must only fire on rc 1. Checked on the source: the loop is
 # too entangled with judge_package to run here.
