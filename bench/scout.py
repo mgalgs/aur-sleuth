@@ -29,9 +29,10 @@ import sys
 import time
 
 # The charset every downstream check accepts (the entrypoint's model kind,
-# the UI's own validation). Ids outside it -- the ":free" variants -- are not
-# offered: a candidate the pipeline would refuse is a scout that lies.
-RE_MODEL_ID = re.compile(r"^[A-Za-z0-9._/-]+$")
+# the UI's own validation), ":free" variants included -- the pipeline is
+# built to tolerate a flaky model, so free tiers are benchmarkable and the
+# errors column measures their throttling.
+RE_MODEL_ID = re.compile(r"^[A-Za-z0-9._/:-]+$")
 
 # Audits are prompt-heavy: the PKGBUILD and file contents go in, a short
 # assessment comes out. The blend weighs the price accordingly.
@@ -216,6 +217,7 @@ def main():
     scores = load_bench_scores(args.bench_dir) if args.bench_dir else {}
 
     candidates = []
+    free = []
     for entry in catalog:
         model_id = str(entry.get("id") or "")
         if not RE_MODEL_ID.match(model_id) or model_id in seat_ids:
@@ -225,9 +227,23 @@ def main():
         if int(entry.get("context_length") or 0) < args.min_context:
             continue
         price = blended_per_mtok(entry.get("pricing") or {})
-        if price is None or price == 0:
-            # A zero price is a free tier: rate limits and data-use terms the
-            # pipeline cannot see. Not a candidate.
+        if price is None:
+            continue
+        if price == 0:
+            # A free tier. The pipeline tolerates a flaky model by design --
+            # two audit seats, error-triggered judging, budgets -- so free
+            # models are worth BENCHMARKING: the errors column measures the
+            # throttling. They go in their own group, capped, because "free"
+            # would otherwise top every price sort on a technicality.
+            created = int(entry.get("created") or 0)
+            free.append({
+                "id": model_id,
+                "name": str(entry.get("name") or model_id),
+                "context": int(entry.get("context_length") or 0),
+                "created": created,
+                "new": bool(created and now - created < NEW_DAYS * 86400),
+                **({"benchmarked": scores[model_id]} if model_id in scores else {}),
+            })
             continue
         cheaper, savings = [], {}
         for seat, info in seat_out.items():
@@ -263,11 +279,15 @@ def main():
         if take:
             kept.append(c)
 
+    # Newest free tiers first, a handful: enough to notice a new open model
+    # worth a benchmark, not a catalog of everything priced at zero.
+    free.sort(key=lambda f: -f["created"])
     out = {
         "generated": now,
         "catalog_size": len(catalog),
         "seats": seat_out,
         "candidates": kept,
+        "free": free[:5],
     }
     if args.data_dir:
         shares = spend_shares(args.data_dir, now)

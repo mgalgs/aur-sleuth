@@ -532,6 +532,22 @@ push_reports() {
     ) 200>"$LOCK_FILE"
 }
 
+# --- Scout the model catalog -----------------------------------------------
+# Code only, seconds, no API call; the operations page shows the result and a
+# person decides what to benchmark. Runs even on a budget-exhausted day: it
+# spends nothing, and the page's shortlist and spend shares should not go
+# stale because the audits were done for the day. A missing catalog is fine.
+run_scout() {
+    [[ -f "$DATA_DIR/models-catalog.json" ]] || return 0
+    log ""
+    log "=== Scout Phase ==="
+    python3 bench/scout.py --catalog "$DATA_DIR/models-catalog.json" \
+        --out "$DATA_DIR/bench/scout.json" --bench-dir "$DATA_DIR/bench" \
+        --data-dir "$DATA_DIR" \
+        --seats "audit=$AUDIT_MODELS;judge=$JUDGE_MODEL;reaudit=$REAUDIT_MODEL" 2>&1 \
+        || log "WARNING: the scout failed; the page keeps the old shortlist"
+}
+
 # --- Sum judge costs for reports modified after a given timestamp ---
 sum_judge_costs_since() {
     local since="$1"
@@ -603,6 +619,7 @@ main() {
             python3 bench/generate-dashboard.py 2>&1
             push_reports
         fi
+        run_scout
         log ""
         log "=== Escalation Complete ==="
         log "Daily spend: \$$(get_daily_spent) / \$$DAILY_BUDGET"
@@ -612,6 +629,9 @@ main() {
 
     if is_over_budget; then
         log "Daily budget already exhausted (\$$(gate_spent) >= \$$GATE_TOTAL). Exiting."
+        # The shortlist and the spend shares still refresh: the scout costs
+        # nothing, and the page must not go stale on a spent day.
+        run_scout
         return 0
     fi
 
@@ -749,17 +769,7 @@ main() {
     fi
 
     # Step 8: Scout the model catalog for candidates that undercut a seat.
-    # Code only, seconds, no API call; the operations page shows the result
-    # and a person decides what to benchmark. A missing catalog is fine.
-    if [[ -f "$DATA_DIR/models-catalog.json" ]]; then
-        log ""
-        log "=== Scout Phase ==="
-        python3 bench/scout.py --catalog "$DATA_DIR/models-catalog.json" \
-            --out "$DATA_DIR/bench/scout.json" --bench-dir "$DATA_DIR/bench" \
-            --data-dir "$DATA_DIR" \
-            --seats "audit=$AUDIT_MODELS;judge=$JUDGE_MODEL;reaudit=$REAUDIT_MODEL" 2>&1 \
-            || log "WARNING: the scout failed; the page keeps the old shortlist"
-    fi
+    run_scout
 
     # Summary
     log ""

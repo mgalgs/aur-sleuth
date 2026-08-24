@@ -57,7 +57,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ -n "$MODELS" ]] || { echo "--models is required" >&2; exit 1; }
-[[ "$MODELS" =~ ^[A-Za-z0-9._/-]+(,[A-Za-z0-9._/-]+)*$ ]] \
+[[ "$MODELS" =~ ^[A-Za-z0-9._/:-]+(,[A-Za-z0-9._/:-]+)*$ ]] \
     || { echo "--models is not a comma-separated model list: '$MODELS'" >&2; exit 1; }
 [[ "$ROLE" =~ ^(audit|judge)$ ]] || { echo "--role must be audit or judge" >&2; exit 1; }
 [[ -z "$TARGET" || "$TARGET" =~ ^[a-z-]+$ ]] || { echo "--target must be a short lowercase word" >&2; exit 1; }

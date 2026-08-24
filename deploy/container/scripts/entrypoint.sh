@@ -295,10 +295,10 @@ collect_audit_env_flags() {
                 [[ "$value" =~ ^(0(\.[0-9]+)?|1(\.0+)?)$ ]] \
                     || die "$var must be between 0 and 1, got '$value'" ;;
             model)
-                [[ "$value" =~ ^[A-Za-z0-9._/-]+$ ]] \
+                [[ "$value" =~ ^[A-Za-z0-9._/:-]+$ ]] \
                     || die "$var is not a model name, got '$value'" ;;
             models)
-                [[ "$value" =~ ^[A-Za-z0-9._/-]+(,[A-Za-z0-9._/-]+)*$ ]] \
+                [[ "$value" =~ ^[A-Za-z0-9._/:-]+(,[A-Za-z0-9._/:-]+)*$ ]] \
                     || die "$var is not a comma-separated model list, got '$value'" ;;
             packages)
                 # The AUR's package-name charset; a name may not start with a
@@ -356,7 +356,7 @@ do_benchmark() {
 
     local models="${AUR_SLEUTH_BENCH_MODELS:-}"
     [[ -n "$models" ]] || die "AUR_SLEUTH_BENCH_MODELS is not set"
-    [[ "$models" =~ ^[A-Za-z0-9._/-]+(,[A-Za-z0-9._/-]+)*$ ]] \
+    [[ "$models" =~ ^[A-Za-z0-9._/:-]+(,[A-Za-z0-9._/:-]+)*$ ]] \
         || die "AUR_SLEUTH_BENCH_MODELS is not a comma-separated model list, got '$models'"
 
     local flags=(--models "$models")

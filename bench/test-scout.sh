@@ -51,7 +51,7 @@ cat > "$tmp/catalog.json" <<JSON
   "pricing":{"prompt":"0.0000001","completion":"0.0000001"}},
  {"id":"colon/model:free","name":"Colon","created":$RECENT,"context_length":128000,
   "architecture":{"input_modalities":["text"],"output_modalities":["text"]},
-  "pricing":{"prompt":"0.0000001","completion":"0.0000001"}},
+  "pricing":{"prompt":"0","completion":"0"}},
  {"id":"pricey/giant","name":"Giant","created":$RECENT,"context_length":1000000,
   "architecture":{"input_modalities":["text"],"output_modalities":["text"]},
   "pricing":{"prompt":"0.0000100","completion":"0.0000300"}}
@@ -82,8 +82,24 @@ for wanted in new/cheap old/mid; do
     if have "$wanted" True; then ok "$wanted is a candidate"; else bad "$wanted missing"; fi
 done
 for dropped in seat/judge seat/audit free/model tiny/context image/only colon/model:free pricey/giant; do
-    if have "$dropped" False; then ok "$dropped excluded"; else bad "$dropped should be excluded"; fi
+    if have "$dropped" False; then ok "$dropped excluded from the paid shortlist"; else bad "$dropped should be excluded"; fi
 done
+
+echo "== free tiers get their own capped group =="
+# Benchmarkable, not price-ranked: 'free' would top every sort on a
+# technicality, and the errors column is what measures a free tier.
+if python3 - "$tmp/out.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+ids = {f["id"] for f in d["free"]}
+assert ids == {"free/model", "colon/model:free"}, ids
+assert all("blended_per_mtok" not in f for f in d["free"])
+PY
+then
+    ok "price-zero text models land in the free group, ':free' ids included"
+else
+    bad "free group wrong"
+fi
 
 echo "== the fields the card shows are right =="
 if python3 - "$tmp/out.json" <<'PY'; then ok "savings, newness, scores and order check out"; else bad "candidate fields wrong"; fi
