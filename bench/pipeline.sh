@@ -596,10 +596,8 @@ push_reports() {
 }
 
 # --- Scout the model catalog -----------------------------------------------
-# Code only, seconds; the operations page shows the result and a person
-# decides what to benchmark. The one network touch is the free-model probe:
-# a 1-token completion per free model, $0 by definition, so the free list
-# holds models that actually answer. Runs even on a budget-exhausted day: it
+# Code only, seconds, no API call; the operations page shows the result and a
+# person decides what to benchmark. Runs even on a budget-exhausted day: it
 # spends nothing, and the page's shortlist and spend shares should not go
 # stale because the audits were done for the day. A missing catalog is fine.
 run_scout() {
@@ -608,17 +606,20 @@ run_scout() {
     log "=== Scout Phase ==="
     python3 bench/scout.py --catalog "$DATA_DIR/models-catalog.json" \
         --out "$DATA_DIR/bench/scout.json" --bench-dir "$DATA_DIR/bench" \
-        --data-dir "$DATA_DIR" --probe-free \
+        --data-dir "$DATA_DIR" \
         --seats "audit=$AUDIT_MODELS;judge=$JUDGE_MODEL;reaudit=$REAUDIT_MODEL" 2>&1 \
         || log "WARNING: the scout failed; the page keeps the old shortlist"
 }
 
 # --- The recurring free coverage: a child advisory run ----------------------
 # After a scheduled full run (and only then: a shaped run is someone asking
-# for something specific), sweep ADVISORY_SWEEP popular packages with the
-# free advisory models. The child run is advisory by construction -- its
-# reports inform, never rule -- and free by model choice, so it runs even on
-# a spent day under a nominal ceiling of its own. Its failure must never
+# for something specific), sweep ADVISORY_SWEEP recently UPDATED packages
+# with the free advisory models -- updated only, no popularity seed: the
+# threat model is malice arriving in updates, so free coverage extends the
+# paid run's reach down the updated list instead of re-reading the stale
+# popular tail. The child run is advisory by construction -- its reports
+# inform, never rule -- and free by model choice, so it runs even on a
+# spent day under a nominal ceiling of its own. Its failure must never
 # fail the run that carried it.
 run_advisory_sweep() {
     [[ "$ADVISORY_SWEEP" -gt 0 ]] || return 0
@@ -631,14 +632,15 @@ run_advisory_sweep() {
     fi
     log ""
     log "=== Advisory Sweep ==="
-    log "Free coverage pass: up to $ADVISORY_SWEEP popular package(s) with $ADVISORY_MODELS, informational only"
+    log "Free coverage pass: up to $ADVISORY_SWEEP recently updated package(s) with $ADVISORY_MODELS, informational only"
     if $DRY_RUN; then
         log "DRY RUN: sweep skipped"
         return 0
     fi
     local sweep_flags=(--advisory true --audit-models "$ADVISORY_MODELS"
-        --updated-share 0.0 --seed-count "$ADVISORY_SWEEP" --run-budget 1
-        --jobs "$JOBS" --audit-timeout "$AUDIT_TIMEOUT" --seed-top "$SEED_TOP")
+        --updated-share 1.0 --updated-count "$ADVISORY_SWEEP" --run-budget 1
+        --jobs "$JOBS" --audit-timeout "$AUDIT_TIMEOUT"
+        --lookback-hours "$LOOKBACK_HOURS" --min-votes "$MIN_VOTES")
     $NO_PUSH && sweep_flags+=(--no-push)
     $SKIP_DASHBOARD && sweep_flags+=(--skip-dashboard)
     # Free tiers throttle per minute; a sweep is in no hurry, so its audits

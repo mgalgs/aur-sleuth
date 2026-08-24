@@ -89,24 +89,28 @@ leads. This is how an untrusted (usually free) model contributes without
 being able to escalate anything. An advisory run cannot combine with
 escalation, which exists to force a ruling.
 
-The scout probes the free catalog: a one-token completion per free model
-($0 in money, but real requests from the free tier's daily allowance), so
-the operations page's free list holds models that actually answered,
-fastest first, with who served them behind a router id. Measurements are
-reused for 20 hours — one probe a day, so the allowance goes to advisory
-audits, not probes.
+The scout never probes: the advisory work all goes through
+`openrouter/free`, a router that picks among the free models that are
+actually available on every request, so a scout probe would spend the free
+tier's daily request allowance (1000 requests, 20/minute) on measurements
+nothing acts on. The page's free list is the newest catalog entries,
+information for the benchmark form only.
 
 The **advisory sweep** (`AUR_SLEUTH_ADVISORY_SWEEP` on the settings page)
 makes the advisory tier recurring: after each scheduled full run — including
 one that exits on an exhausted budget, since the sweep spends nothing — the
-pipeline runs a child advisory pass over N popular packages with the sweep
-models (default `openrouter/free`). The child's audited index counts
-advisory coverage too, so each sweep digs deeper into the popular set
-instead of re-covering the same head. Shaped runs (named packages, counts,
-escalation, a manual budget) never sweep, and a sweep failure never fails
-the run that carried it. The public page draws advisory reports as hollow
-dashed squares labeled "informational only, not a vote", keeps their
-findings out of the flagged list, and counts them nowhere.
+pipeline runs a child advisory pass over N **recently updated** packages
+with the sweep models (default `openrouter/free`). Updated only, never the
+popularity seed: the threat model is malice arriving in updates, so free
+coverage extends the paid run's reach down the updated list. The child's
+audited index counts advisory coverage too, so the six daily sweeps do not
+re-read the same updates; its audits run with extra retries
+(`AUR_SLEUTH_LLM_RETRIES=5`) so the free tier's per-minute throttle is
+ridden through, while the daily cap still fails soft. Shaped runs (named
+packages, counts, escalation, a manual budget) never sweep, and a sweep
+failure never fails the run that carried it. The public page draws advisory
+reports as hollow dashed squares labeled "informational only, not a vote",
+keeps their findings out of the flagged list, and counts them nowhere.
 
 Seats are set on the operations page's Models tab (a ConfigMap override; git
 holds the baseline). `bench/benchmark.sh` scores candidates against the

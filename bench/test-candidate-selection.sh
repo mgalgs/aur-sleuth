@@ -220,7 +220,9 @@ sweep_out() {
         # shellcheck disable=SC2034
         PACKAGES="" PACKAGES_FILE="" ESCALATE="" ESCALATE_PENDING=false RUN_BUDGET=""
         # shellcheck disable=SC2034
-        UPDATED_COUNT=0 SEED_COUNT=0 JOBS=2 AUDIT_TIMEOUT=900 SEED_TOP=1000
+        UPDATED_COUNT=0 SEED_COUNT=0 JOBS=2 AUDIT_TIMEOUT=900
+        # shellcheck disable=SC2034
+        LOOKBACK_HOURS=26 MIN_VOTES=8
         eval "$1"
         run_advisory_sweep
     )
@@ -229,6 +231,19 @@ if sweep_out '' | grep -q 'DRY RUN: sweep skipped'; then
     ok "an unshaped run reaches the sweep (dry run stops at the announcement)"
 else
     bad "the unshaped run should have announced the sweep"
+fi
+# The sweep is updated-only by design: malice arrives in updates, so the
+# free coverage extends the paid run's reach down the updated list, never
+# the popularity seed. The announcement and the child flags both say so.
+if sweep_out '' | grep -q 'recently updated'; then
+    ok "the sweep announces updated-only coverage"
+else
+    bad "the sweep should target recently updated packages"
+fi
+if grep -A3 'sweep_flags=(--advisory' bench/pipeline.sh | grep -q -- '--updated-share 1.0'; then
+    ok "the child run pins --updated-share 1.0: the seed never runs"
+else
+    bad "the sweep child must run updated-only (--updated-share 1.0)"
 fi
 for shaped in 'RUN_BUDGET=2' 'PACKAGES=foo' 'PACKAGES_FILE=/dev/null' \
               'ESCALATE=foo' 'ESCALATE_PENDING=true' 'UPDATED_COUNT=5' \

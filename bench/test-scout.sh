@@ -144,76 +144,15 @@ else
     bad "spend shares wrong or missing"
 fi
 
-echo "== --probe-free without an API key is a no-op, not a network call =="
-# The probe needs a key to speak to the router; without one the free list
-# stays as it was, unprobed and uncapped differently, and no tally appears.
-if env -u OPENAI_API_KEY python3 bench/scout.py --catalog "$tmp/catalog.json" \
-    --out "$tmp/out3.json" --now "$NOW" --probe-free \
-    --seats "audit=seat/audit" >/dev/null 2>&1 \
-    && python3 - "$tmp/out3.json" <<'PY'
-import json, sys
-d = json.load(open(sys.argv[1]))
-assert "free_probe" not in d, d.get("free_probe")
-assert {f["id"] for f in d["free"]} == {"free/model", "colon/model:free"}
-assert all("probe_ms" not in f for f in d["free"])
-PY
-then
-    ok "no key: the unprobed free list survives, no tally, no probe fields"
+echo "== the scout never probes: no request leaves this process =="
+# The advisory work all goes through openrouter/free, which filters for
+# availability itself on every request; a scout probe would spend the
+# free tier's daily request allowance on measurements nothing acts on.
+# Guarded on the source: the scout must stay code-only, no network.
+if grep -qE 'urllib|urlopen|http|requests' bench/scout.py; then
+    bad "scout.py should make no network calls"
 else
-    bad "--probe-free without a key must leave the free list alone"
-fi
-
-echo "== a fresh probe is reused instead of respent =="
-# The probe costs real free-tier requests from the same daily allowance the
-# advisory audits use, so measurements under 20h old are carried forward.
-# The previous out file below says free/model answered in 800ms; the re-run
-# must attach that to the CURRENT list without touching the network -- the
-# base URL points at a closed local port, so an attempted probe would come
-# back empty and fail the assertions.
-cat > "$tmp/out4.json" <<JSON
-{"generated": $(( NOW - 3600 )),
- "free_probe": {"probed": 2, "answered": 1},
- "free": [{"id":"free/model","probe_ms":800,"served":"nvidia/nemotron:free"}]}
-JSON
-if OPENAI_API_KEY=dummy OPENAI_BASE_URL=http://127.0.0.1:1 \
-    python3 bench/scout.py --catalog "$tmp/catalog.json" \
-    --out "$tmp/out4.json" --now "$NOW" --probe-free \
-    --seats "audit=seat/audit" >/dev/null 2>&1 \
-    && python3 - "$tmp/out4.json" <<'PY'
-import json, sys
-d = json.load(open(sys.argv[1]))
-assert d["free_probe"]["reused_from"], d["free_probe"]
-assert [f["id"] for f in d["free"]] == ["free/model"]
-assert d["free"][0]["probe_ms"] == 800
-assert d["free"][0]["served"] == "nvidia/nemotron:free"
-PY
-then
-    ok "fresh measurements ride again; the stale-listed model is dropped"
-else
-    bad "a fresh probe should be reused, not respent"
-fi
-# A stale previous probe forces a real one; against a dead endpoint every
-# model fails, which must come back as an empty list, not a crash.
-cat > "$tmp/out5.json" <<JSON
-{"generated": $(( NOW - 30 * 3600 )),
- "free_probe": {"probed": 2, "answered": 1},
- "free": [{"id":"free/model","probe_ms":800}]}
-JSON
-if OPENAI_API_KEY=dummy OPENAI_BASE_URL=http://127.0.0.1:1 \
-    python3 bench/scout.py --catalog "$tmp/catalog.json" \
-    --out "$tmp/out5.json" --now "$NOW" --probe-free \
-    --seats "audit=seat/audit" >/dev/null 2>&1 \
-    && python3 - "$tmp/out5.json" <<'PY'
-import json, sys
-d = json.load(open(sys.argv[1]))
-assert "reused_from" not in d["free_probe"], d["free_probe"]
-assert d["free_probe"]["answered"] == 0
-assert d["free"] == []
-PY
-then
-    ok "a stale probe re-probes, and a dead endpoint yields an empty list, no crash"
-else
-    bad "the stale-probe path is wrong"
+    ok "scout.py is code-only: no network machinery in the file"
 fi
 
 echo "== a missing catalog is quiet, not an error =="
