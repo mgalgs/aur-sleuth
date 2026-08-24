@@ -1,0 +1,37 @@
+{
+  "package": "lungo",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The only disagreement centers on src/lungo-1.0.7/res/desktop/lungo.desktop which uses 'Exec=/bin/sh -c \"sleep 3 && lungo\"'. This is a FALSE POSITIVE. The command is hardcoded with no user-supplied arguments, so command injection is impossible. Using sh -c with a delay is a standard pattern for tray applications that need the desktop environment fully loaded before starting. The desktop file is part of the upstream source pinned by SHA256 in the PKGBUILD. The qwen3 model incorrectly flagged this as 'obfuscation' and 'supply chain attack pattern' when it's actually transparent, benign behavior serving a legitimate purpose. Both deepseek and openrouter correctly identified this as safe.",
+  "disagreement_analysis": "qwen3 flagged the desktop file's 'Exec=/bin/sh -c \"sleep 3 && lungo\"' as unsafe, claiming it's an obfuscation technique and allows command injection. This reasoning is flawed: (1) the command is static with no injectable arguments, (2) sh -c with hardcoded commands is a standard desktop file pattern for startup delays, (3) the behavior is fully transparent, not obfuscated. deepseek and openrouter correctly recognized this as a benign startup delay workaround for tray apps.",
+  "coverage_issues": [
+    "thinkingmachines/inkling:free failed with 403 error (model not available on this harness)",
+    "z-ai/glm-5.2:free failed with 429 rate limit error",
+    "openrouter/free had parse errors on Cargo.toml and .nvchecker.toml but otherwise completed review"
+  ],
+  "false_positives": [
+    "lungo.desktop flagged by qwen3: 'Exec=/bin/sh -c \"sleep 3 && lungo\"' is a standard pattern for tray app startup delays. The command is hardcoded (no injection possible), transparent (not obfuscated), and serves a legitimate purpose. This is not a supply chain attack pattern."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models need training/context on desktop file patterns: 'Exec=/bin/sh -c \"command\"' with hardcoded arguments is standard and safe, not obfuscation",
+    "Distinguish 'unusual' from 'malicious': transparent patterns serving legitimate purposes are not security risks even if they deviate from 'best practices'",
+    "Command injection concerns require injectable inputs (user arguments, environment variables, file paths) - hardcoded static commands cannot be exploited",
+    "The audit tool should recognize that 'deviates from best practices' or 'increases attack surface' are not valid security findings when the behavior is transparent and serves the package's stated purpose"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 18943,
+    "completion_tokens": 1624,
+    "cost": 0.00814048
+  },
+  "audits_judged": [
+    "20260824-082320-qwen-qwen3-235b-a22b-2507.md",
+    "20260824-082346-deepseek-deepseek-v4-flash.md",
+    "20260824-043757-thinkingmachines-inkling:free.md",
+    "20260824-043810-z-ai-glm-5.2:free.md",
+    "20260824-044137-openrouter-free.md"
+  ]
+}
