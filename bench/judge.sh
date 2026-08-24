@@ -539,8 +539,10 @@ do_reaudit() {
         log "  Re-audit result: $re_result"
 
         # Archive the audit report and capture the stored path
+        # A refused archive (a stub with no frontmatter) records no path
+        # rather than ending the whole judge run under set -e.
         local archive_output
-        archive_output=$(flock -x 9 bash bench/archive-report.sh "$pkg" "$re_report") 9>"$LOCK_FILE"
+        archive_output=$(flock -x 9 bash bench/archive-report.sh "$pkg" "$re_report" 9>"$LOCK_FILE") || archive_output=""
 
         # Parse actual filename from archive output ("Stored: audit-reports:<pkg>/<filename>")
         local archived_path

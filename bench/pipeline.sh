@@ -557,11 +557,21 @@ run_audit() {
         return 1
     fi
 
-    record_cost "$cost"
-
     local result
     result=$(sed -n '/^---$/,/^---$/p' "$report_file" 2>/dev/null \
-        | grep "^result:" | head -1 | sed 's/^result: *//' || echo "unknown")
+        | grep "^result:" | head -1 | sed 's/^result: *//' || true)
+
+    # No frontmatter means no model answered: aur-sleuth removes such a stub
+    # itself, so one here is a regression. It is treated as no report --
+    # archive-report.sh would refuse it anyway, and judge.sh globs this
+    # directory and would judge it.
+    if [[ -z "$result" ]]; then
+        rm -f "$report_file"
+        log "  [$pkg] $model: report has no frontmatter, abandoning"
+        return 1
+    fi
+
+    record_cost "$cost"
 
     log "  [$pkg] $model: $result (\$$cost)"
 

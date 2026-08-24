@@ -15,19 +15,21 @@ if [[ ! -f "$report_file" ]]; then
     exit 1
 fi
 
-# Extract metadata from YAML frontmatter (preferred) or fall back to body parsing
-_fm() { sed -n '/^---$/,/^---$/p' "$report_file" | grep "^${1}:" | head -1 | sed "s/^${1}: *//" ; }
+# Metadata comes from the YAML frontmatter, and only from there. Every report
+# aur-sleuth finishes has one; a file without one is a stub from a run that
+# crashed before any model answered, holding nothing but the tool's own lines.
+# Archiving that would call the package "audited" (its version enters the
+# audited index and suppresses the retry) under a model and verdict of
+# "unknown". aur-sleuth removes such a stub itself; refusing here is the
+# check that it did.
+_fm() { sed -n '/^---$/,/^---$/p' "$report_file" | grep "^${1}:" | head -1 | sed "s/^${1}: *//" || true; }
 
 model="$(_fm model)"
 result="$(_fm result)"
 
-# Fall back to body parsing for reports without frontmatter
-if [[ -z "$model" ]]; then
-    model="$(grep -oP '^\s*Models?:\s*\K\S+' "$report_file" | head -1 || echo "unknown")"
-fi
-if [[ -z "$result" ]]; then
-    result="$(grep -oP 'Final Status:\s*\K\S+' "$report_file" | head -1 || echo "unknown")"
-    result="$(echo "$result" | tr '[:upper:]' '[:lower:]')"
+if [[ -z "$model" || -z "$result" ]]; then
+    echo "Error: $report_file has no frontmatter; a report no model answered is not archived" >&2
+    exit 2
 fi
 
 filename="$(date -u +%Y%m%d-%H%M%S)-${model//\//-}.md"
