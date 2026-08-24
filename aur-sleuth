@@ -144,6 +144,10 @@ class LLMClient:
         # id like openrouter/free hides its author; this is where the real
         # one surfaces, and the report records it when it differs.
         self.served_models: set[str] = set()
+        # Whether any model ever answered. A run where every call failed has
+        # no model's word in it, and the report is withdrawn at exit.
+        self.ok_calls = 0
+        self.api_errors = 0
         self.pricing: Dict[str, ModelPricingParams] = dict()  # model => pricing
         self._fetch_pricing_info()
 
@@ -213,7 +217,12 @@ class LLMClient:
         if not self.openai_client:
             raise ValueError("OpenAI client not configured.")
 
-        response = self.openai_client.chat.completions.create(*args, **kwargs)
+        try:
+            response = self.openai_client.chat.completions.create(*args, **kwargs)
+        except APIError:
+            self.api_errors += 1
+            raise
+        self.ok_calls += 1
 
         model_name = kwargs["model"]
 
@@ -3014,6 +3023,7 @@ def sleuth_main() -> int:
         package_name = args.package_name
         report_file = tmpdir_parent / f"aur-sleuth-report-{package_name}.txt"
 
+    llm_client = get_openai_client()
     with Report(report_file) as report:
         with TuiCls(report) as tui:
             if args.pkgdir:
@@ -3024,13 +3034,27 @@ def sleuth_main() -> int:
                 )
 
             retval = run_aur_sleuth_audit(
-                tui, report, package_name, pkgdir, get_openai_client()
+                tui, report, package_name, pkgdir, llm_client
             )
 
     if not args.pkgdir:
         # Clean up temporary cloned directory
         if os.path.exists(pkgdir):
             shutil.rmtree(pkgdir)
+
+    # A report no model ever answered into holds nothing but this program's
+    # own error lines. Keeping it would call the package "audited" when
+    # nothing looked at it -- its version would enter the audited index and
+    # suppress the retry. Absence is the honest artifact: the pipeline reads
+    # a missing report as a soft failure and the package comes back next run.
+    if llm_client.api_errors > 0 and llm_client.ok_calls == 0:
+        report_file.unlink(missing_ok=True)
+        print(
+            f"All {llm_client.api_errors} LLM call(s) failed; no report for "
+            f"{package_name} -- the package stays unaudited",
+            file=sys.stderr,
+        )
+        return 3
 
     if retval and not audit_failure_is_fatal():
         print(
