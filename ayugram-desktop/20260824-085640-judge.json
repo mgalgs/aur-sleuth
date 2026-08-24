@@ -1,0 +1,37 @@
+{
+  "package": "ayugram-desktop",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD follows standard AUR practices with pinned sources and SHA256 checksums. The only flagged file (grab_clipboard.ps1) is development tooling in a .claude directory, not executed during makepkg, Windows-specific, and part of upstream source\u2014not AUR-injected. This is a clear false positive per the threat model.",
+  "disagreement_analysis": "Qwen flagged grab_clipboard.ps1 as unsafe due to clipboard access, but this violates the threat model: it's development tooling (.claude dir), not executed during build/install, Windows-specific in a Linux package, and upstream code\u2014not maintainer injection. Deepseek correctly identified it as non-executed upstream tooling.",
+  "coverage_issues": [
+    "openrouter/free: File selection failed\u2014selected paths without src/AyuGramDesktop-7.0.9-full/ prefix, reviewed 0 additional files",
+    "thinkingmachines/inkling:free: Tool error (403), no verdict produced",
+    "z-ai/glm-5.2:free: Tool error (429), no verdict produced"
+  ],
+  "false_positives": [
+    "grab_clipboard.ps1 flagged by Qwen: This is development tooling in .claude/ directory, not executed during makepkg, Windows-specific PowerShell script in Linux package, and part of upstream source\u2014not AUR injection. Threat model explicitly excludes dev tooling unless referenced by PKGBUILD functions."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models must check file paths for .claude/, .vscode/, .github/, etc. directories\u2014these are development tooling and should be deprioritized unless explicitly called by PKGBUILD",
+    "File selection logic should validate paths exist before attempting review (openrouter/free failure)",
+    "Models should distinguish between 'suspicious behavior in isolation' vs 'suspicious behavior in packaging context'\u2014clipboard access in a dev helper script is not the same as clipboard access in a build hook",
+    "Windows-specific scripts (.ps1, .bat) in Linux AUR packages should be automatically deprioritized unless called by build functions"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 19683,
+    "completion_tokens": 1674,
+    "cost": 0.008441279999999999
+  },
+  "audits_judged": [
+    "20260824-071728-qwen-qwen3-235b-a22b-2507.md",
+    "20260824-071744-deepseek-deepseek-v4-flash.md",
+    "20260824-031521-thinkingmachines-inkling:free.md",
+    "20260824-031536-z-ai-glm-5.2:free.md",
+    "20260824-031833-openrouter-free.md"
+  ]
+}
