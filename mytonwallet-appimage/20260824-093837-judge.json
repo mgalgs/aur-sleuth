@@ -1,0 +1,37 @@
+{
+  "package": "mytonwallet-appimage",
+  "correct_verdict": "safe",
+  "confidence": "medium",
+  "reasoning": "Both models correctly identified the PKGBUILD as safe standard AppImage packaging with verified checksums and no malicious build/install logic. However, the critical AppImage binary was skipped in both audits.",
+  "disagreement_analysis": null,
+  "coverage_issues": [
+    "Both models skipped MyWallet-x86_64.AppImage (binary file), leaving the primary executable unaudited despite being the package's payload"
+  ],
+  "false_positives": [],
+  "false_negatives": [
+    "Potential malicious behavior in AppImage binary (network/filesystem access, obfuscated code) was missed due to skipping binary analysis"
+  ],
+  "re_audit_recommended": true,
+  "re_audit_focus": [
+    "MyWallet-x86_64.AppImage (extract/appimage-tool analysis)"
+  ],
+  "learnings": [
+    "Improve binary handling: Prioritize extraction/analysis of AppImages/ELF binaries using appimage-tool/readelf",
+    "Enhance prompt guidance: Explicitly require analysis of payload binaries in prebuilt packages",
+    "Implement binary-aware workflows: Auto-extract AppImages for contained file review"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 3056,
+    "completion_tokens": 1798,
+    "cost": 0.006634200000000001
+  },
+  "audits_judged": [
+    "20260822-233055-qwen-qwen3-235b-a22b-2507.md",
+    "20260822-233052-deepseek-deepseek-v4-flash.md"
+  ],
+  "reaudit_date": "2026-08-24T09:38:37Z",
+  "reaudit_model": "anthropic/claude-sonnet-4.6",
+  "reaudit_result": "safe",
+  "reaudit_report": "mytonwallet-appimage/20260824-093837-anthropic-claude-sonnet-4.6.md"
+}

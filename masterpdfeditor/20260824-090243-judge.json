@@ -1,0 +1,38 @@
+{
+  "package": "masterpdfeditor",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD uses a dynamic checksum fetch from the official upstream site (code-industry.net), which is explicitly called out in the threat model as a normal AUR pattern for vendors without stable URLs. The checksum pins the downloaded artifact, closing the swap risk. The config.sh file flagged by deepseek is part of the upstream tarball (extracted source), not AUR packaging, and is not executed by any PKGBUILD function. Neither finding represents code injected by the AUR maintainer.",
+  "disagreement_analysis": "Models disagreed on whether dynamic checksum fetching constitutes a supply-chain attack. qwen3 and openrouter flagged it as unsafe, while deepseek correctly identified it as non-malicious in the PKGBUILD but then incorrectly flagged upstream source code (config.sh) as an injection. The disagreement stems from confusion between packaging hygiene (dynamic checksums) and actual injection attacks, plus failure to distinguish AUR packaging from upstream application code.",
+  "coverage_issues": [
+    "thinkingmachines/inkling:free failed with 403 error (no verdict signal)",
+    "z-ai/glm-5.2:free failed with 429 rate limit (no verdict signal)",
+    "qwen3 and openrouter only reviewed PKGBUILD, missing opportunity to verify no .install hooks or patches exist"
+  ],
+  "false_positives": [
+    "Dynamic checksum fetch via curl: This is explicitly called out as a normal AUR pattern in the threat model. The checksum is fetched from the official upstream site and pins the artifact, closing swap risk. 'Violates packaging best practices' is not grounds for unsafe.",
+    "config.sh with 'cp -R usr/ / -v': This file is inside the extracted upstream tarball (src/master-pdf-editor-5/), not AUR packaging. The PKGBUILD does not execute this script during build/package/prepare. Per threat model: 'What the application does when it runs is the vendor's product, not an injection.'"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models need explicit training that dynamic checksum fetching from the package's own upstream site is a normal AUR pattern, not an injection attack, when the checksum pins the artifact.",
+    "Models must distinguish between AUR packaging files (PKGBUILD, .install, patches in the repo) and upstream source code extracted from tarballs. Files in src/ are upstream artifacts, not AUR injections, unless explicitly executed by PKGBUILD functions.",
+    "The audit tool should pre-filter file selection to exclude extracted upstream source trees unless the PKGBUILD explicitly references them in build/package/prepare functions.",
+    "Prompt should reinforce: 'Apply one test to every finding: could an AUR maintainer have injected this, and does it serve no purpose the package claims?' Upstream application behavior fails this test."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 9455,
+    "completion_tokens": 1613,
+    "cost": 0.00509024
+  },
+  "audits_judged": [
+    "20260824-071225-qwen-qwen3-235b-a22b-2507.md",
+    "20260824-071436-deepseek-deepseek-v4-flash.md",
+    "20260824-031521-thinkingmachines-inkling:free.md",
+    "20260824-031534-z-ai-glm-5.2:free.md",
+    "20260824-031607-openrouter-free.md"
+  ]
+}

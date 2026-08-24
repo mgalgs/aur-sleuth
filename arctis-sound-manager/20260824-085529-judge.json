@@ -1,0 +1,36 @@
+{
+  "package": "arctis-sound-manager",
+  "correct_verdict": "safe",
+  "confidence": "medium",
+  "reasoning": "The .install script's automatic installation of yay-bin from aur.archlinux.org is poor packaging practice and violates user consent norms, but it is not a supply-chain injection attack. The source is a well-known, legitimate AUR package (not an unknown or suspicious host), the code is fully transparent with no obfuscation, and the action serves a stated purpose (providing an AUR helper for the application's setup). Per the threat model, 'violates packaging best practices' is not grounds for unsafe, and the injection pattern requires fetching from a host the package has no stated relationship with or executing unverified content. The yay-bin installation is a deliberate (if aggressive) convenience feature, not malicious injection.",
+  "disagreement_analysis": "qwen flagged the yay-bin auto-install as a supply-chain attack vector because it downloads and executes code without consent. deepseek and openrouter recognized the same behavior but correctly classified it as an aggressive convenience feature rather than a security injection, noting the source is legitimate and the code is transparent. The disagreement stems from conflating 'unconsented system modification' with 'malicious injection' \u2014 the former is a packaging hygiene issue, the latter is the threat model's focus.",
+  "coverage_issues": [
+    "thinkingmachines/inkling:free and z-ai/glm-5.2:free both failed with API errors (403/429) and contributed no verdict signal",
+    "openrouter/free selected 10 file paths that did not exist in the package (likely hallucinated paths outside the src/ prefix), resulting in 0 additional files reviewed",
+    "qwen skipped the source tarball without attempting to inspect its contents via extraction"
+  ],
+  "false_positives": [
+    "qwen's UNSAFE verdict on arctis-sound-manager.install: The yay-bin installation is poor practice but not a malicious injection. The source is aur.archlinux.org (trusted), the code is transparent, and it serves a stated purpose. This is a packaging hygiene violation, not a supply-chain attack."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models need clearer guidance distinguishing 'unconsented but legitimate system modifications' from 'malicious injection'. The prompt should explicitly state that installing well-known packages from official repos (even without consent) is a hygiene issue, not an injection, unless the source is suspicious or the code is obfuscated.",
+    "File selection hallucination is a recurring problem: openrouter/free generated paths that don't exist in the package. The tool should validate selected paths against the actual file tree before offering them to the model.",
+    "When a model flags an .install script action as unsafe, the audit tool should prompt it to verify: (1) is the fetched source from a trusted/expected host? (2) is the code obfuscated? (3) does it serve a stated package purpose? If all answers are 'no concern', it's hygiene, not injection."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 14821,
+    "completion_tokens": 4084,
+    "cost": 0.00997024
+  },
+  "audits_judged": [
+    "20260824-083645-qwen-qwen3-235b-a22b-2507.md",
+    "20260824-083930-deepseek-deepseek-v4-flash.md",
+    "20260824-051024-thinkingmachines-inkling:free.md",
+    "20260824-051036-z-ai-glm-5.2:free.md",
+    "20260824-051127-openrouter-free.md"
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "package": "git-tpl-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD is a standard prebuilt binary package that downloads verified tarballs from the official upstream GitHub repository using pinned SHA256 checksums. There are no dynamic URL fetches, no command execution during sourcing, and no install hooks. The package() function merely copies files to standard directories. The payload is verified by checksums, closing the swap risk.",
+  "disagreement_analysis": null,
+  "coverage_issues": [
+    "thinkingmachines/inkling:free and z-ai/glm-5.2:free failed with API errors (403 and 429), resulting in inconclusive verdicts due to tool failures rather than security analysis."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "For -bin packages where the PKGBUILD only extracts and installs files from a checksum-verified tarball, models should avoid wasting tokens reviewing the extracted payload files (like man pages and auto-generated shell completions) since they are not executed during makepkg.",
+    "The file selection prompt should explicitly instruct models to deprioritize documentation (man pages) and auto-generated runtime scripts (completions) when the PKGBUILD has already been verified as a simple installer.",
+    "Qwen correctly identified that the tarball contents are the payload and not auditable as text, focusing appropriately on the PKGBUILD. Other models should adopt this efficiency."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 13305,
+    "completion_tokens": 1590,
+    "cost": 0.0062928
+  },
+  "audits_judged": [
+    "20260824-075430-qwen-qwen3-235b-a22b-2507.md",
+    "20260824-075524-deepseek-deepseek-v4-flash.md",
+    "20260824-041324-thinkingmachines-inkling:free.md",
+    "20260824-041331-z-ai-glm-5.2:free.md",
+    "20260824-041625-openrouter-free.md"
+  ]
+}

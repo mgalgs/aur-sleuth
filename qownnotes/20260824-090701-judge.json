@@ -1,0 +1,37 @@
+{
+  "package": "qownnotes",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD is standard and safe: it fetches a pinned source tarball from the official GitHub releases with SHA256 verification. No malicious code executes during makepkg. Both 'unsafe' findings are false positives: (1) copy-from-breeze-dark.sh is an upstream developer helper script with a NixOS-specific path, not executed during AUR build; (2) download-icon.sh is also an upstream developer tool not referenced by PKGBUILD functions. Per the threat model, development tooling in the source tree is not a concern unless executed by PKGBUILD functions or .install scripts. Neither script is executed during package build.",
+  "disagreement_analysis": "Two models (qwen3-235b, openrouter/free) flagged upstream developer helper scripts as unsafe. qwen3-235b overreacted to a hardcoded NixOS path in copy-from-breeze-dark.sh, treating it as a supply-chain concern rather than recognizing it as upstream developer environment code. openrouter/free flagged path traversal in download-icon.sh, missing that this script is never executed during the AUR build process. deepseek correctly identified these as upstream maintainer tools with no execution during package build. The disagreement stems from models failing to distinguish between upstream code quality issues and actual AUR packaging injections.",
+  "coverage_issues": [
+    "thinkingmachines/inkling:free failed with 403 error (model not available for this harness)",
+    "z-ai/glm-5.2:free failed with 429 rate limit error"
+  ],
+  "false_positives": [
+    "copy-from-breeze-dark.sh: Upstream developer helper script not executed during AUR build. NixOS path reflects developer's environment, not malicious injection.",
+    "download-icon.sh: Upstream developer tool not referenced by PKGBUILD. Path traversal concern is irrelevant since script is never executed during package build."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models need explicit guidance that scripts in the upstream source tree are not AUR injections unless executed by PKGBUILD functions (prepare/build/package/check) or .install hooks",
+    "File selection should deprioritize or exclude upstream developer tools, CI scripts, and build helpers that aren't referenced by the AUR packaging",
+    "Distinguish between 'code quality issues in upstream' and 'security injections in AUR packaging' - only the latter belongs in the verdict",
+    "Hardcoded paths specific to other distributions (NixOS, etc.) in upstream code are not supply-chain risks when the source is checksum-pinned"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 17624,
+    "completion_tokens": 1666,
+    "cost": 0.00777216
+  },
+  "audits_judged": [
+    "20260824-083505-qwen-qwen3-235b-a22b-2507.md",
+    "20260824-083527-deepseek-deepseek-v4-flash.md",
+    "20260824-045922-thinkingmachines-inkling:free.md",
+    "20260824-045958-z-ai-glm-5.2:free.md",
+    "20260824-050718-openrouter-free.md"
+  ]
+}

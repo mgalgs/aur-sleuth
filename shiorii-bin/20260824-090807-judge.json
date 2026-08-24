@@ -1,0 +1,34 @@
+{
+  "package": "shiorii-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Three independent models (qwen3-235b, deepseek-v4-flash, openrouter/free) all correctly identified this as a standard -bin package with no injection risks. The PKGBUILD downloads from the project's own GitHub releases with a pinned SHA-256 checksum, eliminating swap risk. The package() function performs only legitimate operations: installing the binary, creating a wrapper script for webkit2gtk compatibility (WEBKIT_DISABLE_DMABUF_RENDERER=1), and using sed to rewrite asset paths for relocatable installation. No network exfiltration, no execution of fetched content, no fetching from unrelated hosts. The two inconclusive reports (thinkingmachines/inkling:free and z-ai/glm-5.2:free) are tool errors (403 and 429) that carry no verdict signal per audit rules.",
+  "disagreement_analysis": null,
+  "coverage_issues": [
+    "thinkingmachines/inkling:free failed with 403 error (model only available on agentic harnesses) - no verdict signal",
+    "z-ai/glm-5.2:free failed with 429 error (rate limited) - no verdict signal"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Binary tarball skipping works correctly for -bin packages - the audit correctly focuses on packaging scripts, not payload",
+    "File selection logic correctly prioritized PKGBUILD and desktop file over 119 compiled/archived files",
+    "Models correctly distinguished between legitimate packaging operations (wrapper script, path fixes) and potential injection patterns",
+    "Tool errors (403, 429) should be filtered out before verdict aggregation to avoid inflating inconclusive counts"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 9023,
+    "completion_tokens": 1235,
+    "cost": 0.0044681600000000005
+  },
+  "audits_judged": [
+    "20260824-084627-qwen-qwen3-235b-a22b-2507.md",
+    "20260824-084605-deepseek-deepseek-v4-flash.md",
+    "20260824-052010-thinkingmachines-inkling:free.md",
+    "20260824-052020-z-ai-glm-5.2:free.md",
+    "20260824-052253-openrouter-free.md"
+  ]
+}

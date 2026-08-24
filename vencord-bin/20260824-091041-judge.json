@@ -1,0 +1,36 @@
+{
+  "package": "vencord-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD uses a pinned commit SHA with SHA256 checksum from the official Vencord/builds GitHub repository, preventing supply-chain substitution. The vencord.install contains only echo statements for user instructions. The JavaScript files (browser.js, renderer.js, etc.) are the upstream Vencord application code, not AUR-injected content. deepseek-v4-flash successfully audited all files and found no malicious injection - the eval patterns noted (oneko plugin) are documented upstream features, not maintainer-injected malice. The disagreement arose from tool failures (context limits, API errors) rather than genuine security concerns.",
+  "disagreement_analysis": "qwen3-235b failed to audit 5 large JS files due to context length limits (300k+ tokens exceeded 262k limit). thinkingmachines/inkling and z-ai/glm-5.2 had API errors (403/429). openrouter/free only reviewed PKGBUILD and vencord.install, skipping the JS files entirely. Only deepseek-v4-flash completed a full audit and found no issues.",
+  "coverage_issues": [
+    "qwen3-235b: Context length exceeded for 5 large JS files (browser.js, Vencord.user.js, extension.js, renderer.js, vencordDesktopRenderer.js)",
+    "openrouter/free: Did not review any JavaScript source files, only PKGBUILD and vencord.install",
+    "thinkingmachines/inkling:free: API error 403 (model not available on this harness)",
+    "z-ai/glm-5.2:free: API error 429 (rate limited)"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models with smaller context windows (262k) cannot audit large minified JS bundles (300k+ tokens). The tool should route large files to models with larger context or use chunked analysis.",
+    "Router-based models (openrouter/free) may fail to select files for review when the prompt format is ambiguous. The file selection prompt should be more explicit about required files.",
+    "For prebuilt binary packages, the audit should clearly distinguish between 'packaging code' (PKGBUILD, .install) and 'upstream payload' (the actual application). The payload is not subject to AUR maintainer injection if checksums are pinned.",
+    "API errors (403, 429) should be treated as coverage gaps, not verdict signals. The tool should retry or route to alternative models."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 23833,
+    "completion_tokens": 1627,
+    "cost": 0.00970912
+  },
+  "audits_judged": [
+    "20260824-082645-qwen-qwen3-235b-a22b-2507.md",
+    "20260824-082748-deepseek-deepseek-v4-flash.md",
+    "20260824-043019-thinkingmachines-inkling:free.md",
+    "20260824-043031-z-ai-glm-5.2:free.md",
+    "20260824-043050-openrouter-free.md"
+  ]
+}

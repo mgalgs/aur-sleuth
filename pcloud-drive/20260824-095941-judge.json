@@ -1,0 +1,40 @@
+{
+  "package": "pcloud-drive",
+  "correct_verdict": "unsafe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD executes an untrusted network request during sourcing (parse time), creating supply-chain risks.",
+  "disagreement_analysis": "Models disagreed on risk assessment of PKGBUILD's dynamic source fetching via API call at parse time.",
+  "coverage_issues": [
+    "deepseek skipped AppImage binary analysis",
+    "Neither model reviewed extracted AppImage contents (AppRun script, desktop files)"
+  ],
+  "false_positives": [],
+  "false_negatives": [
+    "deepseek missed security risk of untrusted command substitution during PKGBUILD sourcing"
+  ],
+  "re_audit_recommended": true,
+  "re_audit_focus": [
+    "PKGBUILD dynamic source handling",
+    "Extracted AppImage contents (AppRun script)"
+  ],
+  "learnings": [
+    "Prioritize files executed during makepkg: PKGBUILD top-scope commands > install hooks > extracted binaries",
+    "Improve binary handling: Extract AppImages for script analysis",
+    "Train models to flag parse-time network operations as critical risks",
+    "Enhance detection of command substitution vulnerabilities in PKGBUILDs"
+  ],
+  "_judge_usage": {
+    "model": "deepseek/deepseek-r1",
+    "prompt_tokens": 4418,
+    "completion_tokens": 1929,
+    "cost": 0.007915100000000001
+  },
+  "audits_judged": [
+    "20260823-192734-qwen-qwen3-235b-a22b-2507.md",
+    "20260823-192811-deepseek-deepseek-v4-flash.md"
+  ],
+  "reaudit_date": "2026-08-24T09:59:41Z",
+  "reaudit_model": "anthropic/claude-sonnet-4.6",
+  "reaudit_result": "safe",
+  "reaudit_report": "pcloud-drive/20260824-095941-anthropic-claude-sonnet-4.6.md"
+}

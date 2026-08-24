@@ -1,0 +1,38 @@
+{
+  "package": "fastmc",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Both 'unsafe' findings are false positives that violate the threat model. The qwen model flagged .github/workflows/aur-publish.yml (upstream CI configuration, not AUR packaging). The openrouter/free model flagged src/fastmc-latest/src/backup.rs for allowing users to enter custom backup commands - this is an explicit application feature where the user is prompted for input, not an injection. The threat model explicitly states: 'Upstream application behaviour. What the application does when it runs is the vendor's product, not an injection.' The PKGBUILD itself is a standard Rust package that fetches from the project's own GitHub repository, uses standard cargo build commands, and installs only the binary and documentation. No malicious code executes during makepkg.",
+  "disagreement_analysis": "Two models produced false positives by misapplying the threat model. Qwen flagged upstream CI automation (aur-publish.yml) as a supply-chain risk, but this is development tooling in the source tree not referenced by PKGBUILD functions. Openrouter/free flagged a user-facing feature (custom backup commands) as command injection, but this is intentional application functionality where the user explicitly enters commands - it's the vendor's product, not an AUR injection. Both models correctly identified the PKGBUILD as safe but then overreached into upstream application code.",
+  "coverage_issues": [
+    "thinkingmachines/inkling:free failed with 403 error (not available on agentic harnesses)",
+    "z-ai/glm-5.2:free failed with 429 rate limit error",
+    "openrouter/free had parse failures on download.rs and server.rs"
+  ],
+  "false_positives": [
+    ".github/workflows/aur-publish.yml: Upstream CI workflow, not AUR packaging. Development tooling in source tree is explicitly excluded from threat model unless referenced by PKGBUILD functions.",
+    "src/fastmc-latest/src/backup.rs custom command feature: This is an explicit user-facing feature where the application prompts for a command and executes it. This is upstream application behavior, not an injection. The threat model states application behavior is the vendor's product."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models need stronger guidance to distinguish between AUR packaging injection (what executes during makepkg) and upstream application features (what the compiled binary does at runtime). The backup.rs finding is a textbook example of confusing application functionality with supply-chain attack.",
+    "CI/CD workflow files (.github/workflows/*) in the upstream source tree should be automatically excluded unless explicitly referenced by PKGBUILD build/package/prepare functions. Models should not flag upstream automation as AUR supply-chain risks.",
+    "The prompt should more explicitly state that user-prompted command execution features (where the application asks the user for input and runs it) are application features, not injections. This pattern appears in many legitimate tools (git, rsync wrappers, etc.).",
+    "When models find 'unsafe' in application source code but 'safe' in PKGBUILD, they should apply a secondary check: could an AUR maintainer have injected this, and does it serve no purpose the package claims? If the feature is documented/intended, it's not an injection."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 17944,
+    "completion_tokens": 1557,
+    "cost": 0.00773504
+  },
+  "audits_judged": [
+    "20260824-073208-qwen-qwen3-235b-a22b-2507.md",
+    "20260824-073227-deepseek-deepseek-v4-flash.md",
+    "20260824-034506-thinkingmachines-inkling:free.md",
+    "20260824-034515-z-ai-glm-5.2:free.md",
+    "20260824-034759-openrouter-free.md"
+  ]
+}
