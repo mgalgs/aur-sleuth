@@ -1,0 +1,32 @@
+{
+  "package": "pi-agent-rust",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD, build.rs, and install.sh are all clean: standard AUR packaging with proper SHA-256 checksums pinning the upstream source tarball from the official GitHub repository. The only 'unsafe' finding (from qwen) concerns a base64-encoded OAuth client ID in github-copilot.ts, which is upstream application code inside the verified source tarball\u2014not an AUR injection. OAuth client IDs are public identifiers, and base64 encoding them is a common pattern to avoid trivial grep matches; this is upstream product behavior, not a supply-chain attack. The threat model explicitly excludes upstream application behavior from the verdict.",
+  "disagreement_analysis": "Qwen flagged a hardcoded, base64-encoded OAuth client ID in an upstream TypeScript file (github-copilot.ts) as unsafe, conflating obfuscation of a public identifier with malicious intent. Deepseek correctly scoped its review to AUR packaging files and found no issues. The disagreement stems from qwen reviewing upstream application code that is irrelevant to AUR injection risk, then misclassifying a normal OAuth pattern as a security issue.",
+  "coverage_issues": [
+    "Qwen reviewed 10 upstream TypeScript files from the source tree (legacy_pi_mono_code/pi-mono/packages/...) that are not referenced by PKGBUILD functions or .install scripts\u2014this is out of scope for an AUR audit and led to a false positive.",
+    "Deepseek had appropriate coverage of AUR-relevant files (PKGBUILD, build.rs, install.sh) and correctly avoided upstream source code."
+  ],
+  "false_positives": [
+    "github-copilot.ts hardcoded OAuth client ID: OAuth client IDs are public information (not secrets), and base64 encoding is a standard pattern to avoid simple text searches. This is upstream application behavior, not an AUR injection. The source tarball is pinned with SHA-256, so there is no swap risk."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models must not review upstream source code unless it is directly referenced by PKGBUILD functions (prepare, build, package, check) or .install scripts. Upstream application behavior is explicitly out of scope per the threat model.",
+    "OAuth client IDs\u2014even when base64-encoded\u2014are public identifiers, not secrets. Audit models should recognize this pattern and not flag it as obfuscation or malicious intent.",
+    "The audit tool should enforce stricter file selection boundaries: only files in the AUR git repo (PKGBUILD, .install, .SRCINFO, local patches/scripts) and files explicitly executed during makepkg should be prioritized. Upstream source trees inside verified tarballs should be deprioritized or excluded unless the PKGBUILD applies patches to them."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 10637,
+    "completion_tokens": 1578,
+    "cost": 0.00542368
+  },
+  "audits_judged": [
+    "20260824-074739-qwen-qwen3-235b-a22b-2507.md",
+    "20260824-074824-deepseek-deepseek-v4-flash.md"
+  ]
+}
