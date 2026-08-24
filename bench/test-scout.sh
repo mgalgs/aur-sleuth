@@ -144,6 +144,25 @@ else
     bad "spend shares wrong or missing"
 fi
 
+echo "== --probe-free without an API key is a no-op, not a network call =="
+# The probe needs a key to speak to the router; without one the free list
+# stays as it was, unprobed and uncapped differently, and no tally appears.
+if env -u OPENAI_API_KEY python3 bench/scout.py --catalog "$tmp/catalog.json" \
+    --out "$tmp/out3.json" --now "$NOW" --probe-free \
+    --seats "audit=seat/audit" >/dev/null 2>&1 \
+    && python3 - "$tmp/out3.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+assert "free_probe" not in d, d.get("free_probe")
+assert {f["id"] for f in d["free"]} == {"free/model", "colon/model:free"}
+assert all("probe_ms" not in f for f in d["free"])
+PY
+then
+    ok "no key: the unprobed free list survives, no tally, no probe fields"
+else
+    bad "--probe-free without a key must leave the free list alone"
+fi
+
 echo "== a missing catalog is quiet, not an error =="
 if python3 bench/scout.py --catalog "$tmp/nope.json" --out "$tmp/none.json" --now "$NOW" 2>/dev/null; then
     ok "exit 0 with no catalog"

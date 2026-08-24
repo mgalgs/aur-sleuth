@@ -579,8 +579,10 @@ push_reports() {
 }
 
 # --- Scout the model catalog -----------------------------------------------
-# Code only, seconds, no API call; the operations page shows the result and a
-# person decides what to benchmark. Runs even on a budget-exhausted day: it
+# Code only, seconds; the operations page shows the result and a person
+# decides what to benchmark. The one network touch is the free-model probe:
+# a 1-token completion per free model, $0 by definition, so the free list
+# holds models that actually answer. Runs even on a budget-exhausted day: it
 # spends nothing, and the page's shortlist and spend shares should not go
 # stale because the audits were done for the day. A missing catalog is fine.
 run_scout() {
@@ -589,7 +591,7 @@ run_scout() {
     log "=== Scout Phase ==="
     python3 bench/scout.py --catalog "$DATA_DIR/models-catalog.json" \
         --out "$DATA_DIR/bench/scout.json" --bench-dir "$DATA_DIR/bench" \
-        --data-dir "$DATA_DIR" \
+        --data-dir "$DATA_DIR" --probe-free \
         --seats "audit=$AUDIT_MODELS;judge=$JUDGE_MODEL;reaudit=$REAUDIT_MODEL" 2>&1 \
         || log "WARNING: the scout failed; the page keeps the old shortlist"
 }

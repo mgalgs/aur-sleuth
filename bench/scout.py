@@ -145,6 +145,53 @@ def spend_shares(data_dir, now, days=7):
     }
 
 
+def probe_free(free, timeout=12, workers=8, cap=40):
+    """One tiny completion against each free model, through the same route
+    the audits use, so the free list holds models that actually answer --
+    with their latency and, behind a router, who served them. $0 by
+    definition. Silently skipped without an API key, leaving the unprobed
+    list as it was."""
+    api_key = os.environ.get("OPENAI_API_KEY", "")
+    if not api_key or not free:
+        return free, None
+    import concurrent.futures
+    import time as _time
+    import urllib.request
+
+    base = os.environ.get("OPENAI_BASE_URL", "https://openrouter.ai/api/v1").rstrip("/")
+
+    def hit(entry):
+        body = json.dumps({
+            "model": entry["id"], "max_tokens": 1,
+            "messages": [{"role": "user", "content": "ok"}],
+        }).encode()
+        req = urllib.request.Request(
+            base + "/chat/completions", data=body,
+            headers={"Authorization": "Bearer " + api_key,
+                     "Content-Type": "application/json"})
+        start = _time.time()
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                data = json.load(resp)
+        except Exception:
+            return None
+        out = dict(entry)
+        out["probe_ms"] = int((_time.time() - start) * 1000)
+        served = str(data.get("model") or "")
+        if served and served != entry["id"]:
+            out["served"] = served
+        return out
+
+    subset = free[:cap]
+    answered = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+        for got in pool.map(hit, subset):
+            if got:
+                answered.append(got)
+    answered.sort(key=lambda f: f["probe_ms"])
+    return answered, {"probed": len(subset), "answered": len(answered)}
+
+
 def load_bench_scores(bench_dir):
     """{model: {'agreement', 'run', 'cost_per_package'}} from the newest
     result that scored each model. The measured cost matters more than any
@@ -181,6 +228,9 @@ def main():
     ap.add_argument("--data-dir", default="", help="for the seat spend shares")
     ap.add_argument("--min-context", type=int, default=32768)
     ap.add_argument("--max-per-seat", type=int, default=10)
+    ap.add_argument("--probe-free", action="store_true",
+                    help="test each free model with a tiny completion and "
+                         "keep only the ones that answer")
     ap.add_argument("--now", type=int, default=0, help="unix time, for tests")
     args = ap.parse_args()
 
@@ -280,15 +330,22 @@ def main():
             kept.append(c)
 
     # Newest free tiers first, a handful: enough to notice a new open model
-    # worth a benchmark, not a catalog of everything priced at zero.
+    # worth a benchmark, not a catalog of everything priced at zero. With
+    # --probe-free the sort is by measured latency instead, and models that
+    # never answered are gone -- the card then shows who is actually home.
     free.sort(key=lambda f: -f["created"])
+    probe_stats = None
+    if args.probe_free:
+        free, probe_stats = probe_free(free)
     out = {
         "generated": now,
         "catalog_size": len(catalog),
         "seats": seat_out,
         "candidates": kept,
-        "free": free[:5],
+        "free": free[: 10 if probe_stats else 5],
     }
+    if probe_stats:
+        out["free_probe"] = probe_stats
     if args.data_dir:
         shares = spend_shares(args.data_dir, now)
         if shares:
