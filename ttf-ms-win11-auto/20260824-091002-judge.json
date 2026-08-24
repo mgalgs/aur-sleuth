@@ -1,0 +1,34 @@
+{
+  "package": "ttf-ms-win11-auto",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Three independent models (qwen3-235b, deepseek-v4-flash, openrouter/free) all correctly identified the PKGBUILD as safe. The package downloads the official Windows 11 Enterprise evaluation ISO from Microsoft's legitimate CDN (software-static.download.prss.microsoft.com) and extracts TrueType fonts. The complex retrieval method (FUSE mounting via httpdirfs with fallback to full ISO download) serves the stated purpose. Hardcoded SHA-256 checksums in _sha256sums array provide integrity verification in prepare(). No obfuscated code, eval, base64, data exfiltration, or execution of fetched content exists. The SKIP checksums in sha256sums array are a standard AUR pattern for dynamic sources where manual verification is performed.",
+  "disagreement_analysis": null,
+  "coverage_issues": [
+    "thinkingmachines/inkling:free failed with 403 error (model only available on agentic harnesses)",
+    "z-ai/glm-5.2:free failed with 429 error (upstream rate limiting)"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Binary files like license.rtf should be skipped - models correctly identified this and it's appropriate behavior",
+    "Models correctly distinguished between packaging hygiene (SKIP checksums, complex retrieval methods) and actual security risks (code injection, suspicious network activity)",
+    "Tool error handling should gracefully exclude failed models from verdict calculation rather than marking as inconclusive",
+    "The audit tool correctly prioritized PKGBUILD review over other files for a font package with no install hooks or additional scripts"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 7771,
+    "completion_tokens": 1250,
+    "cost": 0.00408672
+  },
+  "audits_judged": [
+    "20260824-080524-qwen-qwen3-235b-a22b-2507.md",
+    "20260824-080523-deepseek-deepseek-v4-flash.md",
+    "20260824-044553-thinkingmachines-inkling:free.md",
+    "20260824-044605-z-ai-glm-5.2:free.md",
+    "20260824-044727-openrouter-free.md"
+  ]
+}
