@@ -14,6 +14,7 @@
 #                     [--escalate-pending true|false] [--run-budget USD]
 #                     [--free-models LIST] [--free-timeout SECONDS]
 #                     [--advisory true|false]
+#                     [--advisory-sweep N] [--advisory-models LIST]
 #
 # State is derived from the audit-reports branch (no local state files needed).
 # Daily spend is tracked in $DATA_DIR/pipeline/spend-YYYY-MM-DD.log.
@@ -95,6 +96,12 @@ ESCALATE_PENDING="false"
 # for a run gets one, whatever the schedule already spent. The ledger still
 # records every cost, so the scheduled runs' daily cap sees it all.
 RUN_BUDGET=""
+# The recurring free coverage: after an unshaped (scheduled full) run, sweep
+# this many popular packages in a child advisory run with the free models
+# below. $0 by definition, so it runs even on a spent day, and its reports
+# are informational only -- the advisory rules above apply. 0 is off.
+ADVISORY_SWEEP=0
+ADVISORY_MODELS="openrouter/free"
 
 DATA_DIR="${AUR_SLEUTH_DATA_DIR:-$HOME/aur-sleuth-data}"
 METADATA_CACHE="$DATA_DIR/packages-meta-ext-v1.json.gz"
@@ -131,6 +138,8 @@ while [[ $# -gt 0 ]]; do
         --free-models) FREE_MODELS="$2"; shift 2 ;;
         --free-timeout) FREE_TIMEOUT="$2"; shift 2 ;;
         --advisory) ADVISORY="$2"; shift 2 ;;
+        --advisory-sweep) ADVISORY_SWEEP="$2"; shift 2 ;;
+        --advisory-models) ADVISORY_MODELS="$2"; shift 2 ;;
         *) echo "Unknown arg: $1" >&2; exit 1 ;;
     esac
 done
@@ -174,6 +183,10 @@ FREE_MODEL_LIST=()
     || { echo "--free-models is not a comma-separated model list: '$FREE_MODELS'" >&2; exit 1; }
 [[ "$FREE_TIMEOUT" =~ ^0*[1-9][0-9]*$ ]] \
     || { echo "--free-timeout must be a whole number of at least 1, got '$FREE_TIMEOUT'" >&2; exit 1; }
+[[ "$ADVISORY_SWEEP" =~ ^[0-9]+$ ]] \
+    || { echo "--advisory-sweep must be a whole number, got '$ADVISORY_SWEEP'" >&2; exit 1; }
+[[ "$ADVISORY_MODELS" =~ ^[A-Za-z0-9._/:-]+(,[A-Za-z0-9._/:-]+)*$ ]] \
+    || { echo "--advisory-models is not a comma-separated model list: '$ADVISORY_MODELS'" >&2; exit 1; }
 
 # Accept 0.1 through 1.0 inclusive, with any number of trailing zeros. The first
 # decimal digit of the 0.x form must be 1-9, so 0.00-0.09 (below the minimum, and
@@ -315,8 +328,12 @@ build_audited_index() {
     if git show "${REPORTS_BRANCH}:_dashboard/data.json" &>/dev/null; then
         # bench/audited-index.py applies the soft-failure rule: a package
         # whose every audit failed is not audited, so discovery retries it.
+        # An advisory run also skips what already has advisory coverage, so
+        # a recurring sweep digs deeper instead of re-covering the head.
+        local index_flags=()
+        [[ "$ADVISORY" == "true" ]] && index_flags+=(--include-advisory)
         git show "${REPORTS_BRANCH}:_dashboard/data.json" \
-            | python3 bench/audited-index.py
+            | python3 bench/audited-index.py ${index_flags[@]+"${index_flags[@]}"}
     else
         # No dashboard yet — scan branch directly
         git ls-tree -r "$REPORTS_BRANCH" --name-only 2>/dev/null \
@@ -596,6 +613,38 @@ run_scout() {
         || log "WARNING: the scout failed; the page keeps the old shortlist"
 }
 
+# --- The recurring free coverage: a child advisory run ----------------------
+# After a scheduled full run (and only then: a shaped run is someone asking
+# for something specific), sweep ADVISORY_SWEEP popular packages with the
+# free advisory models. The child run is advisory by construction -- its
+# reports inform, never rule -- and free by model choice, so it runs even on
+# a spent day under a nominal ceiling of its own. Its failure must never
+# fail the run that carried it.
+run_advisory_sweep() {
+    [[ "$ADVISORY_SWEEP" -gt 0 ]] || return 0
+    # Only piggyback on an unshaped run, and never on another advisory run:
+    # the child gets --advisory-sweep 0 by default, so this cannot recurse.
+    if [[ "$ADVISORY" == "true" || -n "$PACKAGES" || -n "$PACKAGES_FILE" \
+          || -n "$ESCALATE" || "$ESCALATE_PENDING" == "true" || -n "$RUN_BUDGET" \
+          || "$UPDATED_COUNT" -gt 0 || "$SEED_COUNT" -gt 0 ]]; then
+        return 0
+    fi
+    log ""
+    log "=== Advisory Sweep ==="
+    log "Free coverage pass: up to $ADVISORY_SWEEP popular package(s) with $ADVISORY_MODELS, informational only"
+    if $DRY_RUN; then
+        log "DRY RUN: sweep skipped"
+        return 0
+    fi
+    local sweep_flags=(--advisory true --audit-models "$ADVISORY_MODELS"
+        --updated-share 0.0 --seed-count "$ADVISORY_SWEEP" --run-budget 1
+        --jobs "$JOBS" --audit-timeout "$AUDIT_TIMEOUT" --seed-top "$SEED_TOP")
+    $NO_PUSH && sweep_flags+=(--no-push)
+    $SKIP_DASHBOARD && sweep_flags+=(--skip-dashboard)
+    bash bench/pipeline.sh "${sweep_flags[@]}" 2>&1 \
+        || log "WARNING: the advisory sweep failed; the run that carried it is already complete"
+}
+
 # --- Sum judge costs for reports modified after a given timestamp ---
 sum_judge_costs_since() {
     local since="$1"
@@ -626,6 +675,9 @@ main() {
     fi
     if [[ "$ADVISORY" == "true" ]]; then
         log "ADVISORY RUN: reports are informational only -- no judge, no escalation, no state changes, now or later"
+    fi
+    if [[ "$ADVISORY_SWEEP" -gt 0 ]]; then
+        log "Advisory sweep configured: $ADVISORY_SWEEP package(s) with $ADVISORY_MODELS after an unshaped run"
     fi
     log "Daily spend so far: \$$(get_daily_spent)"
 
@@ -684,8 +736,10 @@ main() {
     if is_over_budget; then
         log "Daily budget already exhausted (\$$(gate_spent) >= \$$GATE_TOTAL). Exiting."
         # The shortlist and the spend shares still refresh: the scout costs
-        # nothing, and the page must not go stale on a spent day.
+        # nothing, and the page must not go stale on a spent day. Neither
+        # does the free coverage stop: the sweep spends nothing by definition.
         run_scout
+        run_advisory_sweep
         return 0
     fi
 
@@ -824,6 +878,10 @@ main() {
 
     # Step 8: Scout the model catalog for candidates that undercut a seat.
     run_scout
+
+    # Step 9: the recurring free coverage, when configured. Last, so the paid
+    # work of the slot is settled and pushed before the $0 pass begins.
+    run_advisory_sweep
 
     # Summary
     log ""

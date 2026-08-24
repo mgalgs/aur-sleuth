@@ -149,6 +149,18 @@ if bash bench/pipeline.sh --advisory maybe --dry-run --skip-judge \
 else
     ok "refused a non-boolean --advisory"
 fi
+if bash bench/pipeline.sh --advisory-sweep many --dry-run --skip-judge \
+        --skip-dashboard --no-push >/dev/null 2>&1; then
+    bad "should have refused --advisory-sweep many"
+else
+    ok "refused a non-numeric --advisory-sweep"
+fi
+if bash bench/pipeline.sh --advisory-models 'a b' --dry-run --skip-judge \
+        --skip-dashboard --no-push >/dev/null 2>&1; then
+    bad "should have refused --advisory-models 'a b'"
+else
+    ok "refused a malformed --advisory-models"
+fi
 
 echo "== a package whose every audit failed stays eligible =="
 # The audited index is what discovery skips. The soft-failure rule: a
@@ -173,6 +185,60 @@ else
     printf '    want: %s\n' "$(echo "$want" | tr '\n' ' ')"
     printf '    got:  %s\n' "$(echo "$got"  | tr '\n' ' ')"
 fi
+# An advisory run passes --include-advisory, so a recurring sweep skips what
+# it already covered and digs deeper instead of re-covering the same head.
+got="$(python3 bench/audited-index.py --include-advisory <<'JSON' | sort
+{"packages":{
+ "advonly":{"pkgver":"5.0","pkgrel":"1","audits":[{"result":"safe","advisory":true}]},
+ "advfailed":{"pkgver":"7.0","pkgrel":"1","audits":[{"result":"unknown","advisory":true}]},
+ "bare":{"pkgver":"8.0","pkgrel":"1","audits":[]}
+}}
+JSON
+)"
+want=$'advonly\t5.0-1'
+if [[ "$got" == "$want" ]]; then
+    ok "--include-advisory counts advisory coverage, but a failed advisory look is still absence"
+else
+    bad "--include-advisory wrong"
+    printf '    want: %s\n' "$(echo "$want" | tr '\n' ' ')"
+    printf '    got:  %s\n' "$(echo "$got"  | tr '\n' ' ')"
+fi
+
+echo "== the advisory sweep piggybacks only on an unshaped run =="
+# The function is lifted like discover_packages: globals in, log lines out.
+# A dry run stops at the announcement, so no child pipeline ever starts here.
+sweep_out() {
+    (
+        eval "$(sed -n '/^run_advisory_sweep()/,/^}/p' bench/pipeline.sh)"
+        # All read by the function that arrives through the eval above.
+        # shellcheck disable=SC2329
+        log() { echo "$@"; }
+        # shellcheck disable=SC2034
+        DRY_RUN=true NO_PUSH=true SKIP_DASHBOARD=true
+        # shellcheck disable=SC2034
+        ADVISORY_SWEEP=5 ADVISORY_MODELS=openrouter/free ADVISORY=false
+        # shellcheck disable=SC2034
+        PACKAGES="" PACKAGES_FILE="" ESCALATE="" ESCALATE_PENDING=false RUN_BUDGET=""
+        # shellcheck disable=SC2034
+        UPDATED_COUNT=0 SEED_COUNT=0 JOBS=2 AUDIT_TIMEOUT=900 SEED_TOP=1000
+        eval "$1"
+        run_advisory_sweep
+    )
+}
+if sweep_out '' | grep -q 'DRY RUN: sweep skipped'; then
+    ok "an unshaped run reaches the sweep (dry run stops at the announcement)"
+else
+    bad "the unshaped run should have announced the sweep"
+fi
+for shaped in 'RUN_BUDGET=2' 'PACKAGES=foo' 'PACKAGES_FILE=/dev/null' \
+              'ESCALATE=foo' 'ESCALATE_PENDING=true' 'UPDATED_COUNT=5' \
+              'SEED_COUNT=5' 'ADVISORY=true' 'ADVISORY_SWEEP=0'; do
+    if [[ -n "$(sweep_out "$shaped")" ]]; then
+        bad "a run shaped by $shaped must not sweep"
+    else
+        ok "no sweep when $shaped"
+    fi
+done
 
 echo "== MIN_VOTES is a hard floor on the updated stream =="
 got="$(run_discover "$tmp/a.json.gz" "$tmp/a.tsv" 5 3 0.8)"

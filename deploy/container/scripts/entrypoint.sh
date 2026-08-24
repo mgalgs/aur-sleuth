@@ -269,6 +269,8 @@ collect_audit_env_flags() {
         "AUR_SLEUTH_FREE_MODELS:--free-models:models"
         "AUR_SLEUTH_FREE_TIMEOUT:--free-timeout:posint"
         "AUR_SLEUTH_ADVISORY:--advisory:bool"
+        "AUR_SLEUTH_ADVISORY_SWEEP:--advisory-sweep:int"
+        "AUR_SLEUTH_ADVISORY_MODELS:--advisory-models:models"
     )
     local spec var flag kind value rest
 
