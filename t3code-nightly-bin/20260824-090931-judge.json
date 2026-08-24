@@ -1,0 +1,34 @@
+{
+  "package": "t3code-nightly-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Three successful audits (qwen3-235b, deepseek-v4-flash, openrouter/free) all correctly identified this as standard AppImage packaging. The PKGBUILD downloads from the official upstream GitHub repository (pingdotgg/t3code) with pinned SHA-256 checksums, performs no code execution during source fetch, and the prepare()/package() functions contain only standard AppImage extraction and installation logic. The chrome-sandbox SUID bit (4755) is expected for Chromium-based applications. No injection patterns, no unexpected network operations, no obfuscated code.",
+  "disagreement_analysis": null,
+  "coverage_issues": [
+    "thinkingmachines/inkling:free failed with 403 error (model restricted to agentic harnesses)",
+    "z-ai/glm-5.2:free failed with 429 rate limit error"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Tool errors (403, 429) should be filtered from verdict aggregation - they represent infrastructure failures, not audit findings",
+    "Models correctly recognize SUID bit on chrome-sandbox as normal for Electron/Chromium apps - this is a common false positive trigger that should not flag unsafe",
+    "AppImage packaging with pinned checksums from official upstream repositories is a well-understood pattern that models handle correctly",
+    "For binary-only packages, auditing the PKGBUILD and skipping the binary payload is the correct approach - models should not attempt to audit compiled artifacts"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 8259,
+    "completion_tokens": 1042,
+    "cost": 0.00397664
+  },
+  "audits_judged": [
+    "20260824-070258-qwen-qwen3-235b-a22b-2507.md",
+    "20260824-070308-deepseek-deepseek-v4-flash.md",
+    "20260824-031138-thinkingmachines-inkling:free.md",
+    "20260824-031151-z-ai-glm-5.2:free.md",
+    "20260824-031202-openrouter-free.md"
+  ]
+}
