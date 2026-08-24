@@ -47,6 +47,33 @@ else
     ok "provider is not derived from the endpoint hostname"
 fi
 
+echo "== an exception's text reaches a report only through describe_error =="
+# An APIError's text is the provider's response body (it carried the
+# operator's account id once); a CalledProcessError's is the command line;
+# an OSError's names an absolute path. describe_error() is the one place
+# that decides what of that a report may carry, and the log gets the rest.
+# So "{e}" may appear in a logger call, in describe_error's own passthrough
+# line, or in a selftest -- nowhere else.
+hits="$(grep -nE '\{e\}|str\(e\)' aur-sleuth \
+    | grep -vE 'logger\.|assert |return f"\{type\(e\)\.__name__\}: \{e\}"' || true)"
+if [[ -z "$hits" ]]; then
+    ok "no message interpolates an exception outside describe_error"
+else
+    bad "an exception's own text would reach a report:"
+    printf '        %s\n' "$hits"
+fi
+
+echo "== a response payload is previewed only into the log =="
+# _safe_obj_preview renders up to 2000 chars of whatever the API returned.
+# In an exception message that is a report line; in a logger call it is not.
+hits="$(grep -n '_safe_obj_preview(' aur-sleuth | grep -vE 'logger\.|:def _safe_obj_preview' || true)"
+if [[ -z "$hits" ]]; then
+    ok "no exception message carries a payload preview"
+else
+    bad "a payload preview would reach a report:"
+    printf '        %s\n' "$hits"
+fi
+
 echo "== any report lying around must be clean =="
 # Best-effort: only checks reports that happen to exist, so it can pass
 # vacuously. The source checks above are the ones that always run.

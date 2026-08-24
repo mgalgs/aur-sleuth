@@ -1023,13 +1023,15 @@ def extract_assistant_message_dict(response: object) -> dict[str, str]:
         err = getattr(response, "error", None)
         if err is None and isinstance(response, dict):
             err = response.get("error")
+        # The payload goes to the log; the message stays this program's own
+        # words. An error payload is the provider's response body, which can
+        # carry the operator's account id, and the message ends up in the
+        # report.
         if err:
-            raise LLMResponseError(
-                f"LLM returned error payload (no choices): {_safe_obj_preview(err)}"
-            )
-        raise LLMResponseError(
-            f"LLM response missing 'choices': {_safe_obj_preview(response)}"
-        )
+            logger.warning("LLM returned an error payload: %s", _safe_obj_preview(err))
+            raise LLMResponseError("LLM returned an error payload instead of a completion")
+        logger.warning("LLM response has no choices: %s", _safe_obj_preview(response))
+        raise LLMResponseError("LLM response has no choices")
 
     choice0 = choices[0]
     msg = getattr(choice0, "message", None)
@@ -1037,9 +1039,8 @@ def extract_assistant_message_dict(response: object) -> dict[str, str]:
         msg = choice0.get("message")
 
     if msg is None:
-        raise LLMResponseError(
-            f"LLM response missing first choice message: {_safe_obj_preview(response)}"
-        )
+        logger.warning("LLM response has no first-choice message: %s", _safe_obj_preview(response))
+        raise LLMResponseError("LLM response has no message in its first choice")
 
     role = getattr(msg, "role", None)
     content = getattr(msg, "content", None)
@@ -1060,10 +1061,8 @@ def extract_assistant_message_dict(response: object) -> dict[str, str]:
             normalized_content = _normalize_message_content(alt_text)
 
     if normalized_content == "":
-        raise LLMResponseError(
-            "LLM response message content is empty or missing. "
-            f"Raw response: {_safe_obj_preview(response)}"
-        )
+        logger.warning("LLM response content is empty: %s", _safe_obj_preview(response))
+        raise LLMResponseError("LLM response message content is empty or missing")
 
     return {"role": str(role), "content": normalized_content}
 
@@ -1460,6 +1459,9 @@ def describe_error(e: Exception) -> str:
         cmd = e.cmd if isinstance(e.cmd, str) else " ".join(e.cmd)
         prog = Path(cmd.split()[0]).name if cmd.split() else "command"
         return f"{prog} exited with status {e.returncode}"
+    if isinstance(e, OSError) and e.strerror:
+        # The filename in an OSError's text is an absolute path on this machine.
+        return f"{type(e).__name__}: {e.strerror}"
     return f"{type(e).__name__}: {e}"
 
 
@@ -1493,15 +1495,17 @@ def audit_file(
                 file_content = f.read()
         except Exception as e:
             return AuditResult(
-                file_path, pkgdir, SafeStatus.SKIPPED, f"Failed to read file: {e}"
+                file_path, pkgdir, SafeStatus.SKIPPED,
+                f"Failed to read file: {describe_error(e)}",
             )
     except FileNotFoundError:
         return AuditResult(
-            file_path, pkgdir, SafeStatus.SKIPPED, f"File not found at: {file_path}"
+            file_path, pkgdir, SafeStatus.SKIPPED, f"File not found: {file_path.name}"
         )
     except Exception as e:
         return AuditResult(
-            file_path, pkgdir, SafeStatus.SKIPPED, f"Failed to read file: {e}"
+            file_path, pkgdir, SafeStatus.SKIPPED,
+            f"Failed to read file: {describe_error(e)}",
         )
 
     total_lines = file_content.count("\n") + (1 if file_content and not file_content.endswith("\n") else 0)
@@ -2392,9 +2396,11 @@ Respond with a list of file paths, one path per line, with NO other additional t
     except LLMResponseError as e:
         fallback = files_for_prompt[:num_additional_files_to_review]
         logger.warning("File selection failed (%s); falling back to priority order", e)
-        report.write(f"File selection failed ({e}); using highest-priority files instead\n")
+        report.write(
+            f"File selection failed ({describe_error(e)}); using highest-priority files instead\n"
+        )
         tui.finalize_step(
-            f"Note: file selection did not complete ({e}). Falling back to the "
+            f"Note: file selection did not complete ({describe_error(e)}). Falling back to the "
             f"{len(fallback)} highest-priority file(s) by ranking."
         )
         return fallback
@@ -2503,7 +2509,7 @@ def audit_files(
             try:
                 _f, result = future.result()
             except Exception as e:
-                msg = f"Audit exception: {e}"
+                msg = f"Audit exception: {describe_error(e)}"
                 logger.error("Audit exception while reviewing %s: %s", f_rel, e, exc_info=True)
                 result = AuditResult(f_abs, pkgdir, SafeStatus.INCONCLUSIVE, msg)
 
