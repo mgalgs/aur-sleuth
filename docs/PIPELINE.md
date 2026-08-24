@@ -78,6 +78,22 @@ decided, honestly.
   including the right to disagree — which triggers a paid judge read, so
   the overrun trend is the number to watch when adding voices.
 
+An **advisory run** (`--advisory`, or the run form's checkbox) is the tier
+below even a free voice: its reports carry `advisory: true` in their
+frontmatter and are information only. They never convene a judge, never
+count toward agreement or a verdict, never mark a package audited, and a
+late-arriving one does not reopen an already-judged package. When a real
+report later convenes a judge, the advisory reports are in the pile the
+judge reads — context from a model that has not earned a vote, useful for
+leads. This is how an untrusted (usually free) model contributes without
+being able to escalate anything. An advisory run cannot combine with
+escalation, which exists to force a ruling.
+
+The scout probes the free catalog each run: a one-token completion per free
+model ($0 by definition), so the operations page's free list holds models
+that actually answered, fastest first, with who served them behind a router
+id.
+
 Seats are set on the operations page's Models tab (a ConfigMap override; git
 holds the baseline). `bench/benchmark.sh` scores candidates against the
 settled verdicts — synthetics first for audit-seat runs — and the results
