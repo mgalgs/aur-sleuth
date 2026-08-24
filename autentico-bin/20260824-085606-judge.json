@@ -1,0 +1,27 @@
+{
+  "package": "autentico-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The disagreement stems from the `autentico-bin.install` script, which runs the package's own verified binary (`autentico init`) to generate a default configuration file. The qwen model incorrectly flagged this as a potential injection/exfiltration vector, confusing normal upstream application initialization behavior with a malicious AUR packaging injection. The binary is verified via checksums, and running it for first-time setup is a legitimate packaging choice, not an injection.",
+  "disagreement_analysis": "qwen flagged the `post_install` hook for executing the application's own binary to generate a `.env` file, misinterpreting standard application initialization as a suspicious network/exfiltration risk. deepseek correctly recognized this as normal setup behavior using the verified package binary.",
+  "coverage_issues": [],
+  "false_positives": [
+    "autentico-bin.install: Running the package's own verified binary to generate a default configuration file is normal application initialization, not a malicious injection. The model confused upstream application behavior with AUR packaging injection."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models need better distinction between 'upstream application behavior executed via packaging hooks' and 'malicious code injected into packaging'. Running a verified package binary for first-run setup in an `.install` hook is a packaging choice, not an injection, unless the binary itself is unverified or the command does something completely unrelated to the package's stated purpose."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 6632,
+    "completion_tokens": 1508,
+    "cost": 0.00405248
+  },
+  "audits_judged": [
+    "20260822-233316-qwen-qwen3-235b-a22b-2507.md",
+    "20260824-072414-deepseek-deepseek-v4-flash.md"
+  ]
+}
