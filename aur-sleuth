@@ -396,10 +396,60 @@ interpretation -- if the code is consistent with ordinary packaging, treat it as
 }
 
 
+# Hosts that name a public service rather than the operator's network. The
+# provider field already says "openrouter"; nothing is hidden by its name.
+PUBLIC_API_HOSTS = {"openrouter.ai", "api.openai.com"}
+
+REDACTED = "[redacted]"
+
+
+def operator_strings(env: Optional[Dict[str, str]] = None) -> List[str]:
+    """Strings that describe the machine running this audit, derived from its
+    own environment at startup, so no list needs maintaining and no secret
+    needs knowing in advance.
+
+    A report has three inputs -- the package's text, the model's output, and
+    this program's own strings -- and only the last can say anything about
+    the operator: an endpoint, a home directory, a credential. Each is known
+    here. Whatever the operator has additionally named in
+    AUR_SLEUTH_INTERNAL_STRINGS (the list the publish gate greps for) is
+    applied here too, so the gate should never find it in a new report.
+
+    Replacing rather than refusing matters: a package that quotes one of
+    these strings in its own files gets "[redacted]" in its quote and its
+    verdict still publishes, so nothing a package contains can keep its
+    report off the public page.
+
+    Longest first, so a value that contains another is replaced whole."""
+    env = os.environ if env is None else env
+    found = set()
+    host = urlparse(env.get("OPENAI_BASE_URL", "")).hostname
+    if host and host not in PUBLIC_API_HOSTS:
+        found.add(host)
+    home = env.get("HOME", "")
+    if home.startswith("/home/"):
+        found.add(home.rstrip("/"))
+    for name, value in env.items():
+        if re.search(r"KEY|TOKEN|SECRET|PASSWORD", name) and len(value) >= 8:
+            found.add(value)
+    found.update(env.get("AUR_SLEUTH_INTERNAL_STRINGS", "").replace(",", " ").split())
+    # Anything shorter would hit ordinary text.
+    return sorted((s for s in found if len(s) >= 4), key=len, reverse=True)
+
+
+def redact(text: str, needles: List[str]) -> str:
+    for needle in needles:
+        text = text.replace(needle, REDACTED)
+    return text
+
+
 class Report:
     def __init__(self, report_path: Path):
         self.report_path = report_path
         self._lock = Lock()
+        # Every write passes through this; see operator_strings(). Fixed at
+        # open, since the environment does not change during an audit.
+        self._needles = operator_strings()
 
     def __enter__(self):
         self.file = open(self.report_path, "w", encoding="utf-8")
@@ -413,6 +463,7 @@ class Report:
         if not hasattr(self, "file"):
             raise RuntimeError("Report file is not open. Use __entry__ to open it.")
 
+        text = redact(text, self._needles)
         with self._lock:
             self.file.write(text + end)
             self.file.flush()
@@ -2811,7 +2862,10 @@ def _write_report_frontmatter(
             f"---\n\n"
         )
 
+        # The body went through Report.write; the frontmatter takes the same
+        # pass, since it quotes summaries and evidence too.
         existing = report_file.read_text(encoding="utf-8")
+        frontmatter = redact(frontmatter, operator_strings())
         report_file.write_text(frontmatter + existing, encoding="utf-8")
     except Exception as e:
         logger.warning("Failed to write report frontmatter: %s", e)
@@ -3322,12 +3376,65 @@ def selftest_error_description():
 
     assert describe_error(RuntimeError("no assessment tag")) == "RuntimeError: no assessment tag"
 
+    e = FileNotFoundError(2, "No such file or directory", "/home/someone/pkg/x.install")
+    assert describe_error(e) == "FileNotFoundError: No such file or directory", describe_error(e)
+
+
+def selftest_redaction():
+    """What the environment says about this machine never reaches a report:
+    the endpoint host, a home directory, a credential-shaped value, and the
+    operator's own list -- while a public API host is left alone."""
+    import tempfile
+
+    env = {
+        "OPENAI_BASE_URL": "http://llm.internal.example:8080/v1",
+        "HOME": "/home/tester",
+        "OPENAI_API_KEY": "sk-or-v1-abcdef0123456789",
+        "SHORT_KEY": "abc",
+        "AUR_SLEUTH_INTERNAL_STRINGS": "corp.lan,user_secretid",
+    }
+    needles = operator_strings(env)
+    assert "llm.internal.example" in needles and "/home/tester" in needles, needles
+    assert "sk-or-v1-abcdef0123456789" in needles and "abc" not in needles, needles
+    assert {"corp.lan", "user_secretid"} <= set(needles), needles
+    text = (
+        "called http://llm.internal.example:8080/v1 from /home/tester/x "
+        "with sk-or-v1-abcdef0123456789 for user_secretid at corp.lan"
+    )
+    out = redact(text, needles)
+    for s in needles:
+        assert s not in out, out
+    assert out.count(REDACTED) == 5, out
+    assert "openrouter.ai" not in operator_strings(
+        {"OPENAI_BASE_URL": "https://openrouter.ai/api/v1"}
+    )
+    assert operator_strings({"HOME": "/root"}) == []
+
+    # The report applies it on every write.
+    saved = {k: os.environ.get(k) for k in env}
+    os.environ.update(env)
+    try:
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "r.txt"
+            with Report(path) as report:
+                report.write("endpoint llm.internal.example answered for user_secretid")
+            written = path.read_text(encoding="utf-8")
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+    assert "llm.internal.example" not in written and "user_secretid" not in written, written
+    assert written.count(REDACTED) == 2, written
+
 
 def selftest():
     selftest_llm_response_parsing()
     selftest_evidence()
     selftest_fixture_context()
     selftest_error_description()
+    selftest_redaction()
     report_path = Path("/tmp/aur-sleuth-tui-selftest.txt")
 
     with Report(report_path) as report:
