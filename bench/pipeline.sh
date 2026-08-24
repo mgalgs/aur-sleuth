@@ -12,6 +12,7 @@
 #                     [--updated-count N] [--seed-count N]
 #                     [--packages LIST] [--escalate LIST]
 #                     [--escalate-pending true|false] [--run-budget USD]
+#                     [--free-models LIST] [--free-timeout SECONDS]
 #
 # State is derived from the audit-reports branch (no local state files needed).
 # Daily spend is tracked in $DATA_DIR/pipeline/spend-YYYY-MM-DD.log.
@@ -58,6 +59,14 @@ UPDATED_SHARE=0.8
 AUDIT_MODELS="qwen/qwen3-235b-a22b-2507,deepseek/deepseek-v4-flash"
 JUDGE_MODEL="deepseek/deepseek-r1"
 REAUDIT_MODEL="anthropic/claude-sonnet-4.6"
+# Opportunistic free voices: extra audit models run beside the paid seats,
+# best effort. Their failures are soft everywhere -- no judge trigger, no
+# audited-index mark, no cost -- so a rate-limited free tier contributes
+# when its pipes are open and costs nothing in every sense when they are
+# not. They get their own, shorter timeout: a throttled free call must not
+# hold a batch the way a real audit may.
+FREE_MODELS=""
+FREE_TIMEOUT=180
 PACKAGES_FILE=""
 # Sized runs: cap each discovery stream instead of letting the budget cut the
 # interleaved list. 0 means uncapped -- the full-run default.
@@ -111,6 +120,8 @@ while [[ $# -gt 0 ]]; do
         --escalate) ESCALATE="$2"; shift 2 ;;
         --escalate-pending) ESCALATE_PENDING="$2"; shift 2 ;;
         --run-budget) RUN_BUDGET="$2"; shift 2 ;;
+        --free-models) FREE_MODELS="$2"; shift 2 ;;
+        --free-timeout) FREE_TIMEOUT="$2"; shift 2 ;;
         *) echo "Unknown arg: $1" >&2; exit 1 ;;
     esac
 done
@@ -135,6 +146,12 @@ PKG_LIST_RE='^[A-Za-z0-9@._+][A-Za-z0-9@._+-]*(,[A-Za-z0-9@._+][A-Za-z0-9@._+-]*
     || { echo "--escalate is not a comma-separated package list: '$ESCALATE'" >&2; exit 1; }
 
 IFS=',' read -ra MODEL_LIST <<< "$AUDIT_MODELS"
+FREE_MODEL_LIST=()
+[[ -n "$FREE_MODELS" ]] && IFS=',' read -ra FREE_MODEL_LIST <<< "$FREE_MODELS"
+[[ -z "$FREE_MODELS" || "$FREE_MODELS" =~ ^[A-Za-z0-9._/:-]+(,[A-Za-z0-9._/:-]+)*$ ]] \
+    || { echo "--free-models is not a comma-separated model list: '$FREE_MODELS'" >&2; exit 1; }
+[[ "$FREE_TIMEOUT" =~ ^0*[1-9][0-9]*$ ]] \
+    || { echo "--free-timeout must be a whole number of at least 1, got '$FREE_TIMEOUT'" >&2; exit 1; }
 
 # Accept 0.1 through 1.0 inclusive, with any number of trailing zeros. The first
 # decimal digit of the 0.x form must be 1-9, so 0.00-0.09 (below the minimum, and
@@ -274,15 +291,10 @@ refresh_metadata() {
 # never equalled the AUR Version, so no package was ever seen as already audited.
 build_audited_index() {
     if git show "${REPORTS_BRANCH}:_dashboard/data.json" &>/dev/null; then
-        git show "${REPORTS_BRANCH}:_dashboard/data.json" | python3 -c "
-import json, sys
-d = json.load(sys.stdin)
-for name, pkg in d.get('packages', {}).items():
-    pkgver = pkg.get('pkgver', '')
-    pkgrel = pkg.get('pkgrel', '')
-    if pkgver:
-        print(f'{name}\t{pkgver}-{pkgrel}' if pkgrel else f'{name}\t{pkgver}')
-"
+        # bench/audited-index.py applies the soft-failure rule: a package
+        # whose every audit failed is not audited, so discovery retries it.
+        git show "${REPORTS_BRANCH}:_dashboard/data.json" \
+            | python3 bench/audited-index.py
     else
         # No dashboard yet — scan branch directly
         git ls-tree -r "$REPORTS_BRANCH" --name-only 2>/dev/null \
@@ -444,6 +456,11 @@ PYEOF
 run_audit() {
     local pkg="$1"
     local model="$2"
+    # "free" runs under the short free-voice deadline; anything else gets the
+    # real audit timeout.
+    local tier="${3:-paid}"
+    local deadline="$AUDIT_TIMEOUT"
+    [[ "$tier" == "free" ]] && deadline="$FREE_TIMEOUT"
     local model_slug="${model//\//-}"
     local report_dir="$DATA_DIR/bulk-reports/${model_slug}"
     local report_file="${report_dir}/aur-sleuth-report-${pkg}.txt"
@@ -461,7 +478,7 @@ run_audit() {
     AUDIT_FAILURE_FATAL=true AUR_SLEUTH_ASCII_ICONS=1 \
         OPENAI_MODEL="$model" \
         AUR_SLEUTH_REPORT_DIR="$report_dir" \
-        timeout --kill-after=30s "$AUDIT_TIMEOUT" \
+        timeout --kill-after=30s "$deadline" \
         ./aur-sleuth --output plain "$pkg" 2>&1 || rc=$?
 
     local cost
@@ -509,6 +526,13 @@ audit_package() {
     local pids=()
     for model in "${MODEL_LIST[@]}"; do
         run_audit "$pkg" "$model" &
+        pids+=($!)
+    done
+    # The free voices, in the same breath: they run beside the paid seats and
+    # their shorter deadline means waiting for them never outlasts a real
+    # audit. A throttled one leaves nothing behind, by the soft-failure rule.
+    for model in "${FREE_MODEL_LIST[@]}"; do
+        run_audit "$pkg" "$model" free &
         pids+=($!)
     done
     for pid in "${pids[@]}"; do
@@ -573,6 +597,9 @@ main() {
         log "Candidates: updated + top $SEED_TOP by popularity, interleaved at updated-share=$UPDATED_SHARE"
     fi
     log "Models: ${MODEL_LIST[*]} | Judge: $JUDGE_MODEL | Re-audit: $REAUDIT_MODEL"
+    if [[ ${#FREE_MODEL_LIST[@]} -gt 0 ]]; then
+        log "Free voices: ${FREE_MODEL_LIST[*]} (best effort, ${FREE_TIMEOUT}s deadline, failures are soft)"
+    fi
     log "Daily spend so far: \$$(get_daily_spent)"
 
     # Escalation is its own run: no discovery, no audit loop. For each named

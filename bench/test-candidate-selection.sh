@@ -138,6 +138,28 @@ else
     ok "refused an escalation list starting with a hyphen"
 fi
 
+echo "== a package whose every audit failed stays eligible =="
+# The audited index is what discovery skips. The soft-failure rule: a
+# rate-limited or crashed audit is absence, so a package with only failures
+# is retried next run instead of pinned until its next version bump.
+got="$(python3 bench/audited-index.py <<'JSON' | sort
+{"packages":{
+ "good":{"pkgver":"1.0","pkgrel":"1","audits":[{"result":"safe"}]},
+ "half":{"pkgver":"2.0","pkgrel":"1","audits":[{"result":"unknown"},{"result":"inconclusive"}]},
+ "failed":{"pkgver":"3.0","pkgrel":"2","audits":[{"result":"unknown"},{"result":"skipped"}]},
+ "norel":{"pkgver":"4.0","pkgrel":"","audits":[{"result":"unsafe"}]}
+}}
+JSON
+)"
+want=$'good\t1.0-1\nhalf\t2.0-1\nnorel\t4.0'
+if [[ "$got" == "$want" ]]; then
+    ok "only real verdicts mark a package audited; all-failed stays a candidate"
+else
+    bad "audited index wrong"
+    printf '    want: %s\n' "$(echo "$want" | tr '\n' ' ')"
+    printf '    got:  %s\n' "$(echo "$got"  | tr '\n' ' ')"
+fi
+
 echo "== MIN_VOTES is a hard floor on the updated stream =="
 got="$(run_discover "$tmp/a.json.gz" "$tmp/a.tsv" 5 3 0.8)"
 # U4 (3 votes) and U5 (1 vote) fall below the floor and drop out.

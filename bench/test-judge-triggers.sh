@@ -48,13 +48,43 @@ trigger() {
     echo "$rc $out"
 }
 
-echo "== an error report is an error, whatever else it says =="
+echo "== a failed audit is absence: soft failure =="
+# A report with no spend is a rate limit, a quota wall, or a crash -- not a
+# ruling. It must not trigger a paid judge read (it used to, as 'error'),
+# and it must not smuggle a cost-0 'inconclusive' into 'agreed'. This is
+# what makes a free model in an audit seat costless when it is throttled.
 report a pkg-err inconclusive 0
 got="$(trigger pkg-err)"
-if [[ "$got" == 0\ error* ]]; then
-    ok "one inconclusive report with no spend is 'error', not 'agreed'"
+if [[ "$got" == "1 " ]]; then
+    ok "one failed report alone triggers nothing"
 else
-    bad "expected an error trigger, got: $got"
+    bad "a lone failed report should be absence, got: $got"
+fi
+report a pkg-mixed unsafe 0.01
+report free pkg-mixed unknown 0
+got="$(trigger pkg-mixed)"
+if [[ "$got" == "0 warned (single unsafe)" ]]; then
+    ok "a failed free voice beside a real verdict changes nothing"
+else
+    bad "expected the real verdict's own trigger, got: $got"
+fi
+report a pkg-freeok safe 0.01
+report b pkg-freeok safe 0.02
+report free pkg-freeok unsafe 0.0001
+got="$(trigger pkg-freeok)"
+if [[ "$got" == 0\ disagreement* ]]; then
+    ok "a free voice that actually answered is a real verdict, and may disagree"
+else
+    bad "expected a disagreement from the free voice, got: $got"
+fi
+# A failed report reviewed nothing; that is not 'shallow coverage' either.
+report a pkg-notshallow safe 0.01 5
+report free pkg-notshallow unknown 0 0
+got="$(trigger pkg-notshallow)"
+if [[ "$got" == "1 " ]]; then
+    ok "a failed report does not read as shallow coverage"
+else
+    bad "expected no trigger, got: $got"
 fi
 
 echo "== agreed means more than one model =="

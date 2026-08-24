@@ -172,38 +172,33 @@ check_triggers() {
         return 2
     fi
 
-    # Collect all results upfront
+    # Collect the REAL results upfront. A failed audit -- result unknown or
+    # skipped, or a cost of zero (rate-limited, quota-walled, crashed before
+    # a single call) -- is soft: it is absence, not a ruling. It must not
+    # trigger a paid judge read, and it must not smuggle a cost-0
+    # "inconclusive" into the agreed-warning check below. This is what lets
+    # a free model sit in an audit seat: present when the pipes are open,
+    # costless in every sense when they are not.
     local results=()
+    local real_reports=()
     for r in "${reports[@]}"; do
-        local res
-        res=$(fm "$r" result)
-        [[ -n "$res" ]] && results+=("$res")
-    done
-
-    # All-skipped: no point judging, would waste an LLM call
-    local non_skipped=0
-    for res in "${results[@]}"; do
-        [[ "$res" != "skipped" ]] && non_skipped=$(( non_skipped + 1 ))
-    done
-    if (( ${#results[@]} > 0 && non_skipped == 0 )); then
-        return 1
-    fi
-
-    # Error reports first (only reports that have frontmatter): a report with
-    # no verdict and no spend is a failed audit, not a ruling to second-guess,
-    # and the checks below would otherwise file one inconclusive, cost-0
-    # report under "agreed".
-    for r in "${reports[@]}"; do
-        # Skip reports without frontmatter (pre-frontmatter era)
         head -1 "$r" | grep -q '^---$' || continue
         local res cost
         res=$(fm "$r" result)
         cost=$(fm "$r" cost)
-        if [[ "$res" == "unknown" || "$res" == "skipped" || "$cost" == "0" ]]; then
-            echo "error ($(fm "$r" model): result=$res cost=$cost)"
-            return 0
+        if [[ -z "$res" || "$res" == "unknown" || "$res" == "skipped" || "$cost" == "0" ]]; then
+            continue
         fi
+        results+=("$res")
+        real_reports+=("$r")
     done
+
+    # Nothing real to judge: every report failed or was skipped. The package
+    # stays out of the audited index (bench/audited-index.py applies the
+    # same rule), so discovery retries it next run instead of never.
+    if (( ${#results[@]} == 0 )); then
+        return 1
+    fi
 
     # Disagreement: different result values across models
     if (( ${#results[@]} >= 2 )); then
@@ -234,8 +229,9 @@ check_triggers() {
         fi
     done
 
-    # Shallow coverage
-    for r in "${reports[@]}"; do
+    # Shallow coverage. Real reports only: a failed audit reviewed nothing,
+    # and that is absence, not shallowness.
+    for r in "${real_reports[@]}"; do
         local fr
         fr=$(fm "$r" files_reviewed)
         if [[ -n "$fr" ]] && (( fr < 3 )); then

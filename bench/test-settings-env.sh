@@ -81,6 +81,9 @@ expect_flags "--packages icaclient,snapd" AUR_SLEUTH_PACKAGES=icaclient,snapd
 expect_flags "--escalate pcloud-drive" AUR_SLEUTH_ESCALATE=pcloud-drive
 expect_flags "--escalate-pending true" AUR_SLEUTH_ESCALATE_PENDING=true
 expect_flags "--run-budget 2.50" AUR_SLEUTH_RUN_BUDGET=2.50
+expect_flags "--free-models z-ai/glm-5.2:free,stealth/ox-alpha" \
+    AUR_SLEUTH_FREE_MODELS=z-ai/glm-5.2:free,stealth/ox-alpha
+expect_flags "--free-timeout 180" AUR_SLEUTH_FREE_TIMEOUT=180
 
 echo "== a budget that is not a number is code, so refuse it =="
 expect_refused 'AUR_SLEUTH_DAILY_BUDGET=1) or __import__("os").system("id") or (0'

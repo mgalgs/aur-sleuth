@@ -266,6 +266,8 @@ collect_audit_env_flags() {
         "AUR_SLEUTH_ESCALATE:--escalate:packages"
         "AUR_SLEUTH_ESCALATE_PENDING:--escalate-pending:bool"
         "AUR_SLEUTH_RUN_BUDGET:--run-budget:posnum"
+        "AUR_SLEUTH_FREE_MODELS:--free-models:models"
+        "AUR_SLEUTH_FREE_TIMEOUT:--free-timeout:posint"
     )
     local spec var flag kind value rest
 

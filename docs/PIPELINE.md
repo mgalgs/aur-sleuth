@@ -62,13 +62,21 @@ outranks the models everywhere: the page, and the benchmark's references
 ("disagreeing with one of these is being wrong"). Its `by` field names who
 decided, honestly.
 
-## The three seats
+## The three seats, and the free voices
 
 - **Audit**: cheap models, two of them so they can disagree; every package,
   every model.
 - **Judge**: reads reports when they disagree or agree on a warning.
 - **Escalation** (`REAUDIT_MODEL`): the expensive second opinion, one call
   per flagged package.
+- **Free voices** (`FREE_MODELS`, optional): extra audit opinions at $0,
+  best effort, under their own short timeout. Failure is soft everywhere: a
+  rate-limited or crashed audit — any report with no verdict and no spend —
+  is absence, not a ruling. It triggers no judge read, marks nothing
+  audited (discovery retries next run), and never reads as shallow
+  coverage. A free voice that answers is a real verdict like any other,
+  including the right to disagree — which triggers a paid judge read, so
+  the overrun trend is the number to watch when adding voices.
 
 Seats are set on the operations page's Models tab (a ConfigMap override; git
 holds the baseline). `bench/benchmark.sh` scores candidates against the
