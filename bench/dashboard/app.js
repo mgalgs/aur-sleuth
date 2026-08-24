@@ -272,9 +272,10 @@ function matchesPreset(pkg, preset) {
             return packageState(pkg) === preset;
         case 'overridden':
             // The judge disagreed with an audit that called it unsafe. Worth
-            // its own view: these are the false positives being caught.
+            // its own view: these are the false positives being caught. An
+            // advisory report is not a vote, so it cannot be overridden.
             return pkg.judge_majority === 'safe'
-                && (pkg.audits || []).some(a => a.result === 'unsafe' || a.result === 'inconclusive');
+                && (pkg.audits || []).some(a => !a.advisory && (a.result === 'unsafe' || a.result === 'inconclusive'));
         case 'unjudged':
             return !pkg.judges || pkg.judges.length === 0;
         default: return true;
@@ -346,6 +347,11 @@ function renderSquares(items, type, pkg) {
     return '<span class="sqs">' + items.map(item => {
         const value = (type === 'audit' ? item.result : item.verdict) || 'unknown';
         const model = shortModel(item.model || 'unknown');
+        // An advisory report is information, not a vote: one muted style
+        // whatever it said, so a free model's "unsafe" never reads as a flag.
+        if (item.advisory) {
+            return '<span class="sq sq-advisory" title="' + escapeAttr(model + ': ' + value + ' (advisory — informational only, not a vote)') + '"></span>';
+        }
         const label = item.reaudit ? 'second audit' : type;
         const cls = squareClass(value, type, pkg) + (item.reaudit ? ' sq-reaudit' : '');
         return '<span class="sq ' + cls + '" title="' + escapeAttr(model + ': ' + value + ' (' + label + ')' + squareNote(value, type, pkg)) + '"></span>';
@@ -365,8 +371,9 @@ function renderTable() {
     tbody.innerHTML = entries.map(([name, pkg]) => {
         const date = pkg.latest_date ? pkg.latest_date.split('T')[0] : '—';
         const safeId = escapeAttr(name);
-        const skippedAll = pkg.files_reviewed === 0 && pkg.audits
-            && pkg.audits.every(a => a.result === 'skipped' || a.result === 'inconclusive');
+        const realAudits = (pkg.audits || []).filter(a => !a.advisory);
+        const skippedAll = pkg.files_reviewed === 0 && realAudits.length > 0
+            && realAudits.every(a => a.result === 'skipped' || a.result === 'inconclusive');
         const sub = [pkg.pkgver, date.slice(5)].filter(Boolean).join(' · ');
         return '<tr class="pkg-row" data-pkg="' + safeId + '">'
             + '<td><span class="pkg-name">' + escapeHtml(name) + '</span><div class="pkg-sub">' + escapeHtml(sub) + '</div></td>'
@@ -425,7 +432,9 @@ function explainState(pkg) {
             + (pkg.human.since ? ' on ' + pkg.human.since : '')
             + (pkg.human.verdict === 'safe' ? ' and cleared it.' : ' and confirmed it.');
     }
-    const audits = pkg.audits || [];
+    // Advisory reports are information, not votes: the explanation counts
+    // only the audits the state rule counted.
+    const audits = (pkg.audits || []).filter(a => !a.advisory);
     const judges = pkg.judges || [];
     const unsafe = audits.filter(a => a.result === 'unsafe').length;
     const word = n => ['No', 'One', 'Two', 'Three', 'Four', 'Five'][n] || String(n);
@@ -484,6 +493,10 @@ function renderDetail(name, data) {
     const findings = new Map();
     for (const a of audits) {
         const fm = a.frontmatter || {};
+        // Advisory reports never put a file in the flagged list: "flagged
+        // by" is a claim about votes, and an advisory report has none. Its
+        // full text still folds out under Reports below.
+        if (fm.advisory === 'true') continue;
         const model = shortModel(fm.model || 'unknown');
         for (const v of fm.file_verdicts || []) {
             if (v.status !== 'unsafe') continue;
@@ -539,7 +552,9 @@ function renderDetail(name, data) {
                 // like this one; it is used when the two line up.
                 const summary = (pkg.audits || []).length === audits.length ? pkg.audits[i] : null;
                 const reaudit = summary ? !!summary.reaudit : !!fm.triggered_by;
-                const cls = squareClass(result, 'audit', pkg) + (reaudit ? ' sq-reaudit' : '');
+                const advisory = fm.advisory === 'true' || !!(summary && summary.advisory);
+                const cls = advisory ? 'sq-advisory'
+                    : squareClass(result, 'audit', pkg) + (reaudit ? ' sq-reaudit' : '');
                 const bodyId = 'report-' + name.replace(/[^a-zA-Z0-9-]/g, '_') + '-' + i;
                 const meta = [shortModel(fm.model || 'unknown'), String(fm.date || '').split('T')[0],
                     fmtNum(fm.files_reviewed || 0) + ' files', '$' + (parseFloat(fm.cost) || 0).toFixed(4),
@@ -555,7 +570,9 @@ function renderDetail(name, data) {
                 full += '<pre class="report-body">' + escapeHtml(a.body || '') + '</pre>';
                 return '<div class="report"><div class="line">'
                     + '<span class="sq ' + cls + '"></span>'
-                    + '<span class="verdict result-' + escapeAttr(result) + confirmedCls + '">' + escapeHtml(result) + '</span>'
+                    + (advisory
+                        ? '<span class="verdict dim">' + escapeHtml(result) + '</span><span class="meta">advisory — informational only, not a vote</span>'
+                        : '<span class="verdict result-' + escapeAttr(result) + confirmedCls + '">' + escapeHtml(result) + '</span>')
                     + (reaudit ? '<span class="meta">second audit</span>' : '')
                     + '<span class="meta">' + escapeHtml(meta) + '</span>'
                     + '<button type="button" class="link-btn" data-toggle="' + escapeAttr(bodyId) + '">Full report</button>'
