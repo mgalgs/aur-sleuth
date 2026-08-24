@@ -1,0 +1,36 @@
+{
+  "package": "shorkfetch",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD is a standard AUR package that downloads a tagged tarball from the project's own GitHub repository, builds with make, and installs the binary. The install.sh file flagged by qwen3-235b is upstream source code included in the tarball, NOT executed during makepkg. The PKGBUILD's build() and package() functions use the Makefile, not install.sh. Per the threat model, development tooling and alternative install scripts in the source tree are not a concern unless referenced by PKGBUILD functions. The openrouter/free model correctly identified this distinction.",
+  "disagreement_analysis": "qwen3-235b flagged install.sh as unsafe because it downloads from GitHub and runs 'sudo make install' without checksum verification. However, this is a false positive: install.sh is an upstream-provided alternative installation script that is NEVER executed during the AUR build process. The PKGBUILD uses the Makefile directly. The model confused upstream application behavior with AUR packaging injection. openrouter/free correctly reviewed install.sh and recognized it as part of standard upstream workflow, not executed by makepkg.",
+  "coverage_issues": [
+    "deepseek/deepseek-v4-flash: Tool error - LLM response content was empty/missing, resulting in inconclusive verdict",
+    "thinkingmachines/inkling:free: Tool error - 403 API error (model only available on agentic harnesses)",
+    "z-ai/glm-5.2:free: Tool error - 429 rate limit error from upstream provider"
+  ],
+  "false_positives": [
+    "qwen3-235b flagged install.sh as unsafe: This is upstream source code providing an alternative installation method for users installing directly from GitHub. It is NOT executed during makepkg - the PKGBUILD uses the Makefile. Flagging upstream development tooling that isn't referenced by PKGBUILD functions violates the threat model boundary."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models need clearer guidance that files inside the source tarball (upstream code) are only in-scope if they are executed by PKGBUILD functions (build, package, prepare, check) or .install hooks. Alternative install scripts, CI configs, and dev tooling in the source tree should be deprioritized or explicitly excluded.",
+    "The audit tool should filter file selection to prioritize: PKGBUILD, .install hooks, and files actually referenced by packaging functions. Files like install.sh that exist in the source but aren't called by makepkg should be marked as out-of-scope rather than audited for supply-chain attacks.",
+    "Tool errors (403, 429, empty responses) should trigger automatic retry or fallback to another model rather than producing inconclusive verdicts that skew the disagreement detection."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 19979,
+    "completion_tokens": 1439,
+    "cost": 0.0082352
+  },
+  "audits_judged": [
+    "20260824-080350-qwen-qwen3-235b-a22b-2507.md",
+    "20260824-080229-deepseek-deepseek-v4-flash.md",
+    "20260824-042630-thinkingmachines-inkling:free.md",
+    "20260824-042641-z-ai-glm-5.2:free.md",
+    "20260824-042957-openrouter-free.md"
+  ]
+}
