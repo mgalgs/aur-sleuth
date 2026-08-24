@@ -3035,18 +3035,30 @@ def sleuth_main() -> int:
         report_file = tmpdir_parent / f"aur-sleuth-report-{package_name}.txt"
 
     llm_client = get_openai_client()
-    with Report(report_file) as report:
-        with TuiCls(report) as tui:
-            if args.pkgdir:
-                pkgdir = Path(args.pkgdir).resolve()
-            else:
-                pkgdir = download_package_to_tmpdir(
-                    tui, Path(tmpdir_parent), package_name, args.clone_url
-                )
+    try:
+        with Report(report_file) as report:
+            with TuiCls(report) as tui:
+                if args.pkgdir:
+                    pkgdir = Path(args.pkgdir).resolve()
+                else:
+                    pkgdir = download_package_to_tmpdir(
+                        tui, Path(tmpdir_parent), package_name, args.clone_url
+                    )
 
-            retval = run_aur_sleuth_audit(
-                tui, report, package_name, pkgdir, llm_client
-            )
+                retval = run_aur_sleuth_audit(
+                    tui, report, package_name, pkgdir, llm_client
+                )
+    except BaseException:
+        # A crash before any model answered -- a clone that failed because
+        # the package is gone, a PKGBUILD that would not parse -- leaves a
+        # report holding nothing but this program's own lines, and no
+        # frontmatter, since the audit never reached the code that writes
+        # one. The withdrawal rule below applies here too, for the same
+        # reason: absence is the honest artifact. The traceback still goes
+        # out with the exit status.
+        if llm_client.ok_calls == 0:
+            report_file.unlink(missing_ok=True)
+        raise
 
     if not args.pkgdir:
         # Clean up temporary cloned directory
