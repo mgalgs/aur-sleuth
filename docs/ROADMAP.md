@@ -33,6 +33,32 @@ the benchmark as the one experiment runner.
    same machinery, no second pipeline, experiments still never write the
    reports branch.
 
+## SleuthBench: the trust gate (queued 2026-08-23)
+
+One named, comparable number per model: **sleuthbench, 0 to 1.0**, computed
+by the existing benchmark machinery over a FIXED, versioned evaluation set
+(sleuthbench-v1: every hand-settled verdict, the synthetic fixtures, and a
+pinned stratified sample of settled packages heavy on hard negatives).
+Comparable means the set is the same for every model and every run of the
+same version; the set re-pins only with a version bump.
+
+- Score = effective agreement over the set (non-answers count against),
+  with hard gates that zero it: any miss or false flag against a
+  hand-settled verdict, or a failed synthetic, is not a low score — it is
+  a fail.
+- **Trust rule**: a model's verdicts count only once it holds a passing
+  sleuthbench (threshold configurable, e.g. 0.9). Until then it is
+  advisory: its reports may ADD scrutiny (trigger a judge look) but never
+  conclude — never counted toward "confirmed", never able to flip an
+  audit majority toward clean. This is the answer to two bad models
+  agreeing, incorrectly: unqualified agreement can only summon the judge,
+  not settle anything.
+- Enforcement points: the pipeline's state and trigger math (the advisory
+  tier above), and the UI — seating a model without a passing sleuthbench
+  warns and links the one-tap benchmark that would qualify it.
+- Prerequisite: judge-role synthetics (below), or judge candidates can
+  only be scored on false-flag resistance.
+
 ## Operations page
 
 - Live updates (SSE or a websocket) instead of the 10s poll. Deferred
