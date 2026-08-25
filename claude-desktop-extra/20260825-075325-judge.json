@@ -1,0 +1,36 @@
+{
+  "package": "claude-desktop-extra",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD and claude-desktop-extra.install script were successfully reviewed by multiple models and found to contain no malicious code. The PKGBUILD has no executable code in global scope or pkgver(), uses pinned checksums for upstream tarballs, and follows standard AUR packaging practices. The install script performs expected operations (SUID sandbox setup, AppArmor profile, cache refresh) with no suspicious behavior. The 'inconclusive' results are due to tool errors (HTTP 413, empty LLM responses), not security findings.",
+  "disagreement_analysis": "No substantive security disagreement exists. All successful file reviews found the AUR packaging safe. The inconclusive verdicts stem from API/tool failures (HTTP 413 errors, empty LLM responses), not from detected security issues.",
+  "coverage_issues": [
+    "Report 1 (qwen) reviewed 10 JavaScript files from the upstream tarball (src/claude-desktop/resources/ion-dist/...), which are upstream application code, not AUR packaging - this is out of scope for the audit tool's threat model",
+    "Report 2 (deepseek) failed to complete PKGBUILD review due to empty LLM response error",
+    "Report 3 (openrouter) failed on initial PKGBUILD audit and is marked advisory-only",
+    "None of the reports explicitly confirmed whether additional files (patches, .SRCINFO, etc.) exist in the AUR repo"
+  ],
+  "false_positives": [],
+  "false_negatives": [
+    "Report 1 spent significant effort reviewing upstream application JavaScript files (ion-dist runtime modules), which are not part of the AUR packaging and cannot be injected by the AUR maintainer - this represents a misallocation of audit resources away from actual AUR packaging files"
+  ],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "The audit tool should distinguish between AUR packaging files (PKGBUILD, .install, patches in the git repo) and upstream application files (contents of downloaded tarballs). Only the former can be injected by the AUR maintainer.",
+    "When upstream sources are pinned with checksums (as in this package), the contents of those tarballs are verified and cannot be swapped without detection - reviewing them is out of scope unless checksums are missing or marked SKIP.",
+    "Tool errors (HTTP 413, empty LLM responses) should trigger automatic retries with smaller file chunks or alternative error handling, rather than marking the entire audit as inconclusive.",
+    "The file selection logic should prioritize AUR packaging files over upstream application code, especially for packages that ship prebuilt binaries where the upstream code is not modifiable by the AUR maintainer."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 10187,
+    "completion_tokens": 2132,
+    "cost": 0.0059888
+  },
+  "audits_judged": [
+    "20260825-022744-qwen-qwen3-235b-a22b-2507.md",
+    "20260825-022539-deepseek-deepseek-v4-flash.md",
+    "20260825-030642-openrouter-free.md"
+  ]
+}
