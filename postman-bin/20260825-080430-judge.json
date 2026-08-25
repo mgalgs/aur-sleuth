@@ -1,0 +1,34 @@
+{
+  "package": "postman-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "All three models correctly identified the PKGBUILD as safe. The package downloads prebuilt binaries from the official Postman CDN (dl.pstmn.io) with pinned versions and SHA256 checksums. The PKGBUILD contains no dangerous code in global scope, no dynamic fetching, and standard binary packaging operations. The 'inconclusive' results across all models are due to HTTP 413 API errors (payload too large) when reviewing minified application JavaScript files, not security concerns. These application files are upstream Postman code, not AUR-injected code. The critical packaging files (PKGBUILD, postman.desktop) were successfully reviewed and found safe by all models.",
+  "disagreement_analysis": "No substantive disagreement on security. All models agreed the PKGBUILD and reviewed application files are safe. The 'inconclusive' verdicts stem from tool errors (HTTP 413) when processing large minified JS files, not from security findings. The models reviewed different subsets of application JS files but all found legitimate Postman functionality.",
+  "coverage_issues": [
+    "HTTP 413 errors prevented review of several large minified JS files (AgentWorker.js, execution-worker.js, _thread.js, desktop-offline.js) across models",
+    "Models spent significant effort reviewing upstream application code rather than focusing on AUR packaging artifacts",
+    "No .install hooks or post-install scripts were present to review"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "For binary packages with verified checksums, prioritize PKGBUILD and packaging scripts over extracted application code",
+    "HTTP 413 errors should trigger graceful degradation (skip file or use chunked processing) rather than marking as inconclusive",
+    "Distinguish between 'inconclusive due to tool error' and 'inconclusive due to security ambiguity' in verdict reporting",
+    "Application code review for binary packages should be deprioritized when upstream source is verified with checksums - focus on what the AUR maintainer controls",
+    "Large minified files should be handled with size-aware processing or excluded from deep review for binary packages"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 19117,
+    "completion_tokens": 1582,
+    "cost": 0.008142400000000001
+  },
+  "audits_judged": [
+    "20260825-031308-qwen-qwen3-235b-a22b-2507.md",
+    "20260825-031419-deepseek-deepseek-v4-flash.md",
+    "20260825-033039-openrouter-free.md"
+  ]
+}
