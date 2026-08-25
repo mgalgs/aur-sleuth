@@ -1,0 +1,32 @@
+{
+  "package": "opencode-desktop",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD is a standard, clean AUR package that clones the upstream GitHub repository at a pinned tag, applies a legitimate patch to add the pacman target to electron-builder, and builds an Electron app. No malicious code is injected into the AUR packaging. The disagreement stems from qwen3-235b-a22b-2507 incorrectly flagging src/opencode-desktop/github/index.ts as unsafe. This file is part of the upstream source code (a GitHub Actions workflow for the upstream project's CI), not an AUR injection. Per the threat model, upstream application behavior is the vendor's product, not an injection by the AUR maintainer. The deepseek model correctly identified this as legitimate upstream functionality.",
+  "disagreement_analysis": "qwen3-235b-a22b-2507 flagged src/opencode-desktop/github/index.ts as unsafe because it sends data to an external AI service (api.opencode.ai) and spawns a local opencode server. However, this is upstream application behavior (a GitHub Actions workflow that runs in the upstream project's CI environment), not code injected by the AUR maintainer. The AUR PKGBUILD simply clones the upstream repo and builds the Electron app; it does not execute this GitHub Actions workflow during makepkg. The deepseek model correctly recognized this distinction and marked the file as safe.",
+  "coverage_issues": [
+    "openrouter/free report ended in a tool error (parsing failure on PKGBUILD) and is advisory-only, providing no verdict signal"
+  ],
+  "false_positives": [
+    "qwen3-235b-a22b-2507's finding on src/opencode-desktop/github/index.ts: This is upstream application behavior (a GitHub Actions workflow for the upstream project's CI), not an AUR injection. The threat model explicitly excludes upstream application behavior from the verdict."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models need stronger guidance on distinguishing upstream application behavior from AUR injection. The threat model explicitly states that upstream behavior is not an injection, but models may still flag it if they see patterns like sending data to external services. The audit prompt should emphasize that files in the upstream source tree that are not executed during makepkg or installed as part of the package are out of scope.",
+    "File selection prioritization should deprioritize upstream infrastructure-as-code files (SST/Pulumi configs, cloud deployment configs) that are not executed during the AUR build process. Both models spent significant tokens reviewing files like infra/app.ts, infra/lake.ts, infra/secret.ts, which are deployment configs for the upstream project's cloud infrastructure and have no bearing on AUR package safety.",
+    "GitHub Actions workflow files (.github/workflows/* or similar) in the upstream source tree should be recognized as CI/CD tooling that does not execute during makepkg, unless the PKGBUILD explicitly references them. Models should not flag these as supply-chain risks unless the AUR maintainer modified them to inject malicious behavior."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 13766,
+    "completion_tokens": 1804,
+    "cost": 0.00671424
+  },
+  "audits_judged": [
+    "20260825-113110-qwen-qwen3-235b-a22b-2507.md",
+    "20260825-114016-deepseek-deepseek-v4-flash.md",
+    "20260825-033026-openrouter-free.md"
+  ]
+}
