@@ -115,10 +115,10 @@ out="$(AUR_SLEUTH_DATA_DIR="$data" OPENAI_API_KEY="unused-no-completion-is-made"
         --packages-file /dev/null \
         --skip-dashboard --no-push 2>&1 || true)"
 
-if grep -q '=== Re-audit Phase ===' <<< "$out"; then
-    ok "the re-audit phase ran past the exhausted budget"
+if grep -q '=== Escalation Phase ===' <<< "$out"; then
+    ok "the escalation phase ran past the exhausted budget"
 else
-    bad "the re-audit phase was gated on the spent budget"
+    bad "the escalation phase was gated on the spent budget"
 fi
 # The fake file's future mtime makes both phase markers count it, so the
 # exact amount is an artifact of the trick. The contract under test is that

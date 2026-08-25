@@ -365,6 +365,11 @@ Weigh the reports; do not count them:
 - Two reports from the same model are one opinion, not corroboration. A
   "served_models" line names who actually answered behind a router id; use
   it when deciding what counts as the same model.
+- A report whose frontmatter carries "triggered_by" is an escalation audit:
+  a stronger model, commissioned after an earlier ruling to settle exactly
+  the question in front of you, reading the same files. Weigh its reasoning
+  against the cheaper reports' on the merits; it is the evidence this
+  ruling was convened to consider.
 - A report that ended in a tool error (a crash, a timeout, a symlink loop)
   carries no verdict signal. Treat it as missing and note the failure under
   coverage_issues.

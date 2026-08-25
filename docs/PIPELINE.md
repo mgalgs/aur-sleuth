@@ -20,13 +20,18 @@ drives everything described here without a terminal.
 3. **Judge.** For every package whose reports disagree, agree on a warning,
    erred, or ran shallow, the judge model reads the reports and rules. A
    package already judged on the same report set is skipped.
-4. **Escalation** (the re-audit phase). Every package whose judge ruling
-   asked for a second look gets a fresh audit by the escalation model; the
-   enlarged report set gets a fresh judge ruling on the next pass. An
-   escalation run (`--escalate a,b` or `--escalate-pending true`) does this
-   directly: `--escalate-pending` sweeps everything currently "worth a
-   closer look", using the same state rule the public page uses
-   (`bench/pending-escalations.py`).
+4. **Escalation**, in rounds. Every package still "worth a closer look"
+   after the judge phase gets a fresh audit by an escalation model that has
+   not yet read it (`REAUDIT_MODEL` first, then `TIEBREAK_MODEL`), followed
+   at once by a fresh judge ruling over the enlarged report set. A package
+   the ruling settles leaves the list; one still flagged gets a second
+   round with the other model; after two escalations it is "disputed" and
+   the pipeline stops spending on it. The worklist and the model choice are
+   `bench/pending-escalations.py`, on the same state rule the public page
+   uses. An escalation run (`--escalate a,b` or `--escalate-pending true`)
+   does the same directly: the sweep runs the rounds, named packages get
+   one round whatever their state. (Before the rounds, a re-audit was one
+   audit whose ruling came a run later — if a run with budget ever came.)
 5. **Dashboard.** `bench/generate-dashboard.py` rebuilds the page data from
    the branch: per-package state, evidence, costs, the funding numbers.
 6. **Scout.** `bench/scout.py` compares the cached OpenRouter catalog
@@ -75,8 +80,9 @@ decided, honestly.
 - **Audit**: cheap models, two of them so they can disagree; every package,
   every model.
 - **Judge**: reads reports when they disagree or agree on a warning.
-- **Escalation** (`REAUDIT_MODEL`): the expensive second opinion, one call
-  per flagged package.
+- **Escalation** (`REAUDIT_MODEL`, then `TIEBREAK_MODEL`): the expensive
+  second opinion, at most two per flagged package, each from a model that
+  has not read it yet.
 - **Free voices** (`FREE_MODELS`, optional): extra audit opinions at $0,
   best effort, under their own short timeout. Failure is soft everywhere: a
   rate-limited or crashed audit — any report with no verdict and no spend —

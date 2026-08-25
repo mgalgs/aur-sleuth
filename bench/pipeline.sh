@@ -8,6 +8,7 @@
 #                     [--skip-dashboard] [--no-push] [--packages-file FILE]
 #                     [--audit-timeout SECONDS] [--audit-models LIST]
 #                     [--judge-model MODEL] [--reaudit-model MODEL]
+#                     [--tiebreak-model MODEL]
 #                     [--audit-budget-share FRACTION]
 #                     [--updated-count N] [--seed-count N]
 #                     [--packages LIST] [--escalate LIST]
@@ -61,6 +62,11 @@ UPDATED_SHARE=0.8
 AUDIT_MODELS="qwen/qwen3-235b-a22b-2507,deepseek/deepseek-v4-flash"
 JUDGE_MODEL="deepseek/deepseek-r1"
 REAUDIT_MODEL="anthropic/claude-sonnet-4.6"
+# The second escalation model. An escalation is a fresh opinion, so it goes
+# to a model that has not read the package: REAUDIT_MODEL first, this one
+# when REAUDIT_MODEL already has. A different vendor from every other seat,
+# priced like the escalation seat.
+TIEBREAK_MODEL="openai/gpt-5.4"
 # Opportunistic free voices: extra audit models run beside the paid seats,
 # best effort. Their failures are soft everywhere -- no judge trigger, no
 # audited-index mark, no cost -- so a rate-limited free tier contributes
@@ -84,9 +90,11 @@ SEED_COUNT=0
 # A run over named packages only (comma-separated). Skips discovery, and
 # audits them even at an already-audited version: naming a package is asking.
 PACKAGES=""
-# Escalation: a fresh audit by REAUDIT_MODEL and then a forced judge ruling
-# over the enlarged report set. The operator's closer look at packages the
-# judge would otherwise never revisit. --escalate names packages;
+# Escalation: a fresh audit by a model that has not read the package
+# (REAUDIT_MODEL, else TIEBREAK_MODEL) and then a forced judge ruling over
+# the enlarged report set. The scheduled run does this itself, in rounds,
+# for everything worth a closer look (see run_escalation_rounds); these
+# flags are the operator's own run of it. --escalate names packages;
 # --escalate-pending true sweeps everything currently worth a closer look
 # (the page's own state rule, via bench/pending-escalations.py).
 ESCALATE=""
@@ -128,6 +136,7 @@ while [[ $# -gt 0 ]]; do
         --audit-models) AUDIT_MODELS="$2"; shift 2 ;;
         --judge-model) JUDGE_MODEL="$2"; shift 2 ;;
         --reaudit-model) REAUDIT_MODEL="$2"; shift 2 ;;
+        --tiebreak-model) TIEBREAK_MODEL="$2"; shift 2 ;;
         --packages-file) PACKAGES_FILE="$2"; shift 2 ;;
         --updated-count) UPDATED_COUNT="$2"; shift 2 ;;
         --seed-count) SEED_COUNT="$2"; shift 2 ;;
@@ -224,6 +233,7 @@ if [[ "$ADVISORY" != "true" && -z "$PACKAGES" && -z "$PACKAGES_FILE" \
       && -z "$ESCALATE" && "$ESCALATE_PENDING" != "true" && -z "$RUN_BUDGET" \
       && "$UPDATED_COUNT" -eq 0 && "$SEED_COUNT" -eq 0 ]]; then
 PIPE_AUDIT_MODELS="$AUDIT_MODELS" PIPE_JUDGE_MODEL="$JUDGE_MODEL" PIPE_REAUDIT_MODEL="$REAUDIT_MODEL" \
+PIPE_TIEBREAK_MODEL="$TIEBREAK_MODEL" \
 PIPE_DAILY_BUDGET="$DAILY_BUDGET" PIPE_JOBS="$JOBS" PIPE_OUT="$PIPELINE_DIR/effective.json" \
 python3 - <<'PY'
 import datetime, json, os
@@ -232,6 +242,7 @@ out = {
     "AUR_SLEUTH_AUDIT_MODELS": e["PIPE_AUDIT_MODELS"],
     "AUR_SLEUTH_JUDGE_MODEL": e["PIPE_JUDGE_MODEL"],
     "AUR_SLEUTH_REAUDIT_MODEL": e["PIPE_REAUDIT_MODEL"],
+    "AUR_SLEUTH_TIEBREAK_MODEL": e["PIPE_TIEBREAK_MODEL"],
     "AUR_SLEUTH_DAILY_BUDGET": e["PIPE_DAILY_BUDGET"],
     "AUR_SLEUTH_JOBS": e["PIPE_JOBS"],
     "written": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -632,7 +643,7 @@ run_scout() {
     python3 bench/scout.py --catalog "$DATA_DIR/models-catalog.json" \
         --out "$DATA_DIR/bench/scout.json" --bench-dir "$DATA_DIR/bench" \
         --data-dir "$DATA_DIR" \
-        --seats "audit=$AUDIT_MODELS;judge=$JUDGE_MODEL;reaudit=$REAUDIT_MODEL" 2>&1 \
+        --seats "audit=$AUDIT_MODELS;judge=$JUDGE_MODEL;reaudit=$REAUDIT_MODEL,$TIEBREAK_MODEL" 2>&1 \
         || log "WARNING: the scout failed; the page keeps the old shortlist"
 }
 
@@ -676,6 +687,63 @@ run_advisory_sweep() {
         || log "WARNING: the advisory sweep failed; the run that carried it is already complete"
 }
 
+# --- Escalation: one package, one fresh opinion, one fresh ruling ----------
+# bench/judge.sh --escalate audits the package with the named model and then
+# forces a judge ruling over every report there is. The audit's own cost is
+# in its report, which the judge-cost sum below never sees; it is recorded
+# here. (It was not, before: Sonnet's re-audits never reached the ledger.)
+# A present report is this run's -- aur-sleuth truncates the file on open
+# and withdraws it when no model answered, and judge.sh removes a timed-out
+# one -- so its cost is never a stale one.
+escalate_one() {
+    local pkg="$1" model="$2"
+    bash bench/judge.sh --package "$pkg" --escalate \
+        --audit-model "$model" --judge-model "$JUDGE_MODEL" \
+        --audit-timeout "$AUDIT_TIMEOUT" 2>&1
+    local report="$DATA_DIR/bulk-reports/${model//\//-}/aur-sleuth-report-${pkg}.txt"
+    if [[ -f "$report" ]]; then
+        record_cost "$(report_cost "$report")"
+    fi
+}
+
+# --- Escalation rounds: settle what the judge phase left flagged ----------
+# Each round asks bench/pending-escalations.py which packages are "look" by
+# the page's own state rule, and which escalation model each has not yet
+# heard from; then each gets escalate_one. A package the fresh ruling
+# settles leaves the list; one that is still "look" gets the next round with
+# the other model; after ESCALATION_CAP escalations (the state rule's own
+# constant) it is "disputed", terminal, and never listed again -- so the
+# rounds are bounded by the cap, not by this loop. Named packages get one
+# round only: a person asked for one more look, not a campaign.
+run_escalation_rounds() {
+    local named="${1:-}"
+    local rounds=2
+    [[ -n "$named" ]] && rounds=1
+    local pick_flags=(--models "$REAUDIT_MODEL,$TIEBREAK_MODEL")
+    [[ -n "$named" ]] && pick_flags+=(--packages "$named")
+    local round line pkg model
+    local notes="$PIPELINE_DIR/.escalation-notes"
+    for (( round = 1; round <= rounds; round++ )); do
+        local work=()
+        while IFS= read -r line; do
+            [[ -n "$line" ]] && work+=("$line")
+        done < <(python3 bench/pending-escalations.py "${pick_flags[@]}" 2>"$notes")
+        while IFS= read -r line; do log "  $line"; done < "$notes"
+        rm -f "$notes"
+        if [[ ${#work[@]} -eq 0 ]]; then
+            log "Round $round: nothing needs a second look."
+            break
+        fi
+        log "Round $round: ${#work[@]} package(s)"
+        for line in "${work[@]}"; do
+            pkg="${line%%$'\t'*}"
+            model="${line#*$'\t'}"
+            log "--- Escalating $pkg with $model ---"
+            escalate_one "$pkg" "$model"
+        done
+    done
+}
+
 # --- Sum judge costs for reports modified after a given timestamp ---
 sum_judge_costs_since() {
     local since="$1"
@@ -700,7 +768,7 @@ main() {
     if [[ "$SEED_TOP" -gt 0 ]]; then
         log "Candidates: updated + top $SEED_TOP by popularity, interleaved at updated-share=$UPDATED_SHARE"
     fi
-    log "Models: ${MODEL_LIST[*]} | Judge: $JUDGE_MODEL | Re-audit: $REAUDIT_MODEL"
+    log "Models: ${MODEL_LIST[*]} | Judge: $JUDGE_MODEL | Escalation: $REAUDIT_MODEL, then $TIEBREAK_MODEL"
     if [[ ${#FREE_MODEL_LIST[@]} -gt 0 ]]; then
         log "Free voices: ${FREE_MODEL_LIST[*]} (best effort, ${FREE_TIMEOUT}s deadline, failures are soft)"
     fi
@@ -712,37 +780,17 @@ main() {
     fi
     log "Daily spend so far: \$$(get_daily_spent)"
 
-    # Escalation is its own run: no discovery, no audit loop. For each named
-    # package, a fresh audit by the escalation model, then a forced judge
-    # ruling over the enlarged report set. It is judge work, so it has top
-    # priority in the budget: an explicit escalation runs even on a spent day,
-    # and the overrun rules above apply.
+    # Escalation is its own run: no discovery, no audit loop. The same rounds
+    # the scheduled run ends with (run_escalation_rounds), over the named
+    # packages or everything worth a closer look. It is judge work, so it has
+    # top priority in the budget: an explicit escalation runs even on a spent
+    # day, and the overrun rules above apply.
     if [[ -n "$ESCALATE" || "$ESCALATE_PENDING" == "true" ]]; then
         log ""
         log "=== Escalation ==="
         local esc_marker="$PIPELINE_DIR/.escalate-marker"
         touch "$esc_marker"
-        local esc_pkgs=()
-        local pkg
-        if [[ -n "$ESCALATE" ]]; then
-            IFS=',' read -ra esc_pkgs <<< "$ESCALATE"
-        else
-            # The sweep: everything currently worth a closer look, by the
-            # page's own state rule.
-            while IFS= read -r pkg; do
-                esc_pkgs+=("$pkg")
-            done < <(python3 bench/pending-escalations.py)
-            log "Worth a closer look: ${#esc_pkgs[@]} package(s)"
-            if [[ ${#esc_pkgs[@]} -eq 0 ]]; then
-                log "Nothing needs a second look."
-                return 0
-            fi
-        fi
-        for pkg in "${esc_pkgs[@]}"; do
-            bash bench/judge.sh --package "$pkg" --escalate \
-                --audit-model "$REAUDIT_MODEL" --judge-model "$JUDGE_MODEL" \
-                --audit-timeout "$AUDIT_TIMEOUT" 2>&1
-        done
+        run_escalation_rounds "$ESCALATE"
         local esc_cost
         esc_cost=$(sum_judge_costs_since "$esc_marker")
         if python3 -c "import sys; sys.exit(0 if float('$esc_cost') > 0 else 1)" 2>/dev/null; then
@@ -906,25 +954,28 @@ main() {
         record_cost "$judge_cost"
         log "Judge phase cost: \$$judge_cost"
 
-        # Step 6: Re-audit flagged packages. Same rule as the judge: no
-        # budget gate. This phase is what settles a flag, so skipping it is
-        # the most expensive saving there is -- one run did exactly that and
-        # left every flagged package in limbo for a day.
+        # Step 6: Escalate what the judge left flagged, in rounds, until each
+        # package settles or hits the cap. Same rule as the judge: no budget
+        # gate. This phase is what settles a flag, so skipping it is the most
+        # expensive saving there is -- one run did exactly that and left every
+        # flagged package in limbo for a day. Before the rounds, a re-audit
+        # was one audit with no ruling to weigh it: the ruling came a run
+        # later, if a run with budget ever came, and pcloud-drive waited on
+        # one that never did.
         log ""
-        log "=== Re-audit Phase ==="
+        log "=== Escalation Phase ==="
         local reaudit_marker="$PIPELINE_DIR/.reaudit-start-marker"
         touch "$reaudit_marker"
 
-        bash bench/judge.sh --re-audit-pending --audit-model "$REAUDIT_MODEL" \
-            --audit-timeout "$AUDIT_TIMEOUT" 2>&1
+        run_escalation_rounds
 
-        # Re-audit costs are in audit reports, not judge reports —
-        # track via judge report updates (re-audit metadata gets added)
+        # The forced rulings' cost; each escalation audit's own cost is
+        # recorded by escalate_one as it lands.
         local reaudit_cost
         reaudit_cost=$(sum_judge_costs_since "$reaudit_marker")
         if python3 -c "import sys; sys.exit(0 if float('$reaudit_cost') > 0 else 1)" 2>/dev/null; then
             record_cost "$reaudit_cost"
-            log "Re-audit phase cost: \$$reaudit_cost"
+            log "Escalation phase judge cost: \$$reaudit_cost"
         fi
 
         push_reports

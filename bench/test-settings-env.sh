@@ -68,6 +68,7 @@ expect_flags "--daily-budget 0.50" AUR_SLEUTH_DAILY_BUDGET=0.50
 expect_flags "--jobs 4" AUR_SLEUTH_JOBS=4
 expect_flags "--reaudit-model anthropic/claude-sonnet-4.6" \
     AUR_SLEUTH_REAUDIT_MODEL=anthropic/claude-sonnet-4.6
+expect_flags "--tiebreak-model openai/gpt-5.4" AUR_SLEUTH_TIEBREAK_MODEL=openai/gpt-5.4
 expect_flags "--audit-models qwen/qwen3-235b-a22b-2507,deepseek/deepseek-v4-flash" \
     AUR_SLEUTH_AUDIT_MODELS=qwen/qwen3-235b-a22b-2507,deepseek/deepseek-v4-flash
 expect_flags "--daily-budget 1.00 --jobs 2" \
@@ -103,6 +104,7 @@ expect_refused "AUR_SLEUTH_MIN_VOTES=lots"
 expect_refused 'AUR_SLEUTH_JUDGE_MODEL=a b'
 # shellcheck disable=SC2016  # the literal text is the point
 expect_refused 'AUR_SLEUTH_JUDGE_MODEL=$(id)'
+expect_refused 'AUR_SLEUTH_TIEBREAK_MODEL=a b'
 expect_refused "AUR_SLEUTH_AUDIT_MODELS=a,,b"
 expect_refused "AUR_SLEUTH_AUDIT_MODELS=a,"
 expect_refused "AUR_SLEUTH_UPDATED_SHARE=abc"
