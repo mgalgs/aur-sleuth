@@ -508,6 +508,29 @@ print(d.get('verdict','error'), d.get('confidence','?'), d.get('re_audit',False)
     fi
 }
 
+# --- What an escalation audit's report records as its trigger ---
+# The latest ruling on the branch when there is one, and the bare word
+# otherwise: an escalation target need not have been judged before, because
+# a package is "look" on its audit reports alone -- flagged by a model and
+# never ruled on -- and the escalation rounds pick it up in exactly that
+# state. grep matching no ruling exits 1, and under this file's pipefail
+# that ended the whole run here, before the audit ever started.
+#
+# Either way the report must say it is an escalation audit: triggered_by is
+# read as a flag and never as a path (generate-dashboard.py sets it to
+# "judge" itself for a re-audit it recognises), and it is what counts this
+# escalation against the cap. Left empty, the package would be escalated
+# forever, and its second opinion would count as a first.
+escalation_marker() {
+    local pkg="$1" latest
+    latest=$(git show "${REPORTS_BRANCH}:${pkg}/" 2>/dev/null | grep 'judge\.json$' | sort | tail -1) || true
+    if [[ -n "$latest" ]]; then
+        printf '%s/%s\n' "$pkg" "$latest"
+    else
+        printf 'escalation\n'
+    fi
+}
+
 # --- Run re-audit and update judge report with results ---
 do_reaudit() {
     local pkg="$1"
@@ -518,15 +541,15 @@ do_reaudit() {
     local report_dir="${REPORTS_DIR}/${audit_model_slug}"
     mkdir -p "$report_dir"
 
-    local latest_judge
-    latest_judge=$(git show "${REPORTS_BRANCH}:${pkg}/" 2>/dev/null | grep 'judge\.json$' | sort | tail -1)
+    local triggered_by
+    triggered_by=$(escalation_marker "$pkg")
 
     local re_report="${report_dir}/aur-sleuth-report-${pkg}.txt"
     local rc=0
     AUDIT_FAILURE_FATAL=true AUR_SLEUTH_ASCII_ICONS=1 \
         OPENAI_MODEL="$AUDIT_MODEL" \
         AUR_SLEUTH_REPORT_DIR="$report_dir" \
-        AUR_SLEUTH_TRIGGERED_BY="${pkg}/${latest_judge}" \
+        AUR_SLEUTH_TRIGGERED_BY="$triggered_by" \
         timeout --kill-after=30s "$AUDIT_TIMEOUT" \
         ./aur-sleuth --output plain "$pkg" 2>&1 || rc=$?
 
