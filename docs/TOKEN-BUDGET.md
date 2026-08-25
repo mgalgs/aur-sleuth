@@ -142,10 +142,21 @@ canonical expression. Two options exist and neither was taken here:
   and its failure isolation, and makes each turn carry the previous turns'
   history — quadratic unless the history is pruned.
 
-**The review ceiling: the largest lever with a knob already attached.** Since
-production takes the full quota, cutting `NUM_FILES_TO_REVIEW` from 10 to N
-cuts the additional stage close to linearly — roughly 7% of the total per slot
-given up. It is a setting, reversible, and now actually honoured from the
+**Removing the upstream-tree review entirely: −75%, from the stage table.**
+If the threat model narrows to the maintainer-controlled set — the files in
+the AUR git repository, with everything `makepkg` fetched out of scope by
+decision — then the additional stage (71.0%) and the selection call that
+feeds it (4.0%) both go. The gate and the required files are untouched. That
+is the single largest number on this page, and it comes from the stage table,
+not from any sweep. What remains is the gate plus the required reviews: 24.9%
+of today's spend, of which roughly half is the repeated instruction. So the
+prompt lever survives the scope change and becomes the dominant one.
+
+**The review ceiling: a knob already attached, worth less than it looks.**
+Cutting `NUM_FILES_TO_REVIEW` from 10 to N trims the additional stage, but
+not linearly, and not by the stage's full share — the model may not have been
+spending the whole quota, and every call that remains still pays the fixed
+overhead. It is a setting, reversible, and now actually honoured from the
 environment and the config file.
 
 What stopped it being taken here is evidence, not arithmetic. Every settled
@@ -157,13 +168,44 @@ detection.
 
 `bench/synthetics/malicious-deep-payload` was written to close that gap: a
 clean PKGBUILD whose `prepare()` invokes a generator holding the payload, so
-the fixture fails when the budget stops reaching it. Against
-qwen/qwen3-235b-a22b-2507 it is caught 3 times out of 3 at every ceiling from
-10 down to 3, while the audit's prompt falls only from 20,282 to 14,527
-tokens — a 28% cut for a 70% smaller budget, because the per-call overhead
-does not shrink with the quota. One fixture on one model is a data point, not
-a licence; it is the start of the evidence a ceiling change needs, not the
-end.
+the fixture fails when the budget stops reaching it. Swept against
+qwen/qwen3-235b-a22b-2507, three runs per ceiling:
+
+```
+ceiling   caught   files actually reviewed   mean prompt tokens
+     10      3/3                         6               20,282
+      8      3/3                         -               18,960
+      6      3/3                         6               20,208
+      5      3/3                         -               18,299
+      4      3/3                         -               16,455
+      3      3/3                         3               14,527
+      2      0/3                         2               12,248
+```
+
+The cliff at 2 is what makes the rest of the column mean anything. A fixture
+that always passes proves only that it is easy; this one is caught at every
+ceiling down to 3 and then missed three times out of three at 2 — a clean
+SAFE verdict on a package that fetches and runs a remote script at build time.
+It can fail, so its passes are evidence.
+
+**Read the flat region carefully.** Ceilings of 10 and 6 cost the same because
+the model selected 6 files either way — not because the candidate pool ran
+out, which it did not: the fixture offers about thirteen. On a package this
+small the "10 is a ceiling, not a quota" instruction works, which is the
+opposite of what production shows on real packages. So the 28% drop from
+20,282 to 14,527 tokens is **6 files down to 3, not 10 down to 3**, and the
+arithmetic agrees: three calls removed at roughly 1,900 tokens each.
+
+This is also why the sweep says nothing about deleting the additional stage
+outright. Trimming slots removes fewer calls than the quota suggests, because
+the model may not have been using the quota; removing the stage removes every
+call in it. Those are different operations, and only the stage table above
+sizes the second one.
+
+Two cautions on the fixture. The payload sits in the top three of roughly
+thirteen candidates, so this bounds the *ranking's* quality on a small pool,
+not the ceiling's safety on a real package offering fifty. And one fixture on
+one model is a data point, not a licence.
 
 **Per-file content caps: measured, and not worth it.** Capping the additional
 stage by priority tier (60k/30k/20k/12k characters) saves 14.8% of content
