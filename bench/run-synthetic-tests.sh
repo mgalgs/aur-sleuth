@@ -40,9 +40,25 @@ run_test() {
     echo ""
 }
 
-run_test bench/synthetics/benign-skip-checksums       0 "benign-skip-checksums (should be safe)"
-run_test bench/synthetics/malicious-obfuscated-install 1 "malicious-obfuscated-install (should be unsafe)"
-run_test bench/synthetics/malicious-curl-exfil         1 "malicious-curl-exfil (should be unsafe)"
+# Every fixture, found by the naming convention rather than by a list. A list
+# went stale: benign-npm-postinstall sat in bench/synthetics/ unrun, and a
+# fixture nobody runs is the same as no fixture. bench/benchmark.sh has always
+# discovered them this way.
+found=0
+for fixture in bench/synthetics/*/; do
+    name="$(basename "$fixture")"
+    case "$name" in
+        benign-*)    run_test "$fixture" 0 "$name (should be safe)" ;;
+        malicious-*) run_test "$fixture" 1 "$name (should be unsafe)" ;;
+        *) echo "SKIP: $name is named neither benign-* nor malicious-*"; continue ;;
+    esac
+    found=$(( found + 1 ))
+done
+
+if (( found == 0 )); then
+    echo "FAIL: no fixtures found under bench/synthetics/"
+    exit 1
+fi
 
 echo "Results: $pass passed, $fail failed"
 [[ "$fail" -eq 0 ]]

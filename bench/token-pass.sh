@@ -77,6 +77,12 @@ log() { echo "[$(date '+%H:%M:%S')] $*"; }
 one_package() {
     local pkg="$1"
     local dir="$WORK/$pkg"
+    # One pass at a time per package directory. Every run calls makepkg there,
+    # which writes src/ and pkg/, so a before-pass and an after-pass started
+    # together would each measure a tree the other was rewriting -- and the
+    # numbers would look plausible.
+    exec 9>"$WORK/.$pkg.lock"
+    flock 9
     local -a mode=()
     if [[ ! -d "$dir/.git" ]]; then
         rm -rf "$dir"
