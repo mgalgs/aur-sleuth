@@ -1391,6 +1391,13 @@ class LLM:
             self.completion_tokens += completion_tokens
             # add_tokens expects an *incremental* count
             self.add_tokens(prompt_tokens + completion_tokens)
+            # How much of the prompt the provider served from its own cache.
+            # The system prompt is byte-identical across every call an audit
+            # makes, so a provider that caches prefixes charges a fraction for
+            # it -- which moves cost without moving a single token. The two
+            # questions have different answers and the ledger records both.
+            details = getattr(usage, "prompt_tokens_details", None)
+            cached_tokens = getattr(details, "cached_tokens", None) if details else None
             record_call(
                 stage=self.stage,
                 label=self.label,
@@ -1399,6 +1406,7 @@ class LLM:
                 user_chars=prompt_chars - system_chars,
                 prompt_chars=prompt_chars,
                 prompt_tokens=prompt_tokens,
+                cached_tokens=cached_tokens,
                 completion_tokens=completion_tokens,
                 estimated=False,
             )

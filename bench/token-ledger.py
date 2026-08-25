@@ -119,6 +119,23 @@ def print_table(ledgers):
         print(f"prompt characters: {fmt(system)} system ("
               f"{100 * system / (system + user):.1f}%) + {fmt(user)} content")
 
+    # A cached prefix is billed at a discount but still counted, so it changes
+    # cost without changing tokens. Reported apart for that reason.
+    cached = 0
+    reported = False
+    for data in ledgers.values():
+        for call in data["calls"]:
+            c = call.get("cached_tokens")
+            if c is not None:
+                reported = True
+                cached += c
+    if reported:
+        print(f"cached prompt tokens: {fmt(cached)} "
+              f"({100 * cached / total_prompt if total_prompt else 0:.1f}% of prompt) "
+              f"-- billed cheaper, still counted")
+    else:
+        print("cached prompt tokens: the provider reported none")
+
 
 def print_compare(after, before):
     common = sorted(set(after) & set(before))

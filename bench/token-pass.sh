@@ -24,7 +24,7 @@
 # Nothing here touches the audit-reports branch: reports land under --out and
 # stay there.
 #
-# Usage: token-pass.sh --out DIR [--live] [--model M] [--work DIR] [--jobs N]
+# Usage: token-pass.sh --out DIR [--live] [--model M] [--files N] [--work DIR] [--jobs N]
 #                      pkg [pkg...]
 #        token-pass.sh --out DIR --packages-from FILE
 #
@@ -39,6 +39,9 @@ WORK="${AUR_SLEUTH_DRY_RUN_WORK:-$HOME/aur-sleuth-data/dry-run/packages}"
 JOBS=4
 LIVE=false
 MODEL=""
+# Passed as -n, always, so the operator's own config file cannot move the
+# baseline out from under a comparison. 10 is what an unconfigured run uses.
+FILES=10
 PACKAGES=()
 
 while [[ $# -gt 0 ]]; do
@@ -49,6 +52,7 @@ while [[ $# -gt 0 ]]; do
         --live) LIVE=true; shift ;;
         --dry) LIVE=false; shift ;;
         --model) MODEL="$2"; shift 2 ;;
+        --files) FILES="$2"; shift 2 ;;
         --packages-from) mapfile -t -O "${#PACKAGES[@]}" PACKAGES < "$2"; shift 2 ;;
         -*) echo "Unknown option: $1" >&2; exit 1 ;;
         *) PACKAGES+=("$1"); shift ;;
@@ -59,10 +63,12 @@ done
 [[ ${#PACKAGES[@]} -gt 0 ]] || { echo "no packages given" >&2; exit 1; }
 [[ "$JOBS" =~ ^[1-9][0-9]*$ ]] || { echo "--jobs must be a positive number" >&2; exit 1; }
 if $LIVE; then
-    [[ -n "${OPENAI_API_KEY:-}" ]] || { echo "--live needs OPENAI_API_KEY" >&2; exit 1; }
+    [[ -n "${OPENAI_API_KEY:-}" || -f "$HOME/.config/aur-sleuth.conf" || -f /etc/aur-sleuth.conf ]] \
+        || { echo "--live needs OPENAI_API_KEY or an aur-sleuth.conf holding one" >&2; exit 1; }
 else
     [[ -z "$MODEL" ]] || { echo "--model means nothing without --live" >&2; exit 1; }
 fi
+[[ "$FILES" =~ ^[0-9]+$ ]] || { echo "--files must be a whole number" >&2; exit 1; }
 
 mkdir -p "$OUT" "$OUT/reports" "$OUT/ledgers" "$OUT/logs" "$WORK"
 
@@ -81,6 +87,7 @@ one_package() {
     fi
     [[ "$LIVE" == true ]] || mode+=(--dry-run)
     [[ -z "$MODEL" ]] || mode+=(--model "$MODEL")
+    mode+=(-n "$FILES")
     # One ledger directory per package asked for. The ledger inside it is named
     # for the package makepkg reports, which is not always the name that was
     # asked for (a split package answers under its first pkgname), so the
@@ -97,7 +104,7 @@ one_package() {
     fi
 }
 export -f one_package
-export SLEUTH WORK OUT LIVE MODEL
+export SLEUTH WORK OUT LIVE MODEL FILES
 
 if $LIVE; then
     log "LIVE pass over ${#PACKAGES[@]} package(s) with ${MODEL:-\$OPENAI_MODEL} -- this spends money"
