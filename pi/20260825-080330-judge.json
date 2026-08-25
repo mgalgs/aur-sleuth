@@ -1,0 +1,34 @@
+{
+  "package": "pi",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD pulls supplementary files from an NPM package (@earendil-works/pi-ai) that belongs to the same project organization (earendil-works). Both sources have pinned SHA256 checksums, which per the threat model closes the swap risk: makepkg rejects substituted bytes. The prepare() function's file copying is a standard pattern for Node.js monorepos where pre-built artifacts supplement source builds. This is not a supply-chain attack vector because (1) the NPM package is from the same project, (2) checksums prevent content substitution, and (3) the pattern serves a legitimate build purpose.",
+  "disagreement_analysis": "qwen3-235b misidentified a legitimate monorepo build pattern as a supply-chain attack. It failed to recognize that @earendil-works/pi-ai is the same project's package and that pinned checksums prevent the attack it describes. The model's reasoning about 'NPM packages can be republished' is technically true but irrelevant when checksums are pinned. deepseek correctly identified this as standard npm packaging.",
+  "coverage_issues": [
+    "All models skipped the NPM tarball (pi-ai-*.tgz) as a 'binary file', but this is acceptable since checksums are pinned",
+    "qwen3-235b only reviewed PKGBUILD and did not examine the relationship between the two sources"
+  ],
+  "false_positives": [
+    "qwen3-235b's finding 'Build replaces source files with untrusted NPM content' is a false positive: the NPM package is from the same project (earendil-works), checksums are pinned preventing substitution, and this is a standard monorepo build pattern"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models need better recognition of monorepo patterns where multiple packages from the same organization are published separately",
+    "The threat model's guidance about pinned checksums closing swap risk must be more prominently applied - models should not flag content substitution concerns when checksums are present",
+    "File selection should prioritize understanding source relationships (same organization, same project) rather than treating each source in isolation",
+    "Audit prompts should explicitly ask models to verify whether multiple sources belong to the same project before flagging cross-source file operations as suspicious"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 13951,
+    "completion_tokens": 1790,
+    "cost": 0.00675552
+  },
+  "audits_judged": [
+    "20260825-022016-qwen-qwen3-235b-a22b-2507.md",
+    "20260824-085115-deepseek-deepseek-v4-flash.md",
+    "20260825-030443-openrouter-free.md"
+  ]
+}
