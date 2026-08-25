@@ -2433,6 +2433,34 @@ _LOW_VALUE_DIRS = frozenset(
     }
 )
 
+# Vendored dependency trees: code that shipped verbatim inside the upstream
+# release artifact, from a third party, with no AUR maintainer's hand on it.
+#
+# We hunt for code INJECTED into the AUR packaging, so a review slot spent
+# here buys almost nothing: the files are identical for every user of that
+# upstream release, and a bundle holds thousands of them, so reviewing ten is
+# not coverage of the bundle -- it is ten slots not spent on the package's own
+# code. Measured on a 27-package sample, three packages spent 89,000 prompt
+# tokens on files under these directories, one minified bundle costing 35,572
+# tokens by itself.
+#
+# The file-selection prompt has asked models to deprioritize these in words
+# for some time, and the judge's learnings record them picking node_modules
+# anyway. A directory name is decidable by parsing, so it belongs here rather
+# than in a prompt -- see CLAUDE.md, "Prefer code over prompt for anything
+# decidable".
+#
+# Ranked with documentation: a last resort, not a refusal. A package whose
+# tree is nothing but a bundle still gets its files reviewed, because they are
+# what is left once everything better is gone.
+_VENDORED_DIRS = frozenset(
+    {
+        "node_modules", "bower_components", "jspm_packages", ".yarn",
+        "vendor", "_vendor", "third_party", "thirdparty", "3rdparty",
+        "site-packages", "dist-packages", "godeps",
+    }
+)
+
 # Directories whose contents are test data: code there is expected to look
 # like anything at all -- including malware, when the project tests a malware
 # detector -- and none of it runs at build or install time unless the build
@@ -2531,7 +2559,10 @@ def file_security_priority(path: Path) -> int:
     source and config files rank in the middle; pure documentation and license
     files rank lowest, since they can't execute and waste a review slot. Generic
     scripts/source under a test/example/dev directory are demoted one tier, since
-    they seldom run during an actual build or install.
+    they seldom run during an actual build or install. A file inside a vendored
+    third-party bundle drops to the documentation tier outright, whatever it is:
+    nobody in the AUR touched it, and a bundle holds too many files for ten
+    reviews to be coverage of it.
     """
     name = path.name.lower()
     suffix = path.suffix.lower()
@@ -2542,6 +2573,13 @@ def file_security_priority(path: Path) -> int:
             or suffix in _INERT_EXTS or suffixes & _INERT_EXTS
             or name in _INERT_NAMES):
         return -1
+
+    # Vendored third-party bundles: demote before the high-risk checks, so a
+    # package.json or a .js inside node_modules cannot win on its name or its
+    # extension. Nothing under such a directory was written by the maintainer,
+    # which is whose work this tool reads.
+    if any(part.lower() in _VENDORED_DIRS for part in path.parts[:-1]):
+        return 0
 
     # Auto-generated build scaffolding: demote before high-risk checks so that
     # e.g. ltmain.sh doesn't win via its .sh extension.
@@ -3918,6 +3956,47 @@ def selftest_file_caps():
     print("✓ selftest_file_caps")
 
 
+def selftest_file_priority():
+    """The ranking that decides which files a review slot is spent on: build
+    and install code first, documentation last, and vendored third-party
+    bundles down with the documentation however executable they look."""
+
+    # The AUR-controlled surface and code that runs: the top tier.
+    assert file_security_priority(Path("PKGBUILD")) == 3
+    assert file_security_priority(Path("app.install")) == 3
+    assert file_security_priority(Path("fix-build.patch")) == 3
+    assert file_security_priority(Path("src/x/meson.build")) == 3
+
+    # Documentation and signatures: nothing to execute.
+    assert file_security_priority(Path("README.md")) == 0
+    assert file_security_priority(Path("COPYING")) == 0
+    assert file_security_priority(Path("src/x.tar.gz.sig")) == -1
+
+    # A vendored bundle is upstream's, from a third party, and identical for
+    # every user of that release. It ranks with documentation even when the
+    # file's own name or extension would otherwise put it at the top.
+    for vendored in (
+        "src/app/node_modules/pkg/build/index.js",
+        "src/app/node_modules/pkg/package.json",
+        "src/ui/bower_components/thing/dist/thing.js",
+        "src/x/3rdparty/Vc/cmake/OptimizeForArchitecture.cmake",
+        "src/x/vendor/github.com/foo/bar.go",
+        "src/x/lib/site-packages/requests/api.py",
+    ):
+        assert file_security_priority(Path(vendored)) == 0, vendored
+
+    # The same names outside a vendored tree keep their own rank, so the rule
+    # demotes a location and never a file type.
+    assert file_security_priority(Path("src/app/index.js")) == 3
+    assert file_security_priority(Path("src/app/package.json")) == 3
+    assert file_security_priority(Path("src/x/cmake/Options.cmake")) == 3
+
+    # A vendored path is not binary, so the file stays a candidate and still
+    # counts as reviewable rather than joining the unauditable payload.
+    assert file_security_priority(Path("src/app/node_modules/a/b.js")) >= 0
+    print("✓ selftest_file_priority")
+
+
 def selftest_redaction():
     """What the environment says about this machine never reaches a report:
     the endpoint host, a home directory, a credential-shaped value, and the
@@ -3975,6 +4054,7 @@ def selftest():
     selftest_pkgbase()
     selftest_quota_reset()
     selftest_file_caps()
+    selftest_file_priority()
     selftest_redaction()
     report_path = Path("/tmp/aur-sleuth-tui-selftest.txt")
 
