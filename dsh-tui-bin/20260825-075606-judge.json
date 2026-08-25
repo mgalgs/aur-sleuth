@@ -1,0 +1,32 @@
+{
+  "package": "dsh-tui-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "All three models independently reached SAFE verdict with consistent reasoning. The PKGBUILD fetches a tarball from registry.npmjs.org with a pinned SHA-256 checksum, which is standard and secure for npm-based AUR packages. The prepare() and package() functions contain only standard npm installation logic with no malicious execution, obfuscation, or unexpected network requests. The reviewed JavaScript files (launcher script, protocol specs, utility modules) contain legitimate application code with no supply-chain attack indicators. The escalation audit by claude-sonnet-4.6 provided deeper coverage (8 files vs 2-7) and confirmed the initial assessments.",
+  "disagreement_analysis": null,
+  "coverage_issues": [
+    "deepseek/deepseek-v4-flash reviewed only 2 files (PKGBUILD + dsh-tui.js), which triggered the escalation audit due to shallow coverage"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models correctly prioritized PKGBUILD and launcher script (dsh-tui.js) as highest-priority files for review",
+    "Binary tarballs with pinned checksums should be skipped - all models correctly handled this",
+    "npm lifecycle script execution during prepare() is a standard pattern that models should note but not flag as malicious when the source is pinned and from the official registry",
+    "The escalation mechanism worked correctly: shallow coverage by deepseek triggered a deeper audit by claude, which confirmed the SAFE verdict with broader file coverage",
+    "For npm-based AUR packages, the critical attack surface is the PKGBUILD (source URL and checksum) and any scripts that execute during build/install - application source code is secondary unless it contains install hooks or build-time execution"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 10783,
+    "completion_tokens": 1381,
+    "cost": 0.00521824
+  },
+  "audits_judged": [
+    "20260823-184325-qwen-qwen3-235b-a22b-2507.md",
+    "20260823-184351-deepseek-deepseek-v4-flash.md",
+    "20260824-095738-anthropic-claude-sonnet-4.6.md"
+  ]
+}
