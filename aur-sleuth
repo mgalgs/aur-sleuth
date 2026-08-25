@@ -125,6 +125,83 @@ UNAUDITABLE_PAYLOAD: List[Path] = []
 # function's docstring for why this is detected in code rather than by the model.
 UNPINNED_SOURCES: List[str] = []
 
+# One row per model call: which stage of the loop made it, what it sent, what
+# it cost. The report's frontmatter carries a single prompt_tokens for the
+# whole package, and that number cannot say which stage spent it -- the makepkg
+# gate, the required files, the file-selection call, or the additional reviews.
+# Without the split, a change to the loop can only be judged by a per-package
+# total that moves for many reasons at once.
+CALL_LEDGER: List[dict] = []
+_CALL_LEDGER_LOCK = Lock()
+
+# What one prompt character costs in tokens, for the dry run, which never sees
+# a tokenizer's answer. Calibrated from live ledger rows (see
+# docs/TOKEN-BUDGET.md); the dry run's job is comparing two policies on the
+# same packages, and a constant factor cancels in that comparison.
+CHARS_PER_TOKEN = float(os.environ.get("AUR_SLEUTH_CHARS_PER_TOKEN", "3.6"))
+
+# The canned verdict a dry run answers its own audit calls with. It has to
+# parse as a real assessment: the loop stops the additional review when a
+# required file comes back UNSAFE or INCONCLUSIVE, so anything else would
+# measure a run that ended early.
+DRY_RUN_ASSESSMENT = """<security_assessment>
+<decision>SAFE</decision>
+<details>Dry run: no model was called. This verdict is a placeholder.</details>
+<evidence></evidence>
+<summary>Dry run placeholder verdict</summary>
+</security_assessment>"""
+
+
+def dry_run_enabled() -> bool:
+    """Whether to build every prompt, count it, and answer it locally.
+
+    What the loop sends is package-determined, not model-determined: the same
+    files and the same bytes go out whichever model holds the seat (measured --
+    two models on the same 12 packages differed by under 12% on prompt tokens,
+    all of it tokenizer, none of it content). So the input side can be measured
+    exactly, offline and for free; only accuracy needs a live model.
+    """
+    return os.environ.get("AUR_SLEUTH_DRY_RUN", "").lower() in ("1", "true", "yes")
+
+
+def record_call(**row) -> None:
+    """Append one call's accounting to the ledger. Called from audit threads."""
+    with _CALL_LEDGER_LOCK:
+        CALL_LEDGER.append(row)
+
+
+def write_call_ledger(report_file: Path, package_name: str) -> Optional[Path]:
+    """Write the ledger beside the report, when asked for.
+
+    Off by default: the pipeline publishes what lands in its report directory,
+    and this is measurement, not an audit artifact. AUR_SLEUTH_CALL_LEDGER
+    names a file, or is "1" for a sidecar next to the report.
+    """
+    dest = os.environ.get("AUR_SLEUTH_CALL_LEDGER", "")
+    if not dest or not CALL_LEDGER:
+        return None
+    if dest in ("1", "true", "yes"):
+        path = report_file.parent / f"aur-sleuth-calls-{package_name}.json"
+    else:
+        path = Path(dest)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps(
+                {
+                    "package": package_name,
+                    "dry_run": dry_run_enabled(),
+                    "calls": CALL_LEDGER,
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+    except OSError as e:
+        logger.warning("Failed to write call ledger: %s", e)
+        return None
+    return path
+
 
 def sanitize_for_llm(text: str) -> str:
     """
@@ -185,6 +262,10 @@ class LLMClient:
         a proxy in front of OpenRouter needs, since its base URL gives nothing away;
         "none" skips the lookup; unset means infer it from the base URL.
         """
+        # A dry run never reaches _calculate_cost, so the price list would buy
+        # nothing but a network round trip.
+        if dry_run_enabled():
+            return
         source = os.environ.get("AUR_SLEUTH_PRICING", "").strip().lower()
         if not source:
             base_url = str(getattr(self.openai_client, "base_url", ""))
@@ -1210,6 +1291,8 @@ class LLM:
         temperature=None,
         top_p=None,
         reasoning_effort=DEFAULT_REASONING_EFFORT,
+        stage="unknown",
+        label="",
     ):
         self.limit_tokens = limit_tokens
         self.tokens_processed = 0
@@ -1221,6 +1304,10 @@ class LLM:
         self.temperature = temperature
         self.top_p = top_p
         self.reasoning_effort = reasoning_effort
+        # Which stage of the audit loop this call belongs to, and what it is
+        # about, for the ledger. Every LLM here is built for one call.
+        self.stage = stage
+        self.label = label
 
         if system_prompt:
             self.init_chat(system_prompt)
@@ -1245,12 +1332,38 @@ class LLM:
         logger.debug("Pushing user message to chat history: %s", content)
         self.history.append({"role": "user", "content": content})
 
-    def chat(self, user_prompt):
-        """Makes an LLM call and tracks token usage."""
+    def chat(self, user_prompt, dry_run_response: Optional[str] = None):
+        """Makes an LLM call and tracks token usage.
+
+        In a dry run no call goes out: the prompt is built and measured, and
+        dry_run_response (or a canned SAFE verdict) stands in for the answer.
+        """
         if not self.history:
             raise ValueError("Chat session not initialized. Call init_chat first.")
 
         self.push_user_message(user_prompt)
+
+        system_chars = len(self.history[0].get("content") or "")
+        prompt_chars = sum(len(m.get("content") or "") for m in self.history)
+
+        if dry_run_enabled():
+            estimated = round(prompt_chars / CHARS_PER_TOKEN)
+            self.prompt_tokens += estimated
+            self.add_tokens(estimated)
+            record_call(
+                stage=self.stage,
+                label=self.label,
+                model=self.model,
+                system_chars=system_chars,
+                user_chars=prompt_chars - system_chars,
+                prompt_chars=prompt_chars,
+                prompt_tokens=estimated,
+                completion_tokens=0,
+                estimated=True,
+            )
+            content = dry_run_response if dry_run_response is not None else DRY_RUN_ASSESSMENT
+            self.history.append({"role": "assistant", "content": content})
+            return content
 
         kwargs = {
             "model": self.model,
@@ -1273,6 +1386,17 @@ class LLM:
             self.completion_tokens += completion_tokens
             # add_tokens expects an *incremental* count
             self.add_tokens(prompt_tokens + completion_tokens)
+            record_call(
+                stage=self.stage,
+                label=self.label,
+                model=self.model,
+                system_chars=system_chars,
+                user_chars=prompt_chars - system_chars,
+                prompt_chars=prompt_chars,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                estimated=False,
+            )
 
         rsp_msg = extract_assistant_message_dict(response)
         self.history.append(rsp_msg)
@@ -1340,6 +1464,11 @@ def get_llm_params_from_env():
 def get_api_key():
     """Get API key from OPENAI_API_KEY environment variable"""
     api_key = os.environ.get("OPENAI_API_KEY")
+    # A dry run sends nothing, so requiring a credential for one would be a
+    # false barrier -- and one that invites running the measurement with a real
+    # key in the environment.
+    if not api_key and dry_run_enabled():
+        return "dry-run-no-key"
     if not api_key:
         print("ERROR: OPENAI_API_KEY environment variable not set", file=sys.stderr)
         sys.exit(1)
@@ -1659,6 +1788,7 @@ def audit_file(
     pkgdir: Path,
     llm_client: LLMClient,
     extra_instructions: Optional[str] = None,
+    stage: str = "review",
 ) -> AuditResult:
     """Audits a single source file with an LLM."""
 
@@ -1713,6 +1843,11 @@ def audit_file(
 
     llm_params = get_llm_params_from_env()
 
+    try:
+        rel = file_path.relative_to(pkgdir)
+    except ValueError:
+        rel = file_path.name
+
     llm_pkgbuild_auditor = LLM(
         limit_tokens=SESSION_AUDIT_LIMIT_TOKENS,
         llm_client=llm_client,
@@ -1721,6 +1856,8 @@ def audit_file(
         temperature=llm_params.temperature,
         top_p=llm_params.top_p,
         reasoning_effort=llm_params.reasoning_effort,
+        stage=stage,
+        label=str(rel),
     )
     truncation_note = ""
     if was_truncated:
@@ -1737,10 +1874,6 @@ def audit_file(
     # the location as a plain fact and nothing that steers the decision; the
     # fixture cap below, and then a judge, handle "is it run".
     fixture_note = ""
-    try:
-        rel = file_path.relative_to(pkgdir)
-    except ValueError:
-        rel = file_path.name
     if str(rel) != file_path.name:
         fixture_note = f"LOCATION: {sanitize_for_llm(str(rel))}\n\n"
     prompt = f"""{extra_instructions + "\n" if extra_instructions else ""}{truncation_note}{fixture_note}
@@ -2524,6 +2657,8 @@ def decide_next_files_to_review(
         temperature=llm_params.temperature,
         top_p=llm_params.top_p,
         reasoning_effort=llm_params.reasoning_effort,
+        stage="select",
+        label=package_name,
     )
     already_reviewed_str = "\n".join(f"- {f}" for f in already_reviewed_files)
     listing_lines = []
@@ -2587,8 +2722,17 @@ Respond with a list of file paths, one path per line, with NO other additional t
     # a partial reply from parsing as a clean SAFE, but letting that abort the whole audit
     # over a lost path would be far worse than reviewing a few files chosen by ranking.
     # Fall back to the priority order already computed above.
+    # A dry run answers this call with the same list the truncation fallback
+    # below would use: the ranking is deterministic, so two dry runs of
+    # different loop policies pick over the same files and the comparison is
+    # about what each sends, not about what a model happened to choose.
     try:
-        response = llm.chat(prompt)
+        response = llm.chat(
+            prompt,
+            dry_run_response="\n".join(
+                str(f) for f in files_for_prompt[:num_additional_files_to_review]
+            ) if dry_run_enabled() else None,
+        )
     except LLMResponseError as e:
         fallback = files_for_prompt[:num_additional_files_to_review]
         logger.warning("File selection failed (%s); falling back to priority order", e)
@@ -2649,6 +2793,7 @@ def audit_files(
     files_to_audit: List[Path],
     processing_description: str,
     llm_client: LLMClient,
+    stage: str = "review",
 ) -> List[AuditResult]:
     """Audit a list of files in parallel."""
     processing_files = []
@@ -2685,7 +2830,7 @@ def audit_files(
         f_rel = f_abs.relative_to(pkgdir)
 
         add_file_to_processing(f_rel)
-        result = audit_file(report, package_name, f_abs, pkgdir, llm_client)
+        result = audit_file(report, package_name, f_abs, pkgdir, llm_client, stage=stage)
 
         return (f, result)
 
@@ -2782,6 +2927,7 @@ PKGBUILD review that follows.)"""
         pkgdir,
         llm_client,
         extra_instructions,
+        stage="gate",
     )
 
     # Branch on color support: the markup is literal text in a no-color report, and
@@ -2850,6 +2996,7 @@ def do_agentic_audit(
         required_review_files,
         "required files",
         llm_client,
+        stage="required",
     )
 
     required_statuses = {r.status for r in required_audit_results}
@@ -2889,6 +3036,7 @@ def do_agentic_audit(
         additional_review_files,
         "additional files",
         llm_client,
+        stage="additional",
     )
 
     tui.finalize_step("Reviewed additional files.")
@@ -3123,6 +3271,10 @@ def run_aur_sleuth_audit(
             llm_client, execution_time,
         )
 
+        ledger_path = write_call_ledger(report_file, package_name)
+        if ledger_path:
+            logger.info("Per-call token ledger written to %s", ledger_path)
+
     return 0 if audit_ok else 1
 
 
@@ -3263,12 +3415,30 @@ def sleuth_main() -> int:
         help="Target number of files to audit jobs (default: 10)",
     )
     parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Build and measure every prompt without calling a model. Sources are "
+             "still downloaded; verdicts are placeholders. Use with --call-ledger.",
+    )
+    parser.add_argument(
+        "--call-ledger",
+        default=None,
+        metavar="PATH",
+        help="Write a per-call token ledger to PATH (or beside the report, for '1').",
+    )
+    parser.add_argument(
         "--version",
         action="version",
         version="aur-sleuth 1.0.0",
         help="Show version information",
     )
     args = parser.parse_args()
+
+    if args.dry_run:
+        os.environ["AUR_SLEUTH_DRY_RUN"] = "1"
+
+    if args.call_ledger:
+        os.environ["AUR_SLEUTH_CALL_LEDGER"] = args.call_ledger
 
     if args.model:
         logger.debug("Setting model from command line: %s", args.model)
