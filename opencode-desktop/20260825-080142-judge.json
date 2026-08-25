@@ -1,0 +1,30 @@
+{
+  "package": "opencode-desktop",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The disagreement stems from qwen flagging src/opencode-desktop/github/index.ts as unsafe for sending tokens to api.opencode.ai. However, this is upstream application source code (not AUR packaging), and api.opencode.ai is the vendor's own service for their GitHub integration feature. The threat model explicitly excludes 'upstream application behaviour' and only concerns code INJECTED into AUR packaging. The PKGBUILD, patch, and wrapper script are all standard and safe. The TypeScript files are compiled application code that doesn't execute during makepkg.",
+  "disagreement_analysis": "qwen flagged network calls in application source code to the vendor's own backend service (api.opencode.ai) as 'exfiltration to untrusted external service'. This is a false positive: (1) it's upstream application behavior, not AUR injection; (2) the service is the vendor's own product backend, not an unrelated third party; (3) this code is compiled, not executed during packaging. deepseek correctly identified this as legitimate application functionality.",
+  "coverage_issues": [],
+  "false_positives": [
+    "src/opencode-desktop/github/index.ts flagged as unsafe by qwen: This is upstream application source code making calls to the vendor's own service (api.opencode.ai) for GitHub token exchange. The threat model explicitly excludes upstream application behavior. The AUR maintainer did not inject this code; it's part of the upstream repository being packaged."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models need stronger guidance to distinguish upstream application source code from AUR packaging injections. Source files in src/ directories that are compiled/bundled during build should be assessed under 'upstream application behavior' exclusion, not flagged for normal application functionality.",
+    "Network calls to the vendor's own services (matching the package name/domain) should not be flagged as 'untrusted external services'. The audit should check if the destination host has a stated relationship with the package.",
+    "File selection correctly prioritized packaging files, but models need to apply the threat model boundary more rigorously when reviewing application source code that happens to be in the source tree."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 13752,
+    "completion_tokens": 1588,
+    "cost": 0.0064332799999999996
+  },
+  "audits_judged": [
+    "20260825-031636-qwen-qwen3-235b-a22b-2507.md",
+    "20260825-032128-deepseek-deepseek-v4-flash.md",
+    "20260825-033026-openrouter-free.md"
+  ]
+}
