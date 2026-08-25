@@ -461,8 +461,13 @@ build_audited_index() {
                 pkg="${path%%/*}"
                 fm=$(git show "${REPORTS_BRANCH}:${path}" 2>/dev/null \
                     | sed -n '/^---$/,/^---$/p')
-                pkgver=$(printf '%s\n' "$fm" | grep '^pkgver:' | head -1 | sed 's/^pkgver: *//')
-                pkgrel=$(printf '%s\n' "$fm" | grep '^pkgrel:' | head -1 | sed 's/^pkgrel: *//')
+                # Every path on the branch comes through here, judge.json
+                # and dashboard data included, and those carry no pkgver at
+                # all. grep matching nothing exits 1, and under pipefail
+                # that would end the whole bootstrap; the empty answer is
+                # the wanted one, and the test below already expects it.
+                pkgver=$(printf '%s\n' "$fm" | grep '^pkgver:' | head -1 | sed 's/^pkgver: *//') || true
+                pkgrel=$(printf '%s\n' "$fm" | grep '^pkgrel:' | head -1 | sed 's/^pkgrel: *//') || true
                 if [[ -n "$pkgver" && -n "$pkgrel" ]]; then
                     printf '%s\t%s-%s\n' "$pkg" "$pkgver" "$pkgrel"
                 elif [[ -n "$pkgver" ]]; then
