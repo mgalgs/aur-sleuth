@@ -135,3 +135,9 @@ same version; the set re-pins only with a version bump.
   once in a full-suite run on 2026-08-23 and passes alone; the emitted
   dashboard data is deterministic under hash-seed variation, so the cause
   sits in the test fixture. Chase before trusting a red suite blindly.
+  Seen again 2026-08-25, and the pattern held on both sides: red in a full
+  run, green alone, then green in an immediate second full run on the
+  identical tree. So it is nondeterministic rather than order-dependent,
+  and a single red full run proves nothing on its own — re-run before
+  chasing. The 08-25 failure was a tree-hash mismatch on the second
+  rewrite (got 4291c8fa, want 711e9b30), which is where to start looking.
