@@ -91,11 +91,18 @@ Content is the minority, and it is concentrated: the median reviewed file is
 3,658 characters, and only 13 of 159 review calls exceeded 20,000. The
 `MAX_FILE_CHARS` cap of 120,000 almost never binds.
 
-At the time of measurement the provider reported **no prompt caching**, so
-cost tracks tokens one for one. That is worth re-checking before any work
-aimed at cost rather than tokens: a cached prefix is billed at a discount but
-still counted, and the two questions then have different answers.
-`bench/token-ledger.py` reports cached tokens separately for this reason.
+**Prompt caching moves, so re-measure it rather than citing this page.** On
+2026-08-25 the provider reported no cached tokens at all on the sample above,
+and cost tracked tokens one for one. Later the same day a single audit of
+papirus-icon-theme-git came back with 4,542 cached prompt tokens, 10.3% of its
+prompt. Nothing in the loop changed between them; the routing did.
+
+So the earlier figure was a measurement on a day, not a fact about the
+provider, and any claim about cost needs its own reading. A cached prefix is
+billed at a discount but still counted, so "halve the tokens" and "halve the
+bill" have different answers whenever caching is live.
+`bench/token-ledger.py` reports cached tokens separately for this reason, and
+says so explicitly when a provider reports none.
 
 ## What has been taken
 
