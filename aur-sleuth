@@ -148,6 +148,10 @@ class LLMClient:
         # no model's word in it, and the report is withdrawn at exit.
         self.ok_calls = 0
         self.api_errors = 0
+        # When a provider says its per-DAY allowance is spent, the epoch at
+        # which it resets, from the 429's own headers. Reported at exit
+        # (status 4) so the pipeline stops probing a dead cap until then.
+        self.quota_reset_epoch: Optional[int] = None
         self.pricing: Dict[str, ModelPricingParams] = dict()  # model => pricing
         self._fetch_pricing_info()
 
@@ -219,8 +223,11 @@ class LLMClient:
 
         try:
             response = self.openai_client.chat.completions.create(*args, **kwargs)
-        except APIError:
+        except APIError as e:
             self.api_errors += 1
+            reset = quota_reset_from_error(e)
+            if reset:
+                self.quota_reset_epoch = max(self.quota_reset_epoch or 0, reset)
             raise
         self.ok_calls += 1
 
@@ -1514,6 +1521,58 @@ def describe_error(e: Exception) -> str:
         # The filename in an OSError's text is an absolute path on this machine.
         return f"{type(e).__name__}: {e.strerror}"
     return f"{type(e).__name__}: {e}"
+
+
+def quota_reset_from_error(e: Exception) -> Optional[int]:
+    """The epoch second at which a spent per-DAY allowance resets, read off a
+    429 that says so; None for any other error.
+
+    OpenRouter's free tier answers "Rate limit exceeded: free-models-per-day"
+    with X-RateLimit-Reset in the error body's metadata headers, an epoch in
+    milliseconds. Only a per-day message counts: a per-minute throttle
+    carries a reset too, and the SDK's own backoff rides those out. A per-day
+    message with no usable reset means the documented one, the next 00:00
+    UTC. Nothing but the epoch leaves here; the message names the operator's
+    account (see describe_error)."""
+    if not isinstance(e, APIError) or getattr(e, "status_code", None) != 429:
+        return None
+    body = getattr(e, "body", None)
+    err = body.get("error") if isinstance(body, dict) else None
+    err = err if isinstance(err, dict) else {}
+    message = err.get("message") if err else getattr(e, "message", "")
+    if "per-day" not in str(message or "").lower():
+        return None
+    headers = (err.get("metadata") or {}).get("headers") if err else None
+    raw = headers.get("X-RateLimit-Reset") if isinstance(headers, dict) else None
+    if raw is None:
+        response = getattr(e, "response", None)
+        raw = response.headers.get("x-ratelimit-reset") if response is not None else None
+    try:
+        value = int(float(raw))
+    except (TypeError, ValueError):
+        value = 0
+    if value > 10**11:  # milliseconds
+        value //= 1000
+    if value > int(time.time()):
+        return value
+    tomorrow = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1)
+    return int(tomorrow.replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
+
+
+def note_quota_reset(epoch: int) -> None:
+    """Leave the reset epoch where the pipeline reads it, when it asked
+    (AUR_SLEUTH_QUOTA_RESET_FILE). Best effort: a failed note costs the
+    pipeline one more probe, nothing else."""
+    path = os.environ.get("AUR_SLEUTH_QUOTA_RESET_FILE", "")
+    if not path:
+        return
+    try:
+        tmp = f"{path}.{os.getpid()}.tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write(f"{epoch}\n")
+        os.replace(tmp, path)
+    except OSError as e:
+        logger.warning("Could not note the quota reset in %s: %s", path, e)
 
 
 def audit_file(
@@ -3132,6 +3191,20 @@ def sleuth_main() -> int:
     # a missing report as a soft failure and the package comes back next run.
     if llm_client.api_errors > 0 and llm_client.ok_calls == 0:
         report_file.unlink(missing_ok=True)
+        # A spent per-day allowance is a different kind of nothing: every
+        # audit until the reset would fail the same way. Say when, and exit
+        # 4, so the pipeline can stop asking until then.
+        reset = llm_client.quota_reset_epoch
+        if reset:
+            note_quota_reset(reset)
+            until = datetime.datetime.fromtimestamp(reset, datetime.timezone.utc)
+            print(
+                f"free quota exhausted until {until.strftime('%Y-%m-%dT%H:%M:%SZ')} "
+                f"(epoch {reset}); no report for {package_name} -- the package "
+                f"stays unaudited",
+                file=sys.stderr,
+            )
+            return 4
         print(
             f"All {llm_client.api_errors} LLM call(s) failed; no report for "
             f"{package_name} -- the package stays unaudited",
@@ -3380,6 +3453,54 @@ def selftest_error_description():
     assert describe_error(e) == "FileNotFoundError: No such file or directory", describe_error(e)
 
 
+def selftest_quota_reset():
+    """A per-day 429 yields its reset epoch, in seconds; a per-minute one,
+    or any other error, yields nothing; a per-day one that does not say
+    when means the next 00:00 UTC. The note lands where the pipeline asked."""
+    import httpx
+    from openai import AuthenticationError, RateLimitError
+
+    def err(message, headers=None, status=429):
+        body = {"error": {"message": message, "code": status}}
+        if headers is not None:
+            body["error"]["metadata"] = {"headers": headers}
+        resp = httpx.Response(
+            status, json=body, request=httpx.Request("POST", "https://llm.internal/v1")
+        )
+        cls = RateLimitError if status == 429 else AuthenticationError
+        return cls(f"Error code: {status} - {body}", response=resp, body=body)
+
+    future_ms = (int(time.time()) + 3600) * 1000
+    got = quota_reset_from_error(err(
+        "Rate limit exceeded: free-models-per-day-high-balance. ",
+        {"X-RateLimit-Limit": "1000", "X-RateLimit-Remaining": "0",
+         "X-RateLimit-Reset": str(future_ms)},
+    ))
+    assert got == future_ms // 1000, got
+    assert quota_reset_from_error(err(
+        "Rate limit exceeded: free-models-per-min. ", {"X-RateLimit-Reset": str(future_ms)}
+    )) is None
+    assert quota_reset_from_error(err("bad key", status=401)) is None
+    assert quota_reset_from_error(RuntimeError("per-day")) is None
+    now = int(time.time())
+    got = quota_reset_from_error(err("free-models-per-day exceeded"))
+    assert now < got <= now + 86400 and got % 86400 == 0, got
+
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, "reset")
+        old = os.environ.get("AUR_SLEUTH_QUOTA_RESET_FILE")
+        os.environ["AUR_SLEUTH_QUOTA_RESET_FILE"] = path
+        try:
+            note_quota_reset(1787616000)
+        finally:
+            if old is None:
+                os.environ.pop("AUR_SLEUTH_QUOTA_RESET_FILE", None)
+            else:
+                os.environ["AUR_SLEUTH_QUOTA_RESET_FILE"] = old
+        with open(path, encoding="utf-8") as f:
+            assert f.read() == "1787616000\n"
+
+
 def selftest_redaction():
     """What the environment says about this machine never reaches a report:
     the endpoint host, a home directory, a credential-shaped value, and the
@@ -3434,6 +3555,7 @@ def selftest():
     selftest_evidence()
     selftest_fixture_context()
     selftest_error_description()
+    selftest_quota_reset()
     selftest_redaction()
     report_path = Path("/tmp/aur-sleuth-tui-selftest.txt")
 
