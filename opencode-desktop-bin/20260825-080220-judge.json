@@ -1,0 +1,27 @@
+{
+  "package": "opencode-desktop-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The disagreement stems from a false positive by the qwen model. It flagged the .desktop file because the Exec path points to /opt/OpenCode/ai.opencode.desktop, incorrectly assuming it was executing a .desktop metadata file. In reality, the upstream .deb package names its main executable 'ai.opencode.desktop'. The PKGBUILD simply extracts this prebuilt binary. There is no malicious injection.",
+  "disagreement_analysis": "qwen flagged src/usr/share/applications/ai.opencode.desktop.desktop as unsafe because the Exec field points to a file ending in .desktop. It failed to realize that the upstream application's executable is literally named 'ai.opencode.desktop'. deepseek correctly identified it as a standard desktop entry pointing to the application binary.",
+  "coverage_issues": [],
+  "false_positives": [
+    "qwen flagged ai.opencode.desktop.desktop for executing a .desktop file. The target /opt/OpenCode/ai.opencode.desktop is the actual executable binary provided by the upstream .deb, not a metadata file."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models may falsely flag Exec paths in .desktop files if the executable itself has a .desktop extension. The audit logic or prompt should clarify that an Exec target matching the packaged binary's name is safe, regardless of its extension."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 8785,
+    "completion_tokens": 2024,
+    "cost": 0.00540192
+  },
+  "audits_judged": [
+    "20260825-071553-qwen-qwen3-235b-a22b-2507.md",
+    "20260825-072648-deepseek-deepseek-v4-flash.md"
+  ]
+}
