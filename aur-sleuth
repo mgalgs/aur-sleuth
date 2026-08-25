@@ -2895,9 +2895,19 @@ def _write_report_frontmatter(
             f"served_models: {_yaml_escape(','.join(served))}\n" if served else ""
         )
 
+        # A split package is audited under the name that was asked for, from
+        # the repository of its base; the base is recorded when it differs,
+        # so a reader knows which PKGBUILD this is.
+        pkgbase = source_info.get("pkgbase", "")
+        pkgbase_line = (
+            f"pkgbase: {_yaml_escape(pkgbase)}\n"
+            if pkgbase and pkgbase != package_name else ""
+        )
+
         frontmatter = (
             f"---\n"
             f"package: {_yaml_escape(package_name)}\n"
+            f"{pkgbase_line}"
             f"pkgver: {_yaml_escape(source_info.get('pkgver', ''))}\n"
             f"pkgrel: {_yaml_escape(source_info.get('pkgrel', ''))}\n"
             f"result: {overall_status.name.lower()}\n"
@@ -3030,6 +3040,53 @@ def run_aur_sleuth_audit(
     return 0 if audit_ok else 1
 
 
+AUR_RPC_INFO = "https://aur.archlinux.org/rpc/v5/info"
+# The AUR's own charset for a package name, so nothing else becomes a URL.
+_PKGNAME_RE = re.compile(r"^[A-Za-z0-9@._+][A-Za-z0-9@._+-]*$")
+
+
+def pkgbase_from_rpc(payload, package_name: str) -> str:
+    """The package base a v5 info reply names for package_name, else the
+    name itself. A split package (immich-server) lives in its base's
+    repository (immich); the AUR serves an EMPTY repository for any other
+    name, and an audit of that reported "Skipping binary file: PKGBUILD"
+    with no version -- 242 such reports in one day."""
+    results = payload.get("results") if isinstance(payload, dict) else None
+    for entry in results or []:
+        if not isinstance(entry, dict) or entry.get("Name") != package_name:
+            continue
+        base = entry.get("PackageBase")
+        if isinstance(base, str) and _PKGNAME_RE.match(base):
+            return base
+    return package_name
+
+
+def resolve_pkgbase(package_name: str) -> str:
+    """Ask the AUR which repository holds package_name. Any failure -- the
+    RPC down, a malformed reply -- falls back to the name: for the common
+    case they are the same, and a wrong guess costs one empty clone that
+    the PKGBUILD check after it catches."""
+    try:
+        response = requests.get(
+            AUR_RPC_INFO, params={"arg[]": package_name}, timeout=15
+        )
+        response.raise_for_status()
+        return pkgbase_from_rpc(response.json(), package_name)
+    except (requests.RequestException, ValueError) as e:
+        logger.warning("Could not resolve the package base of %s (%s); using the name", package_name, e)
+        return package_name
+
+
+class PackageNotFound(Exception):
+    """The clone holds no PKGBUILD: the AUR has no such package (it serves an
+    empty repository for any name), or the given clone URL is not a package."""
+
+    def __init__(self, package_name: str, clone_url: str):
+        super().__init__(package_name)
+        self.package_name = package_name
+        self.clone_url = clone_url
+
+
 def download_package_to_tmpdir(
     tui: ConsoleUI,
     tmpdir_parent: Path,
@@ -3040,13 +3097,16 @@ def download_package_to_tmpdir(
     # Create a temp directory inside it
     tmpdir = tempfile.mkdtemp(prefix="aur-sleuth-", dir=tmpdir_parent)
 
+    if not clone_url:
+        pkgbase = resolve_pkgbase(package_name)
+        if pkgbase != package_name:
+            tui.finalize_step(f"{package_name} is built from {pkgbase}")
+        clone_url = f"https://aur.archlinux.org/{pkgbase}.git"
+
     # The destination is a temporary path on the machine running the audit, and
     # this line ends up in the published report. Keep it out of there.
     logger.info("Cloning %s into %s", package_name, tmpdir)
-    tui.update_status(
-        f"Cloning https://aur.archlinux.org/{package_name}.git..."
-    )
-    clone_url = clone_url or f"https://aur.archlinux.org/{package_name}.git"
+    tui.update_status(f"Cloning {clone_url}...")
     subprocess.run(
         ["git", "clone", clone_url, tmpdir],
         check=True,
@@ -3054,6 +3114,10 @@ def download_package_to_tmpdir(
         text=True,
         timeout=30,
     )
+    # git clones a repository with no commits without complaint. An audit of
+    # nothing must not proceed to call "nothing" a verdict.
+    if not (Path(tmpdir) / "PKGBUILD").is_file():
+        raise PackageNotFound(package_name, clone_url)
     logger.info("Cloned %s into %s", package_name, tmpdir)
     tui.finalize_step(f"Cloned {package_name}")
     return Path(tmpdir).resolve()
@@ -3167,6 +3231,18 @@ def sleuth_main() -> int:
                 retval = run_aur_sleuth_audit(
                     tui, report, package_name, pkgdir, llm_client
                 )
+    except PackageNotFound as e:
+        # Nothing to audit: no report (the stub is gone before the first
+        # model call), one line saying so, and a status of its own. The
+        # pipeline reads the missing report as a soft failure; discovery
+        # never offers a name the AUR does not list, so nothing retries it.
+        report_file.unlink(missing_ok=True)
+        print(
+            f"{e.package_name}: not on the AUR ({e.clone_url} holds no PKGBUILD); "
+            f"no report",
+            file=sys.stderr,
+        )
+        return 5
     except BaseException:
         # A crash before any model answered -- a clone that failed because
         # the package is gone, a PKGBUILD that would not parse -- leaves a
@@ -3453,6 +3529,23 @@ def selftest_error_description():
     assert describe_error(e) == "FileNotFoundError: No such file or directory", describe_error(e)
 
 
+def selftest_pkgbase():
+    """A split package resolves to its base; everything else -- the same
+    name, no result, a malformed reply, a base that is not a name -- is the
+    name itself."""
+    reply = {"resultcount": 1, "type": "multiinfo", "version": 5,
+             "results": [{"Name": "immich-server", "PackageBase": "immich"}]}
+    assert pkgbase_from_rpc(reply, "immich-server") == "immich"
+    assert pkgbase_from_rpc(reply, "immich") == "immich"
+    assert pkgbase_from_rpc({"resultcount": 0, "results": []}, "gone") == "gone"
+    assert pkgbase_from_rpc({"error": "Incorrect request type specified."}, "x") == "x"
+    assert pkgbase_from_rpc("not json", "x") == "x"
+    assert pkgbase_from_rpc({"results": ["x", None]}, "x") == "x"
+    evil = {"results": [{"Name": "x", "PackageBase": "../../etc"}]}
+    assert pkgbase_from_rpc(evil, "x") == "x"
+    assert pkgbase_from_rpc({"results": [{"Name": "x", "PackageBase": 7}]}, "x") == "x"
+
+
 def selftest_quota_reset():
     """A per-day 429 yields its reset epoch, in seconds; a per-minute one,
     or any other error, yields nothing; a per-day one that does not say
@@ -3555,6 +3648,7 @@ def selftest():
     selftest_evidence()
     selftest_fixture_context()
     selftest_error_description()
+    selftest_pkgbase()
     selftest_quota_reset()
     selftest_redaction()
     report_path = Path("/tmp/aur-sleuth-tui-selftest.txt")

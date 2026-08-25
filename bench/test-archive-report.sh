@@ -86,6 +86,39 @@ else
     sed 's/^/        /' "$reports/aur-sleuth-report-gonepkg.txt"
 fi
 
+echo "== a clone with no PKGBUILD is not a package, and leaves no report =="
+# The AUR serves an empty repository for any name it does not know -- a
+# split package's own name included -- and git clones it without complaint.
+# An audit of that once reported "Skipping binary file: PKGBUILD" as a
+# verdict. A local repository with one empty commit stands in for it.
+empty="$tmp/empty.git"
+git init -q "$empty"
+git -C "$empty" -c user.name=t -c user.email=t@t commit -q --allow-empty -m init
+rc=0
+out="$(AUR_SLEUTH_REPORT_DIR="$reports" AUR_SLEUTH_PRICING=none \
+        OPENAI_API_KEY=unused-no-completion-is-made \
+        ./aur-sleuth --output plain --clone-url "$empty" nopkg 2>&1)" || rc=$?
+if (( rc == 5 )); then
+    ok "the run exits 5, the status for a package that is not there"
+else
+    bad "expected exit 5, got $rc: $(tail -3 <<< "$out")"
+fi
+if grep -q 'nopkg: not on the AUR' <<< "$out"; then
+    ok "and says so in one line"
+else
+    bad "no plain line about the missing package: $(tail -3 <<< "$out")"
+fi
+if [[ ! -e "$reports/aur-sleuth-report-nopkg.txt" ]]; then
+    ok "and no report file remains"
+else
+    bad "a report was left behind for a package that does not exist"
+fi
+if ! grep -q 'Traceback' <<< "$out"; then
+    ok "and no traceback: this is an answer, not a crash"
+else
+    bad "a missing package printed a traceback"
+fi
+
 echo
 if (( fails > 0 )); then
     echo "FAILED: $fails check(s)"

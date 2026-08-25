@@ -80,6 +80,16 @@ same version; the set re-pins only with a version bump.
 
 ## Pipeline
 
+- Audit identity by pkgbase (queued 2026-08-24). The AUR serves one
+  repository per package BASE; a split package's own name gets an empty
+  one. The tool now resolves the base through the AUR RPC before cloning
+  and records `pkgbase:` in the frontmatter when it differs, so a split
+  package gets a real audit — but everything downstream still keys on the
+  pkgname: candidate selection, the audited index, the dashboard, the
+  judge. Every member of a split package is therefore audited, judged and
+  listed separately though they share one PKGBUILD (immich-server,
+  immich-web, immich-machine-learning…). Keying the pipeline on pkgbase
+  would audit each PKGBUILD once and list its members under it.
 - Scheduled-vs-manual run overlap: `concurrencyPolicy: Forbid` does not see
   UI-created Jobs. Options: a prepare-stage check for a running audit pod,
   or suspending the schedule around manual runs (needs RBAC the controller
