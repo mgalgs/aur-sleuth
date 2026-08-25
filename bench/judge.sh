@@ -548,7 +548,12 @@ do_reaudit() {
         local archived_path
         archived_path=$(echo "$archive_output" | grep -oP 'Stored: audit-reports:\K.*' || echo "")
 
-        # Update judge report with re-audit metadata
+        # Note the re-audit on the working judge file, so --re-audit-pending
+        # does not ask twice. The working copy only: archiving it again put
+        # a second copy of the SAME ruling on the branch, and the page read
+        # every copy as a further "unsafe" ruling (pcloud-drive showed three
+        # for one). The ruling that actually weighs this report is the fresh
+        # one --escalate makes next, and that is archived on its own.
         if [[ -f "$judge_file" ]]; then
             python3 -c "
 import json, sys
@@ -560,13 +565,7 @@ data['reaudit_result'] = '$re_result'
 data['reaudit_report'] = '${archived_path}'
 json.dump(data, open(f, 'w'), indent=2)
 "
-            # Re-archive updated judge report
-            (
-                flock -x 9 || { log "  WARNING: could not acquire lock"; true; }
-                archive_judge_report "$pkg" "$judge_file"
-            ) 9>"$LOCK_FILE"
-
-            log "  Updated judge report with re-audit: $re_result"
+            log "  Noted the re-audit on the judge file: $re_result"
         fi
     else
         log "  Re-audit produced no report"

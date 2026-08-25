@@ -429,6 +429,9 @@ def build_index_data(audits, judges, now=None, funding_inputs=None, human=None):
             "false_negatives": data.get("false_negatives", []),
             "model": usage.get("model", "unknown"),
             "cost": usage.get("cost") or 0,
+            # For folding, below; dropped before the summary is built.
+            "_ruling": (tuple(data.get("audits_judged") or []), data.get("reasoning", "")),
+            "_reaudit_copy": bool(data.get("reaudit_date")),
         })
 
     # Tag re-audits: either from frontmatter or by cross-referencing judge data
@@ -436,6 +439,28 @@ def build_index_data(audits, judges, now=None, funding_inputs=None, human=None):
         for a in pkg_data["audits"]:
             if not a["triggered_by"] and a["filename"] in reaudit_filenames:
                 a["triggered_by"] = "judge"
+
+    # Fold re-archived rulings. bench/judge.sh used to archive a judge file a
+    # second time after the re-audit it asked for, with reaudit_* fields
+    # added and the verdict copied unchanged. On the branch that is a second
+    # file, and it read as a second ruling: pcloud-drive showed three
+    # "unsafe" judgements when one judge had ruled once and been copied. A
+    # copy is the same ruling (same audits read, same reasoning) carrying a
+    # reaudit_date; the original it duplicates is dropped and the copy, with
+    # its metadata, stands in its place.
+    for pkg_data in packages.values():
+        rulings = pkg_data["judges"]
+        kept = []
+        for i, j in enumerate(rulings):
+            copied_later = any(
+                later["_ruling"] == j["_ruling"] and later["_reaudit_copy"]
+                for later in rulings[i + 1:]
+            )
+            if not copied_later:
+                kept.append(j)
+        for j in kept:
+            del j["_ruling"], j["_reaudit_copy"]
+        pkg_data["judges"] = kept
 
     # Build per-package summary
     pkg_summaries = {}
