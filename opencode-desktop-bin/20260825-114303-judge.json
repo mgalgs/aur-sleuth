@@ -1,0 +1,28 @@
+{
+  "package": "opencode-desktop-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package safely extracts a pinned upstream .deb archive. The only disagreement stems from a false positive where one model misinterpreted the upstream binary's name (which happens to end in '.desktop') as executing a desktop configuration file. This is an upstream payload characteristic, not an AUR injection.",
+  "disagreement_analysis": "The qwen model flagged the Exec line in a .desktop file because the target path '/opt/OpenCode/ai.opencode.desktop' ends in '.desktop'. It incorrectly assumed this meant a .desktop file was being executed, rather than recognizing it as the upstream binary's filename. The deepseek model correctly identified it as a standard desktop entry pointing to the application binary.",
+  "coverage_issues": [],
+  "false_positives": [
+    "qwen model flagged 'Exec=/opt/OpenCode/ai.opencode.desktop' as executing a .desktop file. It is simply the upstream binary's name, and even if it were a misconfiguration, it is part of the upstream payload, not an AUR injection."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models may falsely flag executable paths ending in '.desktop' or other extensions as executing configuration files. The tool should understand that Linux executables can have any name, and paths in 'Exec=' fields refer to the upstream binary payload.",
+    "Reinforce the distinction between upstream payload contents (e.g., files extracted from a .deb archive) and AUR packaging scripts. Upstream naming quirks or misconfigurations are not AUR supply-chain injections."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 8774,
+    "completion_tokens": 2351,
+    "cost": 0.0058169599999999995
+  },
+  "audits_judged": [
+    "20260825-112111-qwen-qwen3-235b-a22b-2507.md",
+    "20260825-112133-deepseek-deepseek-v4-flash.md"
+  ]
+}

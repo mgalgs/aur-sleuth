@@ -1,0 +1,31 @@
+{
+  "package": "t3code-nightly-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Two independent models (qwen/qwen3-235b-a22b-2507 and deepseek/deepseek-v4-flash) both reviewed the PKGBUILD and LICENSE file and found no malicious behavior. The PKGBUILD follows standard AUR practices: it downloads a prebuilt AppImage from the declared upstream GitHub repository with pinned SHA256 checksums, performs no command substitution or network access in global scope, and uses standard prepare/package functions. The LICENSE file is inert MIT license text. The AppImage binary payload is correctly identified as unauditable text, which is expected for -bin packages. No injection patterns were detected.",
+  "disagreement_analysis": null,
+  "coverage_issues": [
+    "openrouter/free report had a tool error parsing the LICENSE file response, resulting in INCONCLUSIVE status for that file. However, this report is marked advisory:true and does not count toward the verdict."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "The audit tool correctly handles -bin packages by focusing on the PKGBUILD as the primary attack surface and acknowledging that binary payloads (AppImage, tarballs) cannot be text-audited.",
+    "Tool errors (model response parsing failures) should be clearly distinguished from security findings to avoid false INCONCLUSIVE verdicts.",
+    "The advisory flag correctly prevents tool-error reports from influencing the final verdict, which is appropriate behavior.",
+    "For packages with binary payloads, the audit correctly prioritizes verifying that the PKGBUILD pins checksums and fetches from declared upstream sources, which closes the swap risk."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5727,
+    "completion_tokens": 1163,
+    "cost": 0.0033212800000000002
+  },
+  "audits_judged": [
+    "20260825-152219-qwen-qwen3-235b-a22b-2507.md",
+    "20260825-152633-deepseek-deepseek-v4-flash.md",
+    "20260825-031801-openrouter-free.md"
+  ]
+}

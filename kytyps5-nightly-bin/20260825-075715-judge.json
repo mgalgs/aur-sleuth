@@ -1,0 +1,30 @@
+{
+  "package": "kytyps5-nightly-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "All three models agree the package is safe. The PKGBUILD fetches sources exclusively from the declared upstream GitHub repository with pinned SHA256 checksums, preventing artifact substitution. The package() function performs standard binary installation operations (copying to /opt, creating symlinks, installing a wrapper script) with no obfuscation, network exfiltration, or execution of untrusted content. The wrapper script's per-user data directory pattern is benign and common for applications requiring writable config. No malicious injection detected in any reviewed file.",
+  "disagreement_analysis": null,
+  "coverage_issues": [
+    "First two models reviewed only PKGBUILD and .desktop file, missing .gitlab-ci.yml and extracted source files. However, these omissions are acceptable: .gitlab-ci.yml is CI automation not executed during makepkg, and the 56 unauditable binary files are the payload, not packaging code."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "For binary packages (-bin suffix), models correctly prioritize PKGBUILD and packaging files over the payload. The tool's note about '56 compiled/archived files cannot be audited' is appropriate and prevents false negatives from being masked by binary content.",
+    "The escalation model's review of .gitlab-ci.yml and CMake config files was thorough but unnecessary for security assessment\u2014these files are not executed during package build/install. Future audits could skip CI/CD automation files unless they're referenced by PKGBUILD functions.",
+    "All models correctly identified that the wrapper script's per-user data directory pattern (creating $XDG_DATA_HOME/kytyps5 and symlinking) is benign, not a security concern. This pattern is common for applications that need writable runtime directories."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 7530,
+    "completion_tokens": 1334,
+    "cost": 0.00411712
+  },
+  "audits_judged": [
+    "20260823-185707-qwen-qwen3-235b-a22b-2507.md",
+    "20260823-185715-deepseek-deepseek-v4-flash.md",
+    "20260824-093301-anthropic-claude-sonnet-4.6.md"
+  ]
+}

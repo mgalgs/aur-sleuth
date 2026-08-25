@@ -1,0 +1,33 @@
+{
+  "package": "brave-origin-nightly-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD fetches official Brave nightly .deb releases from GitHub with proper SHA-512 checksums. The qwen model's 'unsafe' finding on src/postinst is a false positive: (1) postinst is a Debian maintainer script extracted from the upstream .deb payload, not code injected by the AUR maintainer; (2) Debian maintainer scripts do not execute during Arch Linux package installation unless explicitly called via an .install file, which this package lacks; (3) even if it did run, installing Google's APT repo is upstream's product behavior for a Chromium-based browser, not a supply-chain injection. The deepseek model correctly identified this as safe by focusing on what actually executes during makepkg.",
+  "disagreement_analysis": "The qwen model flagged src/postinst for containing Google's GPG key and APT repository configuration, calling it a 'supply chain risk.' This conflates upstream Debian packaging behavior with AUR injection. The postinst script is extracted from the upstream .deb and would never execute on Arch Linux - there is no .install file to trigger it. The model failed to apply the threat model test: 'could an AUR maintainer have injected this?' No - this is upstream content. The deepseek model correctly recognized the package structure and found no malicious execution paths.",
+  "coverage_issues": [
+    "openrouter/free had a parsing error on src/prerm, resulting in inconclusive status",
+    "deepseek model's file selection failed (LLMResponseError) and fell back to highest-priority files, but still covered the important ones"
+  ],
+  "false_positives": [
+    "qwen model flagged src/postinst as unsafe for containing Google's GPG key and APT repo - this is upstream Debian packaging content that would never execute on Arch Linux (no .install file exists), and represents upstream product behavior, not AUR maintainer injection"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models need to distinguish between files that execute during Arch installation (PKGBUILD functions, .install hooks) vs files that are merely extracted from upstream archives (Debian postinst/postrm/prerm scripts). Extracted maintainer scripts from .deb packages do not run on Arch unless explicitly invoked.",
+    "The audit tool should filter out or deprioritize Debian maintainer scripts (postinst, postrm, prerm, preinst) when auditing AUR packages that wrap .deb files, unless the PKGBUILD explicitly executes them or an .install file replicates their logic.",
+    "Models should apply the threat model test before flagging: 'Could the AUR maintainer have injected this, and does it serve no purpose the package claims?' Upstream content that serves the upstream product's purpose (like setting up auto-update repos) is not injection."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 20289,
+    "completion_tokens": 1765,
+    "cost": 0.00875168
+  },
+  "audits_judged": [
+    "20260825-023447-qwen-qwen3-235b-a22b-2507.md",
+    "20260825-023610-deepseek-deepseek-v4-flash.md",
+    "20260825-031036-openrouter-free.md"
+  ]
+}

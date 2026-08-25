@@ -1,0 +1,32 @@
+{
+  "package": "zotero-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard binary AUR package downloading from official Zotero servers with proper SHA-256 checksums. The only flagged issue (qwen3-235b's finding on src/Zotero_linux-x86_64/zotero.desktop) is a false positive: the 'complex' Exec line using bash -c with realpath/sed is a well-documented portable application pattern to resolve the binary path relative to the desktop file location. The %k variable is the desktop file's own path (not user input), so there is no command injection risk. Deepseek correctly identified this as legitimate portable app packaging.",
+  "disagreement_analysis": "qwen3-235b flagged src/Zotero_linux-x86_64/zotero.desktop as 'obfuscated command execution' due to the Exec=bash -c \"$(dirname $(realpath $(echo %k | sed -e 's/^file:\\\\/\\\\///')))/zotero -url %U\" pattern. This is a false positive: %k is a freedesktop.org specification variable that expands to the desktop file's own path (controlled by the DE, not user input), and the command simply resolves the portable app's binary location. Deepseek correctly recognized this as standard portable application packaging. The disagreement stems from qwen3-235b overreacting to shell complexity without understanding the desktop entry specification context.",
+  "coverage_issues": [
+    "openrouter/free had parsing errors for set_launcher_icon and removed-files (inconclusive), but this is an advisory report and doesn't affect the verdict"
+  ],
+  "false_positives": [
+    "qwen3-235b's UNSAFE finding on src/Zotero_linux-x86_64/zotero.desktop: The 'obfuscated' bash -c command is a standard portable application pattern. %k is the desktop file's own path per freedesktop.org spec, not user input. The command resolves the app's binary location relative to the .desktop file - this is legitimate, documented behavior for portable apps, not an injection vector."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models need better context on freedesktop.org desktop entry specification variables (%k, %U, %f, etc.) - these are DE-controlled, not user input, and shell complexity using them is often legitimate portable app packaging",
+    "Complex shell commands in .desktop files should be evaluated in context: if they only reference %k (desktop file path) and execute the package's own binary, this is a standard portable app pattern, not obfuscation",
+    "The audit tool should distinguish between 'unusual but legitimate' patterns and actual injection risks - shell complexity alone is not a security indicator when the data sources are trusted specification variables"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 16793,
+    "completion_tokens": 1608,
+    "cost": 0.007432
+  },
+  "audits_judged": [
+    "20260825-023745-qwen-qwen3-235b-a22b-2507.md",
+    "20260825-023816-deepseek-deepseek-v4-flash.md",
+    "20260825-032344-openrouter-free.md"
+  ]
+}

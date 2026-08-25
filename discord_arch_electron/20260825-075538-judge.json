@@ -1,0 +1,32 @@
+{
+  "package": "discord_arch_electron",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The disagreement centers on src/Discord/discord, which is Discord's official launcher script (extracted from the upstream tarball, not injected by the AUR maintainer). It downloads from updates.discord.com\u2014Discord's legitimate update server\u2014as part of Discord's standard self-bootstrapping distribution model. Per the threat model, 'what the application does when it runs is the vendor's product, not an injection.' The AUR PKGBUILD pins the source tarball with checksums, so the maintainer cannot swap in malicious bytes. The bootstrap behavior is upstream application behavior, not AUR-packaging injection. Deepseek correctly identified this; qwen overreacted to normal Discord functionality.",
+  "disagreement_analysis": "Qwen flagged src/Discord/discord as unsafe because it downloads and executes binaries from updates.discord.com without checksum verification. However, this is Discord's own official launcher script from the upstream tarball, performing Discord's standard bootstrap mechanism. The threat model explicitly excludes upstream application behavior from the verdict. Deepseek correctly recognized this as expected Discord distribution behavior, not an AUR maintainer injection. The openrouter report was advisory-only and had parsing errors.",
+  "coverage_issues": [
+    "openrouter/free had parsing failures for src/Discord/discord and src/Discord/discord.desktop, returning inconclusive instead of a verdict"
+  ],
+  "false_positives": [
+    "src/Discord/discord flagged as unsafe by qwen: This is Discord's official launcher script performing its standard bootstrap from updates.discord.com. It is upstream application behavior, not AUR-packaging injection. The threat model explicitly excludes rating what the application does when it runs."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models need stronger guidance to distinguish upstream application behavior (e.g., Discord's own bootstrap launcher) from AUR-packaging injection. The src/Discord/discord script is extracted from the upstream tarball and performs Discord's standard distribution mechanism\u2014it is not code injected by the AUR maintainer.",
+    "When a file originates from within a checksummed source tarball and performs behavior consistent with the upstream vendor's known distribution model, it should not be flagged as an AUR supply-chain risk even if it downloads/executes binaries.",
+    "The prompt should emphasize that 'downloads from official vendor servers as part of normal application behavior' is categorically different from 'fetches from a host the package has no stated relationship with'\u2014the latter is the injection pattern, not the former."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 15526,
+    "completion_tokens": 1368,
+    "cost": 0.00671936
+  },
+  "audits_judged": [
+    "20260825-024828-qwen-qwen3-235b-a22b-2507.md",
+    "20260825-025120-deepseek-deepseek-v4-flash.md",
+    "20260825-032334-openrouter-free.md"
+  ]
+}

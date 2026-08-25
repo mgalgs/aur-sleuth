@@ -1,0 +1,34 @@
+{
+  "package": "pi-coding-agent-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD is a standard prebuilt binary package that downloads pinned tarballs from the official upstream GitHub repository (github.com/earendil-works/pi) with proper sha256 checksums. No malicious behavior occurs during makepkg. The only 'unsafe' finding (qwen's flag on inline-bash.ts) is a classic false positive: it's an example extension in the upstream source tree that demonstrates the application's shell-execution feature. This code is never executed during package build or install\u2014it's application payload shipped to /opt. Per the threat model, 'what the application does when it runs is the vendor's product, not an injection.'",
+  "disagreement_analysis": "The disagreement stems from qwen reviewing example extension source files (inline-bash.ts) and misclassifying application functionality as a supply-chain injection. Deepseek's file selection failed (LLMResponseError), causing it to review different files (export-html utilities instead of extensions), but this didn't affect the verdict since those files were also safe. The openrouter/free report is advisory-only and had a parsing error on marked.min.js.",
+  "coverage_issues": [
+    "deepseek/deepseek-v4-flash: File selection failed with LLMResponseError, fell back to highest-priority files, missing the extensions directory entirely",
+    "openrouter/free: Same file selection failure, plus parsing error on marked.min.js"
+  ],
+  "false_positives": [
+    "qwen flagged src/pi/examples/extensions/inline-bash.ts as 'Arbitrary command execution' - this is an example extension demonstrating the coding agent's shell feature, never executed during makepkg. It's upstream application code, not an AUR injection. The file lives in examples/ and is installed as part of the application payload, not run during build."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "For -bin packages shipping prebuilt binaries, the audit tool should deprioritize or skip upstream application source files (especially under examples/, docs/, src/) that are merely installed as payload and never executed during makepkg",
+    "File selection needs better heuristics to distinguish 'code executed during packaging' from 'code shipped as application payload' - the current priority ranking surfaced example extensions over more relevant files",
+    "Models need stronger prompting that application features (like a coding agent's ability to run shell commands) are not supply-chain injections, even when they involve exec/spawn patterns",
+    "File selection failures (LLMResponseError) should trigger a retry or fallback that still covers high-risk directories like build scripts and install hooks, not just alphabetical priority"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 17557,
+    "completion_tokens": 1374,
+    "cost": 0.00737696
+  },
+  "audits_judged": [
+    "20260825-022555-qwen-qwen3-235b-a22b-2507.md",
+    "20260825-022726-deepseek-deepseek-v4-flash.md",
+    "20260825-031704-openrouter-free.md"
+  ]
+}

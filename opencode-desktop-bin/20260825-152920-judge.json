@@ -1,0 +1,28 @@
+{
+  "package": "opencode-desktop-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard -bin package that downloads a pinned .deb from the official GitHub releases with verified checksums. The disagreement stems from a false positive where a model assumed that an executable named 'ai.opencode.desktop' was a .desktop metadata file being executed as a binary. In Linux, file extensions do not dictate file type, and this is simply the name chosen by the upstream developers for their binary. There is no malicious injection by the AUR maintainer.",
+  "disagreement_analysis": "qwen3-235b flagged the desktop entry because the Exec path points to a file ending in '.desktop', incorrectly assuming this meant a metadata file was being executed as a binary to obfuscate malicious code. It failed to recognize that the upstream application's binary is simply named 'ai.opencode.desktop'. deepseek-v4-flash correctly identified it as a standard desktop entry pointing to the upstream binary without raising false alarms.",
+  "coverage_issues": [],
+  "false_positives": [
+    "qwen3-235b flagged src/usr/share/applications/ai.opencode.desktop.desktop as malicious obfuscation because the Exec path ends in '.desktop'. This is a false positive based on a misunderstanding of Linux file naming conventions; the upstream binary is just named 'ai.opencode.desktop'."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models must not assume that a file ending in '.desktop' referenced in an Exec= field is a desktop metadata file being executed. In Linux, binaries can have any name. The model should recognize upstream binary naming quirks rather than flagging them as obfuscation.",
+    "Models should differentiate between upstream application behavior/naming and AUR maintainer injections. A weirdly named binary extracted from a verified upstream .deb is not an injection by the AUR maintainer."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 9071,
+    "completion_tokens": 2216,
+    "cost": 0.0057392
+  },
+  "audits_judged": [
+    "20260825-151808-qwen-qwen3-235b-a22b-2507.md",
+    "20260825-151939-deepseek-deepseek-v4-flash.md"
+  ]
+}
