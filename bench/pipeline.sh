@@ -301,6 +301,36 @@ budget_remaining() {
     python3 -c "print(max(0, $GATE_TOTAL - $(gate_spent)))"
 }
 
+# --- The free tier's daily cap -----------------------------------------------
+# An audit whose provider said its per-DAY allowance is spent exits 4 and
+# leaves the reset epoch in this file (aur-sleuth reads the path from the
+# environment). While that moment is ahead, the free work -- the advisory
+# sweep and the free voices -- is skipped outright instead of probing a dead
+# cap: each probe still clones and sources a PKGBUILD before its first call
+# fails, and one scheduled run spent 40 minutes doing exactly that. The
+# two-dry-batches breaker below stays, for a provider that does not say.
+QUOTA_RESET_FILE="$PIPELINE_DIR/free-quota-reset"
+export AUR_SLEUTH_QUOTA_RESET_FILE="$QUOTA_RESET_FILE"
+
+# Prints the reset epoch while it is still ahead; nothing otherwise.
+free_quota_reset() {
+    local epoch
+    epoch=$(cat "$QUOTA_RESET_FILE" 2>/dev/null || true)
+    [[ "$epoch" =~ ^[0-9]+$ ]] || return 0
+    (( epoch > $(date +%s) )) || return 0
+    echo "$epoch"
+}
+
+free_quota_until() {
+    date -u -d "@$1" +%Y-%m-%dT%H:%M:%SZ
+}
+
+# True when this run's audits are all free work that a spent cap makes
+# pointless: an advisory run, while the reset is ahead.
+advisory_quota_spent() {
+    [[ "$ADVISORY" == "true" && -n "$(free_quota_reset)" ]]
+}
+
 # How far past its budget this run's gate spend is. Nonzero is expected, not
 # an error: the judge and re-audit phases are allowed to overrun. This is the
 # number to watch when tuning AUDIT_BUDGET_SHARE.
@@ -563,6 +593,14 @@ run_audit() {
         return 1
     fi
 
+    # 4 is aur-sleuth saying the provider's per-day allowance is spent; it
+    # has noted the reset in QUOTA_RESET_FILE and withdrawn its report. The
+    # loops read the note; here it is one more missing report.
+    if [[ $rc -eq 4 ]]; then
+        log "  [$pkg] $model: the free tier's daily cap is spent; no report"
+        return 1
+    fi
+
     if [[ ! -f "$report_file" ]]; then
         log "  [$pkg] No report produced by $model"
         return 1
@@ -606,10 +644,14 @@ audit_package() {
     # The free voices, in the same breath: they run beside the paid seats and
     # their shorter deadline means waiting for them never outlasts a real
     # audit. A throttled one leaves nothing behind, by the soft-failure rule.
-    for model in "${FREE_MODEL_LIST[@]}"; do
-        run_audit "$pkg" "$model" free &
-        pids+=($!)
-    done
+    # While the free tier's daily cap is known to be spent they are not even
+    # asked: the answer is known, and asking costs a clone.
+    if [[ -z "$(free_quota_reset)" ]]; then
+        for model in "${FREE_MODEL_LIST[@]}"; do
+            run_audit "$pkg" "$model" free &
+            pids+=($!)
+        done
+    fi
     for pid in "${pids[@]}"; do
         wait "$pid" || true
     done
@@ -668,6 +710,14 @@ run_advisory_sweep() {
     fi
     log ""
     log "=== Advisory Sweep ==="
+    # The cap is known to be spent: the sweep would clone and source up to
+    # ADVISORY_SWEEP PKGBUILDs to hear "no" from the first call of each.
+    local reset
+    reset=$(free_quota_reset)
+    if [[ -n "$reset" ]]; then
+        log "The free tier's daily cap is spent until $(free_quota_until "$reset"); sweep skipped"
+        return 0
+    fi
     log "Free coverage pass: up to $ADVISORY_SWEEP recently updated package(s) with $ADVISORY_MODELS, informational only"
     if $DRY_RUN; then
         log "DRY RUN: sweep skipped"
@@ -777,6 +827,9 @@ main() {
     fi
     if [[ "$ADVISORY_SWEEP" -gt 0 ]]; then
         log "Advisory sweep configured: $ADVISORY_SWEEP package(s) with $ADVISORY_MODELS after an unshaped run"
+    fi
+    if [[ -n "$(free_quota_reset)" ]]; then
+        log "Free tier: the daily cap is spent until $(free_quota_until "$(free_quota_reset)"); free voices and the sweep sit this run out"
     fi
     log "Daily spend so far: \$$(get_daily_spent)"
 
@@ -908,6 +961,13 @@ main() {
                 fi
                 batch=()
 
+                # The provider said when its cap resets: stop now, no
+                # second batch to confirm what it already told us.
+                if advisory_quota_spent; then
+                    log "The free tier's daily cap is spent until $(free_quota_until "$(free_quota_reset)") -- stopping after $audited_n package(s)"
+                    break
+                fi
+
                 if (( dry_batches >= 2 )); then
                     log "Two audit batches produced no report at all; the free tier looks exhausted -- stopping after $audited_n package(s)"
                     break
@@ -921,7 +981,7 @@ main() {
         done < <(head -n 500 "$candidates_file")
 
         # Flush remaining batch
-        if [[ ${#batch[@]} -gt 0 ]] && ! is_over_budget "$AUDIT_BUDGET"; then
+        if [[ ${#batch[@]} -gt 0 ]] && ! is_over_budget "$AUDIT_BUDGET" && ! advisory_quota_spent; then
             log "--- Batch of ${#batch[@]} (final) ---"
             local pids=()
             for p in "${batch[@]}"; do

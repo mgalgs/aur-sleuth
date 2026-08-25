@@ -221,6 +221,9 @@ sweep_out() {
         # All read by the function that arrives through the eval above.
         # shellcheck disable=SC2329
         log() { echo "$@"; }
+        # The cap note is a pipeline.sh global too; here the cap is never spent.
+        # shellcheck disable=SC2329
+        free_quota_reset() { :; }
         # shellcheck disable=SC2034
         DRY_RUN=true NO_PUSH=true SKIP_DASHBOARD=true
         # shellcheck disable=SC2034

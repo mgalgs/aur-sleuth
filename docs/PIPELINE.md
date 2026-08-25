@@ -123,9 +123,15 @@ re-read the same updates; its audits run with extra retries
 ridden through, while the daily cap still fails soft. "Soft" is literal: an
 audit whose every LLM call failed withdraws its report and leaves nothing —
 no audited mark, no error transcript — so the package returns next sweep.
-Two consecutive batches that leave no report trip a circuit breaker and end
-the sweep: that only happens when the daily cap is spent, and grinding down
-the rest of the list would hold the Job past its deadline for nothing.
+When the provider says the daily cap is spent — a per-day 429, which
+carries the reset time — the audit exits 4 and notes the reset epoch in
+`pipeline/free-quota-reset`; the sweep stops at once, and until that moment
+every later run skips the sweep and the free voices outright, saying so in
+its log (each probe would clone and source a PKGBUILD to hear "no" from
+its first call). For a provider that does not say, two consecutive batches
+that leave no report trip a circuit breaker and end the sweep: that only
+happens when the daily cap is spent, and grinding down the rest of the
+list would hold the Job past its deadline for nothing.
 Shaped runs (named packages, counts, escalation, a manual budget) never
 sweep, and a sweep failure never fails the run that carried it. The public page draws advisory
 reports as hollow dashed squares labeled "informational only, not a vote",
