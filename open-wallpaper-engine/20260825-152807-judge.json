@@ -1,0 +1,38 @@
+{
+  "package": "open-wallpaper-engine",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The qwen3-235b model flagged a `curl | bash` pattern in `src/open-wallpaper-engine/scripts/build_waywallen_plugin.sh`, but this is an upstream development script that is NOT invoked by the PKGBUILD during `makepkg`. The PKGBUILD declares `lito` as a build dependency and uses it directly in its build() function\u2014it does not call this shell script. Per the threat model, development tooling in the source tree is not a concern unless referenced by PKGBUILD functions. The deepseek model correctly identified this as a hygiene concern but not a security issue for AUR packaging purposes.",
+  "disagreement_analysis": "The qwen3-235b model detected `curl | bash` in an upstream script and flagged it as unsafe without verifying whether the PKGBUILD actually executes that script. The deepseek model reviewed the same file but correctly contextualized it: the script exists in the upstream source tree, the URL points to the project's own build tool repository, and the PKGBUILD uses `lito` as a declared dependency rather than invoking this installation script. The disagreement stems from failing to distinguish between 'code in the source tree' and 'code executed during AUR build'.",
+  "coverage_issues": [
+    "Both models skipped `0001-lito-Use-system-cef.patch` as 'binary file'\u2014patch files are text and should be reviewed for malicious injections",
+    "Neither model explicitly verified whether `build_waywallen_plugin.sh` is called by any PKGBUILD function (prepare/build/package/check)"
+  ],
+  "false_positives": [
+    "qwen3-235b's UNSAFE finding on `build_waywallen_plugin.sh`: This is an upstream development script not invoked by the PKGBUILD. The PKGBUILD uses `lito` as a declared makedepends, not via this curl|bash installer. Development scripts in the source tree are out of scope unless called by packaging functions."
+  ],
+  "false_negatives": [
+    "The patch file `0001-lito-Use-system-cef.patch` was incorrectly skipped as binary by both models. Patch files are text and could contain malicious code injections that would be applied during prepare()."
+  ],
+  "re_audit_recommended": true,
+  "re_audit_focus": [
+    "Review `0001-lito-Use-system-cef.patch` as text to verify it contains no malicious injections",
+    "Explicitly grep PKGBUILD for any reference to `build_waywallen_plugin.sh` to confirm it is not invoked during makepkg"
+  ],
+  "learnings": [
+    "Models must verify whether flagged scripts are actually invoked by PKGBUILD functions before marking unsafe\u2014presence in source tree \u2260 execution during build",
+    "Patch files (.patch, .diff) should never be skipped as 'binary'\u2014they are text files that can contain malicious code applied during prepare()",
+    "The audit tool should explicitly check if flagged files are referenced in PKGBUILD functions before escalating to unsafe verdict",
+    "Distinguish between 'upstream development tooling' and 'AUR packaging code'\u2014only the latter is in scope for injection attacks"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 13580,
+    "completion_tokens": 2370,
+    "cost": 0.0073792
+  },
+  "audits_judged": [
+    "20260825-152311-qwen-qwen3-235b-a22b-2507.md",
+    "20260825-152431-deepseek-deepseek-v4-flash.md"
+  ]
+}
