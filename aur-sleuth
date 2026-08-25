@@ -92,6 +92,16 @@ DEFAULT_MODEL = "qwen/qwen3-235b-a22b-2507"
 DEFAULT_REASONING_EFFORT = "high"
 SESSION_AUDIT_LIMIT_TOKENS = 100_000  # 100k tokens for the entire session
 MAX_FILE_LINES = 2000
+# Two more caps on what one file review may hold, both decided before the
+# model is involved. Lines alone were not enough: file(1) calls a 350 MB
+# NVIDIA .run installer a shell script (its head is one), the line cap left
+# its few-newline payload whole, and reading it whole in every parallel
+# worker had the audit container OOM-killed; minified bundles with one line
+# per file went out whole and came back HTTP 413. A file over MAX_FILE_BYTES
+# is skipped unread, by stat; what survives the line cap is cut again to
+# MAX_FILE_CHARS, head and tail, before it becomes a prompt.
+MAX_FILE_BYTES = 4 * 1024 * 1024
+MAX_FILE_CHARS = 120_000
 IGNORED_DIRS = [".git"]
 GREY = "grey50"
 # Use ASCII icons to avoid ambiguous-width Unicode affecting box layout in some terminals
@@ -973,15 +983,43 @@ _SUSPICIOUS_PATTERNS = re.compile(
 )
 
 
-def _smart_truncate_for_audit(content: str, max_lines: int = MAX_FILE_LINES) -> str:
+def _cap_chars(content: str, max_chars: int = MAX_FILE_CHARS) -> str:
+    """Cut content that is still too long after the line cap: a file of few,
+    enormous lines. Head and tail, with a marker between, the same shape as
+    the line cap minus the suspicious-pattern scan -- on a 3 MB line there is
+    nothing to scan for that the head does not show."""
+    if len(content) <= max_chars:
+        return content
+    head = max_chars * 2 // 3
+    tail = max_chars // 4
+    omitted = len(content) - head - tail
+    return (content[:head]
+            + f"\n\n... [{omitted} characters omitted: the file is {len(content)} characters long] ...\n\n"
+            + content[-tail:])
+
+
+def file_exceeds_size_cap(file_path: Path, max_bytes: int = MAX_FILE_BYTES) -> Optional[int]:
+    """The file's size when it is past the cap, else None. By stat: the point
+    is never to read the file. An unreadable path is not "too large"; the
+    open() after this reports it."""
+    try:
+        size = file_path.stat().st_size
+    except OSError:
+        return None
+    return size if size > max_bytes else None
+
+
+def _smart_truncate_for_audit(content: str, max_lines: int = MAX_FILE_LINES,
+                              max_chars: int = MAX_FILE_CHARS) -> str:
     """Truncate large files for audit, preserving the most security-relevant parts.
 
     Keeps: head (setup/imports), tail (entry points), and any lines matching
-    suspicious patterns (with context). Language-agnostic.
+    suspicious patterns (with context). Language-agnostic. Whatever the line
+    cap leaves is cut again by characters; see _cap_chars.
     """
     lines = content.splitlines(keepends=True)
     if len(lines) <= max_lines:
-        return content
+        return _cap_chars(content, max_chars)
 
     head_lines = max_lines // 2
     tail_lines = max_lines // 4
@@ -1023,7 +1061,7 @@ def _smart_truncate_for_audit(content: str, max_lines: int = MAX_FILE_LINES) -> 
     parts.append(f"\n... [resuming at line {len(lines) - tail_lines + 1}] ...\n\n")
     parts.append("".join(lines[-tail_lines:]))
 
-    return "".join(parts)
+    return _cap_chars("".join(parts), max_chars)
 
 
 def _safe_obj_preview(obj: object, max_chars: int = 2000) -> str:
@@ -1634,6 +1672,14 @@ def audit_file(
             SafeStatus.SKIPPED,
             f"Skipping binary file: {file_path.name}",
         )
+    # Size by stat, before the read: file(1) judges by the head, and a
+    # self-extracting installer's head is a shell script.
+    size = file_exceeds_size_cap(file_path)
+    if size is not None:
+        return AuditResult(
+            file_path, pkgdir, SafeStatus.SKIPPED,
+            f"Skipping {file_path.name}: {size / (1024 * 1024):.0f} MB is too large to audit as text",
+        )
 
     try:
         with open(file_path, "r") as f:
@@ -1662,7 +1708,8 @@ def audit_file(
     # the model reads.
     original_content = file_content
     file_content = _smart_truncate_for_audit(file_content)
-    was_truncated = file_content.count("\n") < total_lines
+    was_truncated = (file_content.count("\n") < total_lines
+                     or len(file_content) < len(original_content))
 
     llm_params = get_llm_params_from_env()
 
@@ -1678,10 +1725,10 @@ def audit_file(
     truncation_note = ""
     if was_truncated:
         truncation_note = (
-            f"NOTE: This file was {total_lines} lines long and has been truncated for review. "
-            "The head, tail, and any lines matching suspicious patterns (curl, wget, eval, "
-            "base64, exec, etc.) are shown. Absence of suspicious matches in the omitted "
-            "region is a good sign but not conclusive.\n\n"
+            f"NOTE: This file was {total_lines} lines and {len(original_content)} characters "
+            "long and has been truncated for review. The head, tail, and any lines matching "
+            "suspicious patterns (curl, wget, eval, base64, exec, etc.) are shown. Absence of "
+            "suspicious matches in the omitted region is a good sign but not conclusive.\n\n"
         )
     under_fixture, referenced = fixture_context(pkgdir, file_path)
     # The auditor judges content: malware is malware wherever it sits, and
@@ -3644,6 +3691,40 @@ def selftest_quota_reset():
             assert f.read() == "1787616000\n"
 
 
+def selftest_file_caps():
+    """The two caps that keep a file review in memory and under the request
+    limit: a byte cap by stat, and a character cap after the line cap."""
+    marker = "characters omitted"
+    # Small stays whole; many short lines are cut by lines and stay under the
+    # character cap; one enormous line is cut by characters.
+    assert _smart_truncate_for_audit("x\n" * 10) == "x\n" * 10
+    many = "line\n" * 5000
+    cut = _smart_truncate_for_audit(many)
+    assert cut.count("\n") < 5000 and marker not in cut and len(cut) <= MAX_FILE_CHARS
+    one = "a" * 300_000
+    cut = _smart_truncate_for_audit(one)
+    assert marker in cut and len(cut) < MAX_FILE_CHARS + 200, len(cut)
+    assert cut.startswith("a" * 100) and cut.endswith("a" * 100)
+    # Both at once: 5000 lines of 200 chars is 1 MB; the line cap leaves ~1500
+    # lines (~300k chars) and the character cap takes it the rest of the way.
+    # The line cap's own marker sits in the middle it cuts away; what
+    # survives is the head, the tail, and the character marker between.
+    both = _smart_truncate_for_audit(("b" * 199 + "\n") * 5000)
+    assert marker in both and len(both) < MAX_FILE_CHARS + 200, len(both)
+    assert both.startswith("b" * 199 + "\n") and both.endswith("b" * 199 + "\n")
+    # The byte cap never reads the file: a sparse file is all size and no bytes.
+    with tempfile.TemporaryDirectory() as d:
+        small = Path(d) / "small.sh"
+        small.write_text("#!/bin/sh\n")
+        assert file_exceeds_size_cap(small) is None
+        huge = Path(d) / "installer.run"
+        with open(huge, "wb") as f:
+            f.truncate(MAX_FILE_BYTES + 1)
+        assert file_exceeds_size_cap(huge) == MAX_FILE_BYTES + 1
+        assert file_exceeds_size_cap(Path(d) / "absent") is None
+    print("✓ selftest_file_caps")
+
+
 def selftest_redaction():
     """What the environment says about this machine never reaches a report:
     the endpoint host, a home directory, a credential-shaped value, and the
@@ -3700,6 +3781,7 @@ def selftest():
     selftest_error_description()
     selftest_pkgbase()
     selftest_quota_reset()
+    selftest_file_caps()
     selftest_redaction()
     report_path = Path("/tmp/aur-sleuth-tui-selftest.txt")
 
