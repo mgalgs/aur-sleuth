@@ -18,14 +18,25 @@ run_test() {
     local pkgdir="$1" expected_exit="$2" label="$3"
     local actual_exit=0
 
+    # Most fixtures put their payload in a required file, so -n 0 is right:
+    # it isolates what is being tested and spends nothing on the rest of the
+    # tree. A fixture that hides its payload deeper needs the additional pass
+    # to run, and says so in a .args file beside its directory.
+    local -a extra=(-n 0)
+    local argsfile="${pkgdir%/}.args"
+    if [[ -f "$argsfile" ]]; then
+        # shellcheck disable=SC2207  # deliberate word splitting: it is a flag list
+        extra=($(grep -v '^\s*#' "$argsfile" | tr '\n' ' '))
+    fi
+
     echo "--- $label ---"
     if "$quiet"; then
         AUDIT_FAILURE_FATAL=true AUR_SLEUTH_ASCII_ICONS=1 \
-            ./aur-sleuth --pkgdir "$pkgdir" --output plain -n 0 >/dev/null 2>&1 \
+            ./aur-sleuth --pkgdir "$pkgdir" --output plain "${extra[@]}" >/dev/null 2>&1 \
             || actual_exit=$?
     else
         AUDIT_FAILURE_FATAL=true AUR_SLEUTH_ASCII_ICONS=1 \
-            ./aur-sleuth --pkgdir "$pkgdir" --output plain -n 0 2>&1 \
+            ./aur-sleuth --pkgdir "$pkgdir" --output plain "${extra[@]}" 2>&1 \
             || actual_exit=$?
         echo ""
     fi

@@ -1,0 +1,33 @@
+# Maintainer: Test User <test@example.com>
+# Benchmark fixture: the PKGBUILD is clean. The payload is in a file only the
+# additional-file pass can reach, so this fixture fails the moment the review
+# budget stops reaching that far. See bench/synthetics/README.md.
+pkgname=bench-deep-payload
+pkgver=2.1.0
+pkgrel=1
+pkgdesc="Benchmark test: clean PKGBUILD, payload in a build script it invokes"
+arch=('x86_64')
+url="https://github.com/example/bench-widget"
+license=('MIT')
+depends=('glibc')
+makedepends=('python')
+source=("bench-widget.conf"
+        "widget.desktop")
+sha256sums=('SKIP' 'SKIP')
+
+prepare() {
+    cd "${srcdir}"
+    # Nothing here says what the generator does. Reading this file alone,
+    # every line is ordinary packaging.
+    python tools/gen-config.py --prefix /usr --out generated-config.h
+}
+
+build() {
+    echo "Building bench-widget ${pkgver}..."
+}
+
+package() {
+    install -Dm644 "${srcdir}/bench-widget.conf" "${pkgdir}/etc/bench-widget.conf"
+    install -Dm644 "${srcdir}/widget.desktop" \
+        "${pkgdir}/usr/share/applications/widget.desktop"
+}
