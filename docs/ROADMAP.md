@@ -122,6 +122,43 @@ same version; the set re-pins only with a version bump.
   fixtures would give judge candidates a malice-detection score, not just
   false-flag resistance. Queued 2026-08-23.
 
+## Token budget (queued 2026-08-25)
+
+`docs/TOKEN-BUDGET.md` has the measurement, the tools that reproduce it, and
+what each idea below is worth. In short: 51.9% of what the loop sends is
+instruction repeated on every call, so choosing files better cannot halve it.
+
+1. **Shorten the repeated instruction.** The only lever big enough to halve
+   the total, and the one CLAUDE.md flags as the most regression-prone
+   surface here — every `file_auditor` edit lands on the `makepkg` gate, and
+   items 5, 6 and 7 are the false-positive suppressors. Needs a decision
+   from a person, not a measurement. Either compress the prose preserving
+   every rule, or send it once per package rather than once per file (which
+   changes `audit_files()`'s parallelism and failure isolation).
+2. **Lower the review ceiling.** Roughly 7% of the total per slot given up,
+   and it is already a setting. Blocked on evidence, not on arithmetic:
+   every settled verdict on the branch is `safe`, so the benchmark scores a
+   smaller ceiling as "unchanged" by construction.
+   `bench/synthetics/malicious-deep-payload` is the first fixture that can
+   fail when the budget stops reaching far enough — it survives every
+   ceiling from 10 down to 3 on one model. More such fixtures, on more
+   models, are what would make this decidable.
+3. **Re-check prompt caching before any cost-driven work.** The provider
+   reported none on 2026-08-25. A cached prefix is billed cheaper but still
+   counted, so "halve the tokens" and "halve the bill" would then need
+   different answers. `bench/token-ledger.py` reports it separately.
+4. **Deduplicate candidates by content, not just basename** (unmeasured).
+   The same bytes under two names cost two review slots today. The
+   selection prompt asks models to notice this, which makes it a decidable
+   property expressed as a prompt rule — the pattern CLAUDE.md says to move
+   into code. Needs a pass over the candidate pools first; the ledger
+   records only what was selected.
+5. **Give `_cap_chars()` a suspicious-line pass** before lowering
+   `MAX_FILE_CHARS`. It keeps head and tail only, so on exactly the files
+   that cost most the middle is dropped blind, and `locate_evidence()` can
+   only find what was sent. Tier-based caps were measured at ~7% of the
+   total and not taken for this reason.
+
 ## Naming
 
 - "Escalation" replaced "re-audit" in operator-facing surfaces on
