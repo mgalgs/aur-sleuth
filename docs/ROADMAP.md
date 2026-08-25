@@ -77,6 +77,21 @@ same version; the set re-pins only with a version bump.
   report now takes the concern quotes or the job logs. Add a small pending
   view if that gap is felt. The reader's `/api/reports` endpoints were kept
   for exactly this.
+- The store's picture of origin goes stale after a publish started from the
+  UI. That Job mounts the volume read-only on purpose — a Job holding the
+  deploy key must not be able to write the store — so its best-effort
+  write-back of `refs/remotes/origin/audit-reports` cannot land, and only the
+  next scheduled prepare moves the ref. The Publish card no longer believes
+  the stale ref (it reads the pushed commit out of the publish Job's own
+  log), but the review stage still does: run one in that window and it
+  reports one pending commit holding no reports. Options: a prepare-only verb
+  the UI can press, or having the review stage fetch origin itself — which
+  needs a credential the review Job is deliberately not given. Until then it
+  clears itself within four hours.
+- The "seen before" mark on a repeated concern lives in the reader, not in
+  `bench/review-pending.py`, and it has to: the review Job mounts the volume
+  read-only, so the script can neither keep its own last answer nor reach the
+  previous Job's log. Do not move it back into the script.
 
 ## Pipeline
 
