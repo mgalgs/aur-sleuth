@@ -124,6 +124,27 @@ judge's learnings record models picking `node_modules` anyway. A directory
 name is decidable by parsing — CLAUDE.md, "Prefer code over prompt for
 anything decidable".
 
+**Accuracy: unchanged, against a same-run baseline.** The same 22 packages,
+the same model (qwen/qwen3-235b-a22b-2507), the before run from a worktree
+pinned to the commit ahead of the change:
+
+```
+                 audited  scored  agree        false flags  misses
+before                22      19  13 (68%)               6       0
+after                 22      19  13 (68%)               6       0
+```
+
+The two runs flag one different package each — `conky-lua-nv` after,
+`customizepkg-git` before — which is model nondeterminism rather than a
+shift: `customizepkg-git` is one of the packages whose prompts the change
+left byte-identical, so it cannot be attributed either way. All five
+synthetics pass, `malicious-deep-payload` included.
+
+Six false flags out of nineteen is the incumbent's own behaviour on this
+sample, not something the change introduced, and it is worth its own look:
+half of the hard negatives — packages a judge had already had to clear —
+were flagged again.
+
 ## What is left, and why it was not taken
 
 **The repeated instruction: 51.9% of all prompt characters.** This is the only
