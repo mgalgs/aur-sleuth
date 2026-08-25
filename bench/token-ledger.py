@@ -30,7 +30,9 @@ def load(paths):
     ledgers = {}
     for p in paths:
         path = Path(p)
-        files = sorted(path.glob("*.json")) if path.is_dir() else [path]
+        # Recursive: a pass writes one directory per package asked for, since
+        # a split package's ledger is named after a pkgname nobody asked for.
+        files = sorted(path.rglob("*.json")) if path.is_dir() else [path]
         for f in files:
             try:
                 data = json.loads(f.read_text(encoding="utf-8"))
@@ -47,12 +49,17 @@ def totals(data):
     """Prompt tokens per stage, plus the package total, for one ledger."""
     per_stage = {}
     for call in data["calls"]:
-        s = per_stage.setdefault(call.get("stage", "unknown"),
-                                 {"calls": 0, "prompt": 0, "completion": 0, "chars": 0})
+        s = per_stage.setdefault(
+            call.get("stage", "unknown"),
+            {"calls": 0, "prompt": 0, "completion": 0, "chars": 0,
+             "system_chars": 0, "user_chars": 0},
+        )
         s["calls"] += 1
         s["prompt"] += call.get("prompt_tokens", 0)
         s["completion"] += call.get("completion_tokens", 0)
         s["chars"] += call.get("prompt_chars", 0)
+        s["system_chars"] += call.get("system_chars", 0)
+        s["user_chars"] += call.get("user_chars", 0)
     return per_stage
 
 
@@ -71,7 +78,7 @@ def print_table(ledgers):
     for pkg in sorted(ledgers):
         per_stage = totals(ledgers[pkg])
         for stage, s in per_stage.items():
-            g = grand.setdefault(stage, {"calls": 0, "prompt": 0, "completion": 0, "chars": 0})
+            g = grand.setdefault(stage, dict.fromkeys(s, 0))
             for k in g:
                 g[k] += s[k]
         rows.append((pkg, sum(s["prompt"] for s in per_stage.values()), per_stage))
@@ -103,6 +110,14 @@ def print_table(ledgers):
     if completion:
         print(f"completion tokens: {fmt(completion)} "
               f"({total_prompt / completion:.1f}:1 prompt:completion)")
+
+    # The system prompt goes out once per call, so its total is a fixed cost
+    # the loop pays for having many calls rather than for what it reviews.
+    system = sum(g["system_chars"] for g in grand.values())
+    user = sum(g["user_chars"] for g in grand.values())
+    if system + user:
+        print(f"prompt characters: {fmt(system)} system ("
+              f"{100 * system / (system + user):.1f}%) + {fmt(user)} content")
 
 
 def print_compare(after, before):

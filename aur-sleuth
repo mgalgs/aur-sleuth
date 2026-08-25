@@ -174,16 +174,21 @@ def write_call_ledger(report_file: Path, package_name: str) -> Optional[Path]:
     """Write the ledger beside the report, when asked for.
 
     Off by default: the pipeline publishes what lands in its report directory,
-    and this is measurement, not an audit artifact. AUR_SLEUTH_CALL_LEDGER
-    names a file, or is "1" for a sidecar next to the report.
+    and this is measurement, not an audit artifact. AUR_SLEUTH_CALL_LEDGER is
+    "1" for a sidecar next to the report, a path ending in .json for one file,
+    or anything else for a directory that gets one file per package -- which is
+    what a run over many packages needs, since one path would have each audit
+    overwrite the last.
     """
     dest = os.environ.get("AUR_SLEUTH_CALL_LEDGER", "")
     if not dest or not CALL_LEDGER:
         return None
     if dest in ("1", "true", "yes"):
         path = report_file.parent / f"aur-sleuth-calls-{package_name}.json"
-    else:
+    elif dest.endswith(".json"):
         path = Path(dest)
+    else:
+        path = Path(dest) / f"{package_name}.json"
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(
@@ -3411,8 +3416,9 @@ def sleuth_main() -> int:
         "--num-files-to-review",
         "-n",
         type=int,
-        default=10,
-        help="Target number of files to audit jobs (default: 10)",
+        default=None,
+        help="Ceiling on the files reviewed beyond the required ones "
+             "(default: NUM_FILES_TO_REVIEW, else 10)",
     )
     parser.add_argument(
         "--dry-run",
@@ -3458,7 +3464,16 @@ def sleuth_main() -> int:
         logger.debug("Setting max LLM jobs from command line: %d", args.max_llm_jobs)
         os.environ["MAX_LLM_JOBS"] = str(args.max_llm_jobs)
 
-    os.environ["NUM_FILES_TO_REVIEW"] = str(args.num_files_to_review)
+    # Only when the flag was actually given. Every other setting here follows
+    # the same rule, and this one did not: it wrote argparse's default over
+    # whatever the environment or the config file had said, so a
+    # NUM_FILES_TO_REVIEW in either was read by load_config() and then thrown
+    # away. The fallback lives where the value is read.
+    if args.num_files_to_review is not None:
+        logger.debug(
+            "Setting files to review from command line: %d", args.num_files_to_review
+        )
+        os.environ["NUM_FILES_TO_REVIEW"] = str(args.num_files_to_review)
 
     TuiCls = TUIPlain if args.output == "plain" else TUI
 
