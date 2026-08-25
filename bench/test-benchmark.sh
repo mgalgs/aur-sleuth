@@ -123,6 +123,21 @@ check("rows from the branch make an incumbent", cur["incumbent"])
 check("an incumbent is scored like anyone", cur["agreement"] == 1.0 and cur["cost_per_package"] == 0.02)
 check("a model with only fresh rows is not an incumbent", not report.score("cheap", rows2, synth)["incumbent"])
 
+# A seat holder auditioning for its own seat appears twice: fresh answers from
+# this run, and its past reports copied off the branch. Those must not be added
+# together. benchmark.sh enters the seat holder deliberately so every delta is
+# same-run, so this is the common path, not a corner -- and mixing them graded
+# one run's incumbent at 46% where its fresh answers alone were 68%.
+rows3 = [row("both/model", p, ref, ref, 0.01) for p, ref in [("a", "safe"), ("b", "safe")]]
+rows3 += [row("both/model", p, "unsafe", ref, 0.09, from_branch=True)
+          for p, ref in [("c", "safe"), ("d", "safe"), ("e", "safe")]]
+both = report.score("both/model", rows3, synth)
+check("a candidate's own branch rows are not scored into its fresh result",
+      both["scored"] == 2 and both["agreement"] == 1.0)
+check("a candidate with fresh rows is not called an incumbent", not both["incumbent"])
+check("the branch rows' cost does not land on the candidate either",
+      abs(both["cost"] - 0.02) < 1e-9)
+
 # The table sorts the usable cheapest first, and a model that fails a synthetic
 # or misses a confirmed package last, however cheap.
 rows_path, synth_path = os.path.join(tmp, "rows.jsonl"), os.path.join(tmp, "synth.jsonl")
