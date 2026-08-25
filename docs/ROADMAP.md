@@ -108,7 +108,10 @@ same version; the set re-pins only with a version bump.
 - Scheduled-vs-manual run overlap: `concurrencyPolicy: Forbid` does not see
   UI-created Jobs. Options: a prepare-stage check for a running audit pod,
   or suspending the schedule around manual runs (needs RBAC the controller
-  deliberately lacks). Queued 2026-08-22.
+  deliberately lacks). Queued 2026-08-22. Seen for real 2026-08-24: a UI run
+  and the 20:00 PT scheduled run shared the volume for 24 minutes, and the
+  UI run's audits landed on the ledger while the scheduled run read it —
+  which looked, until measured, like the free sweep costing money.
 - `generate-dashboard.py` reads the whole branch one `git show` at a time
   (~4.4k files) at every publish; the second bottleneck at 10x scale.
 - The review's advisory read is O(pending reports); incremental reading
