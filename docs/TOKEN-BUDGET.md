@@ -152,6 +152,42 @@ sample, not something the change introduced, and it is worth its own look:
 half of the hard negatives — packages a judge had already had to clear —
 were flagged again.
 
+## The gate and the full review disagree with each other
+
+Not a token finding, but it came out of this measurement and it bears on
+anything that tries to reduce false flags.
+
+`itch-setup-bin` was audited twice on identical code, minutes apart. Both runs
+flagged the same line of the same file — `evidence_line: 30`, the
+`source_x86_64` entry whose local filename carries `$(date +%F-%H)` and whose
+bytes are pinned by a real `sha256sums_x86_64`. The two runs did not agree on
+anything else:
+
+```
+run A   1 verdict   PKGBUILD unsafe   "Command substitution in source enables
+                                       code execution during sourcing"
+run B   2 verdicts  itch.sh safe      "Unverified binary download with
+        PKGBUILD unsafe                mismatched checksum"
+```
+
+One verdict means the makepkg gate refused and the audit stopped there. Two
+means the gate passed the same file — and then the required review flagged it,
+for a different reason. So the same PKGBUILD is a source-time execution risk or
+an unverified download depending on which stage happens to look at it, and
+which stage looks at it depends on the run.
+
+Neither reading survives the facts: the artifact is pinned, and a generated
+local *filename* has no bearing on integrity, since makepkg refuses a build
+whose bytes do not match. But the useful part is not that a stage is wrong. It
+is that the two stages are not consistent with each other on the same input,
+which is the strongest argument for asking again before an accusation stands —
+and for asking at both ends rather than one.
+
+It also means a single benchmark run cannot measure a change at either stage on
+a package like this: the run-to-run flip moves the package between stages, so a
+result has to say which stage the run actually reached before it says whether
+the change did anything.
+
 ## What is left, and why it was not taken
 
 **The repeated instruction: 51.9% of all prompt characters.** This is the only
