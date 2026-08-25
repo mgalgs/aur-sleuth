@@ -152,6 +152,10 @@ class LLMClient:
         # which it resets, from the 429's own headers. Reported at exit
         # (status 4) so the pipeline stops probing a dead cap until then.
         self.quota_reset_epoch: Optional[int] = None
+        # Whether the "a 429 said nothing about a per-day cap" line has been
+        # logged. Once per client: a spent tier answers every call that way,
+        # and the point is to see the shape of one, not dozens.
+        self.rate_limit_shape_logged = False
         self.pricing: Dict[str, ModelPricingParams] = dict()  # model => pricing
         self._fetch_pricing_info()
 
@@ -228,6 +232,9 @@ class LLMClient:
             reset = quota_reset_from_error(e)
             if reset:
                 self.quota_reset_epoch = max(self.quota_reset_epoch or 0, reset)
+            elif getattr(e, "status_code", None) == 429 and not self.rate_limit_shape_logged:
+                self.rate_limit_shape_logged = True
+                logger.warning("a 429 said nothing about a per-day cap, so the daily-cap note stays unset: %s", rate_limit_shape(e))
             raise
         self.ok_calls += 1
 
@@ -1557,6 +1564,32 @@ def quota_reset_from_error(e: Exception) -> Optional[int]:
         return value
     tomorrow = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1)
     return int(tomorrow.replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
+
+
+def rate_limit_shape(e: Exception, limit: int = 300) -> str:
+    """What a 429 carried, for the log, when quota_reset_from_error found no
+    per-day marker in it.
+
+    Exactly the three things that function reads -- the body's message, the
+    reset in the body's metadata headers, and the reset on the response --
+    so the line answers "why did it not match" and nothing else. Truncated,
+    because a provider (or a proxy in front of one) can answer with anything.
+
+    This goes to the log, never to a report: the message can name the
+    operator's account, which is what describe_error exists to keep out of
+    published text. The pipeline's own log is not published."""
+    body = getattr(e, "body", None)
+    err = body.get("error") if isinstance(body, dict) else None
+    err = err if isinstance(err, dict) else {}
+    message = str(err.get("message") if err else getattr(e, "message", "") or "")
+    headers = (err.get("metadata") or {}).get("headers") if err else None
+    in_body = headers.get("X-RateLimit-Reset") if isinstance(headers, dict) else None
+    response = getattr(e, "response", None)
+    on_response = response.headers.get("x-ratelimit-reset") if response is not None else None
+    if len(message) > limit:
+        message = message[:limit] + "..."
+    return (f"message={message!r} body-reset={in_body!r} "
+            f"response-reset={on_response!r}")
 
 
 def note_quota_reset(epoch: int) -> None:
@@ -3578,6 +3611,17 @@ def selftest_quota_reset():
     now = int(time.time())
     got = quota_reset_from_error(err("free-models-per-day exceeded"))
     assert now < got <= now + 86400 and got % 86400 == 0, got
+
+    # The shape line: what a 429 that did NOT match carried, so a run in
+    # production can say why. Every field quota_reset_from_error reads, and
+    # nothing else; a long message is cut rather than logged whole.
+    shape = rate_limit_shape(err("Rate limit exceeded: free-models-per-min. ",
+                                 {"X-RateLimit-Reset": "1787616000000"}))
+    assert "free-models-per-min" in shape, shape
+    assert "body-reset='1787616000000'" in shape, shape
+    assert "response-reset=" in shape, shape
+    assert rate_limit_shape(err("x" * 500)).count("x") == 300, "the message is cut"
+    assert "message=''" in rate_limit_shape(RuntimeError("no body here")), "any error is safe"
 
     with tempfile.TemporaryDirectory() as d:
         path = os.path.join(d, "reset")
