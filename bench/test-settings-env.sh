@@ -65,6 +65,11 @@ expect_flags ""
 
 echo "== values reach the pipeline as flags =="
 expect_flags "--daily-budget 0.50" AUR_SLEUTH_DAILY_BUDGET=0.50
+expect_flags "--runs-per-day 3" AUR_SLEUTH_RUNS_PER_DAY=3
+expect_flags "--escalations-per-run 0" AUR_SLEUTH_ESCALATIONS_PER_RUN=0
+expect_refused "AUR_SLEUTH_RUNS_PER_DAY=0"
+expect_refused "AUR_SLEUTH_RUNS_PER_DAY=2.5"
+expect_refused "AUR_SLEUTH_ESCALATIONS_PER_RUN=-1"
 expect_flags "--jobs 4" AUR_SLEUTH_JOBS=4
 expect_flags "--reaudit-model anthropic/claude-sonnet-4.6" \
     AUR_SLEUTH_REAUDIT_MODEL=anthropic/claude-sonnet-4.6

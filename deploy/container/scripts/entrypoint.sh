@@ -272,6 +272,8 @@ collect_audit_env_flags() {
     local specs=(
         "AUR_SLEUTH_MIN_VOTES:--min-votes:int"
         "AUR_SLEUTH_DAILY_BUDGET:--daily-budget:num"
+        "AUR_SLEUTH_RUNS_PER_DAY:--runs-per-day:posint"
+        "AUR_SLEUTH_ESCALATIONS_PER_RUN:--escalations-per-run:int"
         "AUR_SLEUTH_LOOKBACK_HOURS:--lookback-hours:int"
         "AUR_SLEUTH_SEED_TOP:--seed-top:int"
         "AUR_SLEUTH_UPDATED_SHARE:--updated-share:share"

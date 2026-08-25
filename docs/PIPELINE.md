@@ -40,14 +40,23 @@ drives everything described here without a terminal.
 
 ## Money
 
-- `--daily-budget` caps the **scheduled** runs, across runs, via a spend
-  ledger on the volume. The audit phase stops at `--audit-budget-share` of
-  it; the judge and escalation phases run to completion even past it —
-  settling a flag has top priority, and the overrun is logged
-  (`runs.log`, `overrun=`).
+- `--daily-budget` is shared by the day's **scheduled** runs through a
+  spend ledger on the volume. Each run gets a *slice*: what is left of the
+  day, divided evenly over the runs still to come, itself included
+  (`--runs-per-day`, which should match the CronJob; the arithmetic is
+  `bench/budget-slice.py`, from the ledger and the clock). The audit phase
+  stops at `--audit-budget-share` of the slice; the judge and escalation
+  phases run to completion even past it — settling a flag has top priority
+  — and the overrun shrinks the slices after it instead of gating them. It
+  is logged (`runs.log`, `overrun=` and `slice=`). A run that finds the day
+  spent still exits at once, as before. Escalations are further capped per
+  run (`--escalations-per-run`), so a backlog drains across the day.
 - A **manual** run carries `--run-budget`: its own ceiling, measured from
-  its own start. The daily ledger never refuses a manual run; it still
-  records every cost, so the scheduled cap sees manual spend too.
+  its own start. The daily ledger never refuses a manual run, and never
+  charges the schedule for one: its costs land on the ledger tagged
+  `manual`, the scheduled arithmetic leaves them out, and the ops page
+  shows them beside the day's scheduled spend. A person's escalation run
+  (`--escalate`, `--escalate-pending`) is treated the same way.
 
 ## Verdict states
 

@@ -9,7 +9,8 @@
 #                     [--audit-timeout SECONDS] [--audit-models LIST]
 #                     [--judge-model MODEL] [--reaudit-model MODEL]
 #                     [--tiebreak-model MODEL]
-#                     [--audit-budget-share FRACTION]
+#                     [--audit-budget-share FRACTION] [--runs-per-day N]
+#                     [--escalations-per-run N]
 #                     [--updated-count N] [--seed-count N]
 #                     [--packages LIST] [--escalate LIST]
 #                     [--escalate-pending true|false] [--run-budget USD]
@@ -36,20 +37,35 @@ JOBS=8
 # hung mirror or a wedged API call costs one audit instead of the whole run.
 # Without it a single stalled download can consume the entire job deadline.
 AUDIT_TIMEOUT=900
-# Share of the day's budget the audit phase may spend. The audit loop is the
-# only phase this budget caps. Judge and re-audit work has top priority: a
-# flagged package must not sit in "worth a closer look" because new audits
-# spent the money first. So those two phases run to completion even when they
-# push the day past --daily-budget. The overrun is recorded in the spend
-# ledger, logged, and written as overrun= in runs.log. When the overrun
-# trends up, tune this share down; never gate the judge.
+# How the day's budget is shared out. Each scheduled run gets a SLICE: what
+# is left of the day, divided evenly over the runs still to come (this one
+# included) -- bench/budget-slice.py, from the ledger and the clock. Within
+# the slice, the audit loop stops at AUDIT_BUDGET_SHARE of it; judge and
+# escalation work has top priority and is never gated: a flagged package
+# must not sit in "worth a closer look" because new audits spent the money
+# first. So those phases run to completion even past the slice, and the
+# overrun shrinks the slices after it instead of gating them. It is logged,
+# and written as overrun= in runs.log. When it trends up, tune this share
+# or ESCALATIONS_PER_RUN down; never gate the judge.
 #
-# History, both measured: first the judge shared the audit loop's gate and
-# never ran (the audit loop spent everything). Then this reserve existed but
+# History, all measured: first the judge shared the audit loop's gate and
+# never ran (the audit loop spent everything). Then a reserve existed but
 # judge and re-audit still checked the total budget, and one run had the
 # judge spend past it and starve the re-audit phase -- the flagged packages
-# waited a day. Hence: cap the audits, never the settling.
+# waited a day. Then the reserve was a share of the DAY, so the first run
+# of a day was entitled to all of it and the five runs after it found the
+# day spent: one judge phase a day, and every flag waited for it. Hence:
+# cap the audits, never the settling, and give every run a share.
 AUDIT_BUDGET_SHARE=0.8
+# Scheduled runs a day, for the slice arithmetic. Match the CronJob's
+# schedule; more than the schedule runs leaves budget unspent, fewer
+# front-loads it onto the early runs.
+RUNS_PER_DAY=6
+# Escalations one scheduled run may start (each is a fresh paid audit plus
+# a forced ruling, ~$0.15 with a frontier model). The backlog drains over
+# the day's runs instead of in one burst that spends the day in the first
+# run. 0 skips the phase. A person's own escalation run is never capped.
+ESCALATIONS_PER_RUN=3
 DRY_RUN=false
 SKIP_JUDGE=false
 SKIP_DASHBOARD=false
@@ -133,6 +149,8 @@ while [[ $# -gt 0 ]]; do
         --updated-share) UPDATED_SHARE="$2"; shift 2 ;;
         --audit-timeout) AUDIT_TIMEOUT="$2"; shift 2 ;;
         --audit-budget-share) AUDIT_BUDGET_SHARE="$2"; shift 2 ;;
+        --runs-per-day) RUNS_PER_DAY="$2"; shift 2 ;;
+        --escalations-per-run) ESCALATIONS_PER_RUN="$2"; shift 2 ;;
         --audit-models) AUDIT_MODELS="$2"; shift 2 ;;
         --judge-model) JUDGE_MODEL="$2"; shift 2 ;;
         --reaudit-model) REAUDIT_MODEL="$2"; shift 2 ;;
@@ -199,16 +217,16 @@ FREE_MODEL_LIST=()
 
 # Accept 0.1 through 1.0 inclusive, with any number of trailing zeros. The first
 # decimal digit of the 0.x form must be 1-9, so 0.00-0.09 (below the minimum, and
-# enough to zero the audit budget) is refused. Kept a syntactic allowlist because
-# this value is interpolated straight into a `python3 -c` below.
+# enough to zero the audit budget) is refused. A syntactic allowlist, because
+# the value reaches python3 -c strings below.
 if [[ ! "$AUDIT_BUDGET_SHARE" =~ ^(0\.[1-9][0-9]*|1(\.0+)?)$ ]]; then
     echo "--audit-budget-share must be between 0.1 and 1.0, got '$AUDIT_BUDGET_SHARE'" >&2
     exit 1
 fi
-# The total the gates in this run compare against: the day's budget for a
-# scheduled run, the run's own ceiling for a manual one.
-GATE_TOTAL="${RUN_BUDGET:-$DAILY_BUDGET}"
-AUDIT_BUDGET="$(python3 -c "print(round($GATE_TOTAL * $AUDIT_BUDGET_SHARE, 6))")"
+[[ "$RUNS_PER_DAY" =~ ^0*[1-9][0-9]*$ ]] \
+    || { echo "--runs-per-day must be a whole number of at least 1, got '$RUNS_PER_DAY'" >&2; exit 1; }
+[[ "$ESCALATIONS_PER_RUN" =~ ^[0-9]+$ ]] \
+    || { echo "--escalations-per-run must be a whole number, got '$ESCALATIONS_PER_RUN'" >&2; exit 1; }
 
 # The updated-vs-seed split. Accepts 0 through 1 inclusive: 1.0 is updated-only
 # (the seed never runs), 0.0 is seed-only. Read as a float in discover_packages,
@@ -235,6 +253,7 @@ if [[ "$ADVISORY" != "true" && -z "$PACKAGES" && -z "$PACKAGES_FILE" \
 PIPE_AUDIT_MODELS="$AUDIT_MODELS" PIPE_JUDGE_MODEL="$JUDGE_MODEL" PIPE_REAUDIT_MODEL="$REAUDIT_MODEL" \
 PIPE_TIEBREAK_MODEL="$TIEBREAK_MODEL" \
 PIPE_DAILY_BUDGET="$DAILY_BUDGET" PIPE_JOBS="$JOBS" PIPE_OUT="$PIPELINE_DIR/effective.json" \
+PIPE_RUNS_PER_DAY="$RUNS_PER_DAY" PIPE_ESCALATIONS_PER_RUN="$ESCALATIONS_PER_RUN" \
 python3 - <<'PY'
 import datetime, json, os
 e = os.environ
@@ -244,6 +263,8 @@ out = {
     "AUR_SLEUTH_REAUDIT_MODEL": e["PIPE_REAUDIT_MODEL"],
     "AUR_SLEUTH_TIEBREAK_MODEL": e["PIPE_TIEBREAK_MODEL"],
     "AUR_SLEUTH_DAILY_BUDGET": e["PIPE_DAILY_BUDGET"],
+    "AUR_SLEUTH_RUNS_PER_DAY": e["PIPE_RUNS_PER_DAY"],
+    "AUR_SLEUTH_ESCALATIONS_PER_RUN": e["PIPE_ESCALATIONS_PER_RUN"],
     "AUR_SLEUTH_JOBS": e["PIPE_JOBS"],
     "written": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
 }
@@ -261,32 +282,72 @@ TODAY=$(date +%Y-%m-%d)
 SPEND_FILE="$PIPELINE_DIR/spend-${TODAY}.log"
 touch "$SPEND_FILE"
 
+# The ledger is one cost per line. A line from a run the day's budget does
+# not gate -- a manual run under its own --run-budget, or a person's
+# escalation run -- carries the word "manual" after the cost, and the
+# scheduled runs' arithmetic leaves those lines out: a person pressing Run
+# must not spend the schedule's day. The ops page sums the first field of
+# every line, so the tag costs it nothing.
 get_daily_spent() {
     awk '{s+=$1} END {printf "%.6f", s+0}' "$SPEND_FILE"
 }
+scheduled_spent() {
+    awk '$2 != "manual" {s+=$1} END {printf "%.6f", s+0}' "$SPEND_FILE"
+}
+manual_spent() {
+    awk '$2 == "manual" {s+=$1} END {printf "%.6f", s+0}' "$SPEND_FILE"
+}
+
+# True when the day's ledger gates this run and this run's spend counts
+# toward it: the scheduled run and anything shaped like one. A run with its
+# own ceiling, or an escalation a person asked for, is neither gated by the
+# day nor charged to it.
+day_gated() {
+    [[ -z "$RUN_BUDGET" && -z "$ESCALATE" && "$ESCALATE_PENDING" != "true" ]]
+}
+LEDGER_TAG=""
+day_gated || LEDGER_TAG=" manual"
 
 # What was already on the ledger when this run started: the baseline a
 # manual run's own ceiling is measured from.
 RUN_START_SPENT="$(get_daily_spent)"
 
-# The spend the gates compare. A scheduled run answers for the whole day; a
-# manual run (--run-budget) answers only for itself -- the person asked, so
-# the schedule's spending must not refuse them. Every cost still lands on
-# the ledger, so the daily cap sees manual spend too.
+# The spend the gates compare. A day-gated run answers for the schedule's
+# day; a manual run (--run-budget) answers only for itself -- the person
+# asked, so the schedule's spending must not refuse them.
 gate_spent() {
-    if [[ -n "$RUN_BUDGET" ]]; then
-        python3 -c "print('%.6f' % max(0, $(get_daily_spent) - $RUN_START_SPENT))"
+    if day_gated; then
+        scheduled_spent
     else
-        get_daily_spent
+        python3 -c "print('%.6f' % max(0, $(get_daily_spent) - $RUN_START_SPENT))"
     fi
 }
 
 record_cost() {
     (
         flock -x 201
-        echo "$1" >> "$SPEND_FILE"
+        echo "$1$LEDGER_TAG" >> "$SPEND_FILE"
     ) 201>"$SPEND_FILE.lock"
 }
+
+# This run's ceilings. A day-gated run gets its slice of the day (see the
+# RUNS_PER_DAY comment and bench/budget-slice.py); a manual run's slice is
+# its whole --run-budget, which the same arithmetic yields for one run of a
+# one-run day with nothing spent. A person's escalation run carries no
+# ceiling and nothing gates it; it gets the day's budget as a nominal one
+# so its summary has a number to report against. The hour is the
+# container's local clock, the same clock that names the ledger file.
+if day_gated; then
+    read -r GATE_TOTAL AUDIT_BUDGET RUN_SLICE RUNS_REMAINING < <(
+        python3 bench/budget-slice.py --daily "$DAILY_BUDGET" --spent "$(scheduled_spent)" \
+            --runs-per-day "$RUNS_PER_DAY" --hour "$(date +%H)" --share "$AUDIT_BUDGET_SHARE")
+else
+    read -r GATE_TOTAL AUDIT_BUDGET RUN_SLICE RUNS_REMAINING < <(
+        python3 bench/budget-slice.py --daily "${RUN_BUDGET:-$DAILY_BUDGET}" --spent 0 \
+            --runs-per-day 1 --hour 0 --share "$AUDIT_BUDGET_SHARE")
+fi
+[[ "$GATE_TOTAL" =~ ^[0-9]+\.[0-9]+$ && "$AUDIT_BUDGET" =~ ^[0-9]+\.[0-9]+$ ]] \
+    || { echo "bench/budget-slice.py gave no slice; refusing to guess a budget" >&2; exit 1; }
 
 # The `cost:` field from a report's frontmatter; 0 when the report or the
 # field is missing.
@@ -297,8 +358,14 @@ report_cost() {
     echo "${cost:-0}"
 }
 
+# What is left of this run's slice (a manual run: of its ceiling).
 budget_remaining() {
     python3 -c "print(max(0, $GATE_TOTAL - $(gate_spent)))"
+}
+
+# What is left of the schedule's day, after every run so far.
+day_remaining() {
+    python3 -c "print(max(0, $DAILY_BUDGET - $(scheduled_spent)))"
 }
 
 # --- The free tier's daily cap -----------------------------------------------
@@ -331,15 +398,17 @@ advisory_quota_spent() {
     [[ "$ADVISORY" == "true" && -n "$(free_quota_reset)" ]]
 }
 
-# How far past its budget this run's gate spend is. Nonzero is expected, not
-# an error: the judge and re-audit phases are allowed to overrun. This is the
-# number to watch when tuning AUDIT_BUDGET_SHARE.
+# How far past its slice this run's gate spend is. Nonzero is expected, not
+# an error: the judge and escalation phases are allowed to overrun. This is
+# the number to watch when tuning AUDIT_BUDGET_SHARE and ESCALATIONS_PER_RUN.
 budget_overrun() {
     python3 -c "print(max(0, round($(gate_spent) - $GATE_TOTAL, 6)))"
 }
 
 # True when the gate spend has reached a ceiling. With no argument the
-# ceiling is the whole gate budget; the audit phase passes its own, lower one.
+# ceiling is the whole slice; the audit phase passes its own, lower one. A
+# day-gated run on a spent day has a slice of zero, so its gate is where it
+# already stands, and this is true at once.
 is_over_budget() {
     local ceiling="${1:-$GATE_TOTAL}"
     python3 -c "import sys; sys.exit(0 if $(gate_spent) >= $ceiling else 1)"
@@ -765,9 +834,13 @@ escalate_one() {
 # constant) it is "disputed", terminal, and never listed again -- so the
 # rounds are bounded by the cap, not by this loop. Named packages get one
 # round only: a person asked for one more look, not a campaign.
+#
+# The second argument caps how many escalations this call may start, empty
+# for no cap. The scheduled phase passes ESCALATIONS_PER_RUN so a backlog
+# drains over the day's runs; a person's own escalation run passes nothing.
 run_escalation_rounds() {
-    local named="${1:-}"
-    local rounds=2
+    local named="${1:-}" cap="${2:-}"
+    local rounds=2 started=0
     [[ -n "$named" ]] && rounds=1
     local pick_flags=(--models "$REAUDIT_MODEL,$TIEBREAK_MODEL")
     [[ -n "$named" ]] && pick_flags+=(--packages "$named")
@@ -786,10 +859,15 @@ run_escalation_rounds() {
         fi
         log "Round $round: ${#work[@]} package(s)"
         for line in "${work[@]}"; do
+            if [[ -n "$cap" && "$started" -ge "$cap" ]]; then
+                log "Escalation cap reached ($cap this run); the rest wait for the next run"
+                return 0
+            fi
             pkg="${line%%$'\t'*}"
             model="${line#*$'\t'}"
             log "--- Escalating $pkg with $model ---"
             escalate_one "$pkg" "$model"
+            started=$(( started + 1 ))
         done
     done
 }
@@ -814,7 +892,10 @@ main() {
     if [[ -n "$RUN_BUDGET" ]]; then
         log "Manual run: its own \$$RUN_BUDGET ceiling gates it, not the day's ledger; the ledger still records the spend"
     fi
-    log "Audit phase stops at \$$AUDIT_BUDGET; judge and re-audit run to completion even past the daily budget"
+    if day_gated; then
+        log "This run's slice: \$$RUN_SLICE of the \$$(day_remaining) left today, with $RUNS_REMAINING run(s) still to come; up to $ESCALATIONS_PER_RUN escalation(s)"
+    fi
+    log "Audit phase stops at \$$AUDIT_BUDGET; judge and escalations run to completion even past the slice"
     if [[ "$SEED_TOP" -gt 0 ]]; then
         log "Candidates: updated + top $SEED_TOP by popularity, interleaved at updated-share=$UPDATED_SHARE"
     fi
@@ -831,7 +912,7 @@ main() {
     if [[ -n "$(free_quota_reset)" ]]; then
         log "Free tier: the daily cap is spent until $(free_quota_until "$(free_quota_reset)"); free voices and the sweep sit this run out"
     fi
-    log "Daily spend so far: \$$(get_daily_spent)"
+    log "Daily spend so far: \$$(scheduled_spent) scheduled of \$$DAILY_BUDGET, plus \$$(manual_spent) manual"
 
     # Escalation is its own run: no discovery, no audit loop. The same rounds
     # the scheduled run ends with (run_escalation_rounds), over the named
@@ -860,13 +941,12 @@ main() {
         run_scout
         log ""
         log "=== Escalation Complete ==="
-        log "Daily spend: \$$(get_daily_spent) / \$$DAILY_BUDGET"
-        log "Budget remaining: \$$(budget_remaining)"
+        log "Daily spend: \$$(scheduled_spent) scheduled / \$$DAILY_BUDGET, plus \$$(manual_spent) manual (this run's included)"
         return 0
     fi
 
     if is_over_budget; then
-        log "Daily budget already exhausted (\$$(gate_spent) >= \$$GATE_TOTAL). Exiting."
+        log "Daily budget already exhausted (\$$(gate_spent) >= \$$DAILY_BUDGET). Exiting."
         # The shortlist and the spend shares still refresh: the scout costs
         # nothing, and the page must not go stale on a spent day. Neither
         # does the free coverage stop: the sweep spends nothing by definition.
@@ -916,7 +996,7 @@ main() {
 
         while IFS= read -r pkg; do
             if is_over_budget "$AUDIT_BUDGET"; then
-                log "Audit budget reached (\$$(get_daily_spent) >= \$$AUDIT_BUDGET) after $audited_n packages"
+                log "Audit budget reached (\$$(gate_spent) >= \$$AUDIT_BUDGET) after $audited_n packages"
                 break
             fi
 
@@ -1027,7 +1107,11 @@ main() {
         local reaudit_marker="$PIPELINE_DIR/.reaudit-start-marker"
         touch "$reaudit_marker"
 
-        run_escalation_rounds
+        if [[ "$ESCALATIONS_PER_RUN" -eq 0 ]]; then
+            log "Escalations are off (--escalations-per-run 0); flagged packages wait"
+        else
+            run_escalation_rounds "" "$ESCALATIONS_PER_RUN"
+        fi
 
         # The forced rulings' cost; each escalation audit's own cost is
         # recorded by escalate_one as it lands.
@@ -1059,15 +1143,17 @@ main() {
     # Summary
     log ""
     log "=== Pipeline Complete ==="
-    log "Daily spend: \$$(get_daily_spent) / \$$DAILY_BUDGET"
+    log "Daily spend: \$$(scheduled_spent) scheduled / \$$DAILY_BUDGET, plus \$$(manual_spent) manual"
     if [[ -n "$RUN_BUDGET" ]]; then
         log "This run: \$$(gate_spent) / \$$RUN_BUDGET"
+    else
+        log "This run's slice: \$$RUN_SLICE; \$$(day_remaining) left for the $(( RUNS_REMAINING - 1 )) run(s) after it today"
     fi
     log "Budget remaining: \$$(budget_remaining)"
     local overrun
     overrun=$(budget_overrun)
     if python3 -c "import sys; sys.exit(0 if float('$overrun') > 0 else 1)" 2>/dev/null; then
-        log "Budget overrun: \$$overrun (judge and re-audit run past the cap by design; tune --audit-budget-share when this trends up)"
+        log "Budget overrun: \$$overrun past this run's slice (judge and escalations run past it by design; tune --audit-budget-share or --escalations-per-run when this trends up)"
     fi
     if $NO_PUSH && ! $DRY_RUN; then
         log "--no-push: $REPORTS_BRANCH left unpushed for a separate publish step"
@@ -1075,7 +1161,7 @@ main() {
 
     # Append to run log. run_budget marks manual runs, so the overrun trend
     # for tuning the share can be read from the scheduled runs alone.
-    echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) spent=\$$(get_daily_spent) budget=\$$DAILY_BUDGET overrun=\$$overrun run_budget=\$${RUN_BUDGET:-0} candidates=$candidate_count" \
+    echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) spent=\$$(get_daily_spent) scheduled=\$$(scheduled_spent) budget=\$$DAILY_BUDGET slice=\$$RUN_SLICE overrun=\$$overrun run_budget=\$${RUN_BUDGET:-0} candidates=$candidate_count" \
         >> "$PIPELINE_DIR/runs.log"
 }
 
