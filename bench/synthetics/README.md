@@ -58,3 +58,19 @@ thing being measured.
 Nothing here executes. The audit runs `makepkg --nobuild --nodeps
 --noprepare`, so `prepare()` never runs, and the host the fixture would
 contact does not exist.
+
+### What it can and cannot test
+
+It has a cliff, which is what makes its passes evidence rather than a fixture
+that is merely easy: against qwen/qwen3-235b-a22b-2507 it is caught 3 times
+out of 3 at ceilings from 10 down to 3, and missed 3 times out of 3 at 2 — a
+clean `safe` verdict on a package that fetches and runs a remote script at
+build time.
+
+**It cannot exercise a binding ceiling above 6.** The tree offers about
+thirteen candidates and the model selects six of them whether it is offered
+ten slots or six, so every ceiling from 6 upward is the same run. Do not read
+a pass at 8 or 10 as having tested anything the pass at 6 did not. Testing
+the ceiling where production actually sits — where 61% of audits take the
+whole quota — needs a fixture with a tree big enough that the model wants all
+ten slots.

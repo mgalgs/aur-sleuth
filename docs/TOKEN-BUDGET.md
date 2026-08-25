@@ -202,10 +202,16 @@ the model may not have been using the quota; removing the stage removes every
 call in it. Those are different operations, and only the stage table above
 sizes the second one.
 
-Two cautions on the fixture. The payload sits in the top three of roughly
-thirteen candidates, so this bounds the *ranking's* quality on a small pool,
-not the ceiling's safety on a real package offering fifty. And one fixture on
-one model is a data point, not a licence.
+Three cautions on the fixture, and the first is easy to lose:
+
+- **It cannot exercise a binding ceiling above 6.** The model never asks for
+  more than six files here, so a future pass at 8 or 10 tests nothing the pass
+  at 6 did not. Only a fixture with a tree big enough to make the model want
+  the whole quota can test the ceiling where production actually sits.
+- The payload sits in the top three of roughly thirteen candidates, so this
+  bounds the *ranking's* quality on a small pool, not the ceiling's safety on
+  a real package offering fifty.
+- One fixture on one model is a data point, not a licence.
 
 **Per-file content caps: measured, and not worth it.** Capping the additional
 stage by priority tier (60k/30k/20k/12k characters) saves 14.8% of content
