@@ -57,8 +57,14 @@ def setup_logging():
 
     log_file = tmpdir_parent / "aur-sleuth-debug.log"
 
-    if os.path.exists(log_file):
+    # The pipeline starts several audits at once and they share this path:
+    # between one process seeing the file and removing it, another has. A
+    # missing file is the state wanted here, not an error -- one run lost
+    # four audits to this before it was tolerated.
+    try:
         os.remove(log_file)
+    except FileNotFoundError:
+        pass
 
     # Set up file logging
     logging.basicConfig(
