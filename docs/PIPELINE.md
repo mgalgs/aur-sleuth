@@ -49,13 +49,21 @@ drives everything described here without a terminal.
 Computed once, in `package_state()` (`bench/generate-dashboard.py`); the
 page only reads them:
 
-- **confirmed** — two independent unsafe audits AND the judge agreed.
+- **confirmed** — two distinct models said unsafe, the audits lean unsafe,
+  AND the judge's latest ruling agreed. Two reports from one model are one
+  opinion.
 - **look** ("worth a closer look") — something said unsafe and nothing has
-  settled it. The escalation sweep exists to drain this set.
+  settled it. The escalation rounds exist to drain this set.
+- **disputed** ("models disagree") — still "look" after two escalations.
+  Terminal: no further audit is coming; a settled verdict is the way out.
 - **clean** — nothing found, or a judge or a settled verdict overturned the
   flag.
 - **unknown** — no model reached a verdict; missing information, not
   suspicion.
+
+"The judge" here is its latest ruling, not a majority of every ruling it
+ever made: each ruling reads every report there is, so a later one has
+strictly more evidence — the escalation audit it was convened to weigh.
 
 A verdict settled outside the pipeline lives in `bench/verdicts.json` and
 outranks the models everywhere: the page, and the benchmark's references

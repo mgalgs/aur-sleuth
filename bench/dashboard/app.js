@@ -19,13 +19,17 @@ function dangerScore(pkg) {
     return a * 10 + j * 5 + hasJudge;
 }
 
-// The four package states, their labels, and the one place their names and
+// The five package states, their labels, and the one place their names and
 // colours are paired. Defined once at the bottom of the page; used everywhere.
-const STATES = ['clean', 'unknown', 'look', 'confirmed'];
+// "disputed" is "look" after the escalations ran out: the models still
+// disagree, and no further audit is coming.
+const STATES = ['clean', 'unknown', 'look', 'disputed', 'confirmed'];
 const STATE_LABEL = {clean: 'clean', unknown: 'no verdict',
-                     look: 'worth a closer look', confirmed: 'confirmed malicious'};
+                     look: 'worth a closer look', disputed: 'models disagree',
+                     confirmed: 'confirmed malicious'};
 const STATE_TITLE = {clean: 'Clean', unknown: 'No verdict',
-                     look: 'Worth a closer look', confirmed: 'Confirmed malicious'};
+                     look: 'Worth a closer look', disputed: 'Models disagree',
+                     confirmed: 'Confirmed malicious'};
 
 // A package's state is decided once, in package_state() in
 // generate-dashboard.py, and written into data.json. The page only reads
@@ -121,7 +125,7 @@ function joinNicely(parts) {
 // Counted from the rows, not read from summary.package_states, so the
 // number a reader taps is the number of rows they get.
 function countStates() {
-    const counts = {clean: 0, unknown: 0, look: 0, confirmed: 0};
+    const counts = {clean: 0, unknown: 0, look: 0, disputed: 0, confirmed: 0};
     for (const pkg of Object.values(DATA.packages || {})) counts[packageState(pkg)]++;
     return counts;
 }
@@ -144,10 +148,11 @@ function renderHeadline() {
         stat('all', total, 'packages audited', 'total')
         + stat('confirmed', counts.confirmed, STATE_LABEL.confirmed, counts.confirmed ? 'st-confirmed' : '')
         + stat('look', counts.look, STATE_LABEL.look, counts.look ? 'st-look' : '')
+        + (counts.disputed ? stat('disputed', counts.disputed, STATE_LABEL.disputed, 'st-disputed') : '')
         + stat('clean', counts.clean, STATE_LABEL.clean, 'st-clean')
         + stat('unknown', counts.unknown, STATE_LABEL.unknown, 'st-unknown');
 
-    // The bar: the same four counts as shares of one line, in the order the
+    // The bar: the same counts as shares of one line, in the order the
     // filters list them. A state with nothing in it gets no segment.
     const bar = document.getElementById('state-bar');
     const words = STATES.map(k => fmtNum(counts[k]) + ' ' + STATE_LABEL[k]);
@@ -178,6 +183,9 @@ function renderActivity() {
         html += dot + countLink('clean', n(p.green) + ' clean')
             + dot + countLink('unknown', n(p.unknown) + ' no verdict')
             + dot + countLink('look', n(p.look) + ' worth a closer look', 'st-look')
+            + (Number(p.disputed || 0)
+                ? dot + countLink('disputed', n(p.disputed) + ' models disagree', 'st-disputed')
+                : '')
             + dot + (confirmed
                 ? countLink('confirmed', n(confirmed) + ' confirmed malicious', 'st-confirmed')
                 : '<span>none confirmed</span>');
@@ -192,7 +200,8 @@ function renderActivity() {
     // Only the packages worth a reader's attention get a chip: a list of
     // every clean package this week is the table, repeated.
     const WHAT = {confirmed: 'two audits and a judge agree: unsafe',
-                  look: 'flagged by a model; not confirmed'};
+                  look: 'flagged by a model; not confirmed',
+                  disputed: 'flagged by a model; the escalations did not settle it'};
     const flagged = rec.filter(r => WHAT[r.state]).slice(0, 24);
     if (flagged.length) {
         html += '<span class="chips"><span class="lead">Flagged:</span>' + flagged.map(r => {
@@ -267,6 +276,7 @@ function matchesPreset(pkg, preset) {
         case 'all': return true;
         case 'confirmed':
         case 'look':
+        case 'disputed':
         case 'clean':
         case 'unknown':
             return packageState(pkg) === preset;
@@ -443,13 +453,18 @@ function explainState(pkg) {
     if (state === 'confirmed') {
         return said + ' and the judge agreed.';
     }
-    if (state === 'look') {
+    if (state === 'look' || state === 'disputed') {
+        // The judge's latest ruling is the one that read the most evidence;
+        // older data.json carries only the majority.
+        const ruling = pkg.judge_latest || pkg.judge_majority;
         let judge;
         if (!judges.length) judge = 'no judge has read the reports yet';
-        else if (pkg.judge_majority === 'unsafe') judge = 'the judge agreed';
-        else if (pkg.judge_majority === 'contested') judge = 'the judges split';
+        else if (ruling === 'unsafe') judge = 'the judge agreed';
         else judge = 'the judge did not settle it';
-        const second = unsafe < 2 && pkg.judge_majority === 'unsafe' ? ' No second audit has looked yet.' : '';
+        if (state === 'disputed') {
+            return said + ' and ' + judge + '. The escalation audits did not settle it: the models disagree, and no further audit is coming.';
+        }
+        const second = unsafe < 2 && ruling === 'unsafe' ? ' No second model has looked yet.' : '';
         return said + ' and ' + judge + '.' + second;
     }
     if (state === 'clean') {

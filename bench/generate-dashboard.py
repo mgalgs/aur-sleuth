@@ -136,8 +136,16 @@ def compute_majority(results):
     return 'inconclusive'
 
 
+# How many escalation audits a package gets before the pipeline stops paying
+# for opinions. Each escalation is a fresh audit by a model that has not yet
+# read the package, followed by a fresh judge ruling; when that many have not
+# settled it, the models disagree and no further call will change that.
+ESCALATION_CAP = 2
+
+
 def package_state(ps):
-    """How settled a package's verdict is: confirmed, look, clean, or other.
+    """How settled a package's verdict is: confirmed, look, disputed, clean,
+    or other.
 
     A verdict settled outside the pipeline (bench/verdicts.json, attached to
     the summary as "human") outranks the pipeline's models: a settled "safe"
@@ -156,6 +164,10 @@ def package_state(ps):
     as "suspicious" would be an accusation the evidence does not support -- the
     same harm the publish review is told to watch for. So the page counts them
     separately and says plainly what they are.
+
+    "disputed" is "look" after ESCALATION_CAP escalations: the models still
+    disagree, and the pipeline stops spending on it. Terminal until a person
+    settles it.
     """
     human = (ps.get("human") or {}).get("verdict")
     if human == "safe":
@@ -164,14 +176,21 @@ def package_state(ps):
         return "confirmed"
 
     audit = ps.get("audit_majority")
-    judge = ps.get("judge_majority")
+    # The judge's LATEST ruling, not a majority over every ruling it ever
+    # made. Each ruling reads every report there is, so a later one has
+    # strictly more evidence -- the escalation audit it was convened to
+    # weigh. A majority let two rulings made before that audit existed
+    # outvote the one that read it, and snapd sat in "look" with rulings
+    # unsafe, unsafe, safe.
+    judge = ps.get("judge_latest")
 
-    # "Audits agree" has to mean more than one audit. A single cheap audit plus
+    # "Audits agree" has to mean more than one MODEL. A single cheap audit plus
     # a judge that went along with it once made rocketchat-desktop "confirmed"
-    # over upstream's own build fetching from upstream's own server. Two
-    # independent unsafe reports (a re-audit by the stronger model counts) or
-    # it is "look", not a finding.
-    if audit == "unsafe" and judge == "unsafe" and ps.get("unsafe_audits", 0) >= 2:
+    # over upstream's own build fetching from upstream's own server; then two
+    # reports from the same model counted as two independent opinions, and
+    # they share every failure mode. Two distinct models saying unsafe (an
+    # escalation audit counts) or it is "look", not a finding.
+    if audit == "unsafe" and judge == "unsafe" and ps.get("unsafe_models", 0) >= 2:
         return "confirmed"
     # The judge read the audits and disagreed with them. It is the better model
     # looking at the same evidence, so its answer stands: a package it cleared is
@@ -182,6 +201,8 @@ def package_state(ps):
     # Something actually called it unsafe and nothing has settled it. "contested"
     # counts because it means one model said unsafe and another said safe.
     if audit in ("unsafe", "contested") or judge == "unsafe":
+        if ps.get("escalations", 0) >= ESCALATION_CAP:
+            return "disputed"
         return "look"
     if audit == "safe":
         return "clean"
@@ -497,10 +518,17 @@ def build_index_data(audits, judges, now=None, funding_inputs=None, human=None):
             "judges": [{"verdict": j["correct_verdict"], "model": j.get("model", "unknown")} for j in pkg_data["judges"]],
             "audit_majority": compute_majority(audit_results),
             "judge_majority": compute_majority(judge_verdicts),
-            # Reports that said unsafe, each counted once: what "agree" rests
-            # on. Advisory reports never count here.
-            "unsafe_audits": sum(1 for a in pkg_audits
-                                 if a["result"] == "unsafe" and not a.get("advisory")),
+            # The ruling that read the most evidence. Judge files sort by
+            # name, and the name is the archive timestamp.
+            "judge_latest": judge_verdicts[-1] if judge_verdicts else None,
+            # Distinct models that said unsafe: what "agree" rests on. Two
+            # reports from one model are one opinion. Advisory reports never
+            # count here.
+            "unsafe_models": len({a["model"] for a in pkg_audits
+                                  if a["result"] == "unsafe" and not a.get("advisory")}),
+            # Escalation audits so far, against ESCALATION_CAP.
+            "escalations": sum(1 for a in pkg_audits
+                               if a.get("triggered_by") and not a.get("advisory")),
         }
         # A human-settled verdict rides on the summary so package_state()
         # and the drill-down both see it.
@@ -555,7 +583,7 @@ def build_index_data(audits, judges, now=None, funding_inputs=None, human=None):
     # audit set is drawn from recently-updated and top-popular packages.
     week_start = (now - timedelta(days=7)).strftime("%Y-%m-%d")
 
-    wk_updated = wk_new = wk_confirmed = wk_look = wk_green = wk_unknown = 0
+    wk_updated = wk_new = wk_confirmed = wk_look = wk_disputed = wk_green = wk_unknown = 0
     for ps in pkg_summaries.values():
         if (ps["latest_date"] or "")[:10] < week_start:
             continue
@@ -567,6 +595,8 @@ def build_index_data(audits, judges, now=None, funding_inputs=None, human=None):
             wk_confirmed += 1
         elif state == "look":
             wk_look += 1
+        elif state == "disputed":
+            wk_disputed += 1
         elif state == "clean":
             wk_green += 1
         else:
@@ -590,7 +620,7 @@ def build_index_data(audits, judges, now=None, funding_inputs=None, human=None):
         {"package": name, "state": package_state(ps), "date": ps["latest_date"],
          "audits": len(ps["audits"])}
         for name, ps in pkg_summaries.items()
-        if package_state(ps) in ("look", "confirmed")
+        if package_state(ps) in ("look", "disputed", "confirmed")
         and (ps["latest_date"] or "")[:10] >= week_start
     ]
     # Newest first, confirmed ahead of the rest (sorts are stable).
@@ -624,6 +654,7 @@ def build_index_data(audits, judges, now=None, funding_inputs=None, human=None):
             "start": week_start,
             "packages": {"updated": wk_updated, "new": wk_new,
                          "confirmed": wk_confirmed, "look": wk_look,
+                         "disputed": wk_disputed,
                          "green": wk_green, "unknown": wk_unknown},
             "audits_total": wk_audits_total,
             # "unknown" is not worth naming on the public headline; audits_total
