@@ -26,6 +26,14 @@ bad() { printf '  FAIL  %s\n' "$1"; fails=$(( fails + 1 )); }
 
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
+# Every git command the pipeline runs -- the judge's archive, the escalation
+# worklist's read of the reports branch -- goes to a throwaway repository,
+# never this checkout. A developer's checkout carries a REAL audit-reports
+# branch, and an escalation phase that read it once found ten flagged
+# packages and audited them on the developer's machine. Audits execute
+# PKGBUILDs; CLAUDE.md says cluster only.
+git init -q --bare "$tmp/git"
+export GIT_DIR="$tmp/git"
 
 echo "== the share is validated =="
 # 0.05 and 0.00 are below the minimum; the old glob accepted them, and 0.00
