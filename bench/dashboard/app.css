@@ -12,6 +12,9 @@
     color-scheme: dark;
     --bg: #0f1218;
     --panel: #151a22;
+    /* One step above --panel, for a row that highlights inside a card:
+       --panel on --panel is no highlight at all. */
+    --panel-2: #1c222c;
     --ink: #0b0e13;
     --line: #242b36;
     --line-2: #2f3846;
@@ -71,6 +74,48 @@ code { font-family: var(--mono); }
 @media (min-width: 1024px) { .page { padding: 20px 32px 40px; } }
 
 .hidden { display: none !important; }
+
+/* ---- cards ---- */
+
+/* Each idea in its own panel. The page carries a lot of numbers on purpose,
+   and the density is not the problem -- the problem was that all of it sat
+   on one flat surface, so nothing told the eye where one idea ended. A card
+   edge does that without taking a single number away. The hairline rules
+   that used to separate the sections are gone; the edge is the separator. */
+.card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px 12px;
+}
+@media (min-width: 640px) { .card { padding: 16px 20px; border-radius: 12px; } }
+
+/* A card whose body is folded away. The reference material -- how a verdict
+   is reached, what is open source -- is worth having and is not worth 1,400
+   pixels of a first visit, so it opens on one line that says what is inside.
+   The marker matches the table's sort arrows: the page has one arrow. */
+.fold > summary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 10px;
+    cursor: pointer;
+    list-style: none;
+}
+.fold > summary::-webkit-details-marker { display: none; }
+.fold > summary::before { content: '▸'; color: var(--muted); font-size: 11px; }
+.fold[open] > summary::before { content: '▾'; }
+.fold > summary h2 {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+.fold > summary .teaser { font-size: 12px; color: var(--text-2); }
+.fold > summary:hover h2, .fold > summary:hover .teaser { color: var(--text); }
+.fold[open] > summary { margin-bottom: 12px; }
+@media (min-width: 640px) { .fold > summary .teaser { font-size: 13px; } }
 
 /* ---- text roles ---- */
 
@@ -198,9 +243,10 @@ code { font-family: var(--mono); }
 .count-link { background: none; border: 0; padding: 0; font: inherit; cursor: pointer; }
 .count-link:hover, .count-link:focus-visible { text-decoration: underline; }
 
-@media (min-width: 640px) {
-    .week { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
-}
+/* The week line is a sentence now, so it flows as one. It used to be a flex
+   row of dot-separated fragments; the gap that separated those put a space
+   in front of every comma once the fragments became clauses. */
+@media (min-width: 640px) { .week { font-size: 14px; } }
 
 /* ---- the small squares: one per report ---- */
 
@@ -244,7 +290,10 @@ code { font-family: var(--mono); }
    happened, so a bar per entry would draw six idle weeks as continuous
    work. Grayscale, because volume is not a state and only state is
    coloured on this page. */
-.days { display: flex; flex-direction: column; gap: 4px; }
+/* Capped, because it is a sparkline beside a sentence and not a chart in
+   its own right: across a full desktop width 30 bars are wider than they
+   are tall, which reads as a table of blocks rather than a trend. */
+.days { display: flex; flex-direction: column; gap: 4px; max-width: 34rem; }
 .day-strip { display: flex; align-items: flex-end; gap: 1px; height: 34px; }
 /* No track behind the bar: at 30 columns a full-height track for every
    quiet day merged into one solid block that read as a bar itself. A quiet
@@ -268,7 +317,7 @@ code { font-family: var(--mono); }
    no JavaScript and no measuring; aspect-ratio keeps the cells square as
    they stretch to a flush right edge. GRID_CAP in app.js bounds how many
    are drawn -- see the comment there for what happens as the corpus grows. */
-.squares { display: flex; flex-direction: column; gap: 8px; padding-top: 14px; border-top: 1px solid var(--line); }
+.squares { display: flex; flex-direction: column; gap: 8px; }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(7px, 1fr)); gap: 2px; }
 .grid-cell { aspect-ratio: 1 / 1; border-radius: 1.5px; cursor: pointer; }
 .grid-cell:hover { outline: 1.5px solid var(--white); outline-offset: 1px; }
@@ -605,10 +654,8 @@ body[data-view="packages"] .only-overview { display: none !important; }
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     gap: 12px;
-    padding-top: 14px;
-    border-top: 1px solid var(--line);
 }
-.explain .sec-head { grid-column: 1 / -1; }
+.explain .sec-head, .explain .meta { grid-column: 1 / -1; }
 .explain .dg { max-width: 440px; justify-self: center; }
 .steps {
     margin: 0;
@@ -668,7 +715,7 @@ body[data-view="packages"] .only-overview { display: none !important; }
 
 /* ---- recent audits ---- */
 
-.recent { display: flex; flex-direction: column; gap: 6px; padding-top: 14px; border-top: 1px solid var(--line); }
+.recent { display: flex; flex-direction: column; gap: 6px; }
 .recent-list { display: flex; flex-direction: column; }
 .recent-row {
     display: flex;
@@ -683,7 +730,8 @@ body[data-view="packages"] .only-overview { display: none !important; }
     text-align: left;
     cursor: pointer;
 }
-.recent-row:hover { background: var(--panel); }
+.recent-row:hover { background: var(--panel-2); }
+.recent-list > li:last-child .recent-row { border-bottom: 0; }
 .rr-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .rr-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; }
 .rr-name { font-family: var(--mono); font-size: 13px; color: var(--text); overflow-wrap: anywhere; }
