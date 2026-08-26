@@ -49,6 +49,7 @@ async function init() {
         return;
     }
     renderHeadline();
+    renderGrid();
     renderActivity();
     renderEvidenceLine();
     renderPipelineModels();
@@ -221,6 +222,51 @@ function renderHeadline() {
     bar.title = words.join(' · ');
     bar.innerHTML = STATES.filter(k => counts[k] > 0).map(k =>
         '<span class="seg-' + k + '" style="flex-grow:' + Number(counts[k]) + '"></span>').join('');
+}
+
+// --- Every package as one square ----------------------------------------
+
+// How many cells the grid draws. One per package is the picture; past a few
+// thousand it stops being readable long before it stops fitting, so the
+// newest this many are drawn and the note above says what was left out.
+// At ~1,400 packages the cap does not bite. If the corpus outgrows it for
+// good the answer is to aggregate -- a cell per day, or per maintainer --
+// and not to shrink the cells: 7px is already the floor for something a
+// thumb can hit on a phone.
+const GRID_CAP = 2000;
+
+function renderGrid() {
+    const box = document.getElementById('package-grid');
+    if (!box) return;
+    // Newest audit first, so the grid reads as a timeline: the top-left cell
+    // is what the pipeline read last. Grouping by state instead would only
+    // restate the counts beside it, and it would lose the runs -- a day when
+    // only the advisory model ran is a band of "no verdict" here, which is a
+    // fact about the pipeline nothing else on the page shows.
+    const entries = Object.entries(DATA.packages || {}).sort((a, b) =>
+        String(b[1].latest_date || '').localeCompare(String(a[1].latest_date || '')));
+    const shown = entries.slice(0, GRID_CAP);
+    const counts = countStates();
+    const present = STATES.filter(k => counts[k] > 0);
+
+    // One label for the whole grid. The cells carry a title each for a
+    // pointer, but 1,400 tab stops would be a worse way through this than
+    // the table, which is the route that is meant to be walked.
+    box.setAttribute('aria-label', fmtNum(entries.length) + ' packages audited: '
+        + present.map(k => fmtNum(counts[k]) + ' ' + STATE_LABEL[k]).join(', '));
+    box.innerHTML = shown.map(([name, pkg]) => {
+        const state = packageState(pkg);
+        const date = pkg.latest_date ? pkg.latest_date.split('T')[0] : '';
+        return '<span class="grid-cell gc-' + state + '" data-pkg="' + escapeAttr(name)
+            + '" title="' + escapeAttr(name + ' — ' + STATE_LABEL[state] + (date ? ' · ' + date : '')) + '"></span>';
+    }).join('');
+
+    document.getElementById('grid-note').textContent = shown.length < entries.length
+        ? 'the ' + fmtNum(shown.length) + ' most recent of ' + fmtNum(entries.length)
+        : fmtNum(entries.length) + ' packages, newest first';
+    document.getElementById('grid-legend').innerHTML =
+        present.map(k => '<span><span class="sq gc-' + k + '"></span>' + escapeHtml(STATE_LABEL[k]) + '</span>').join('')
+        + '<span class="grid-hint">Click a square to open that package</span>';
 }
 
 function renderActivity() {
@@ -956,7 +1002,7 @@ function setupEventListeners() {
     document.addEventListener('click', e => {
         const link = e.target.closest('.count-link, .stat');
         if (link && link.dataset.filter) { go(filterHash(link.dataset.filter)); return; }
-        const row = e.target.closest('.recent-row');
+        const row = e.target.closest('.recent-row, .grid-cell');
         if (row && row.dataset.pkg) { go('#pkg=' + encodeURIComponent(row.dataset.pkg)); return; }
         const toggle = e.target.closest('[data-toggle]');
         if (toggle) {

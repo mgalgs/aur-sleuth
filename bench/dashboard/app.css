@@ -222,6 +222,44 @@ code { font-family: var(--mono); }
 .sqs { display: inline-flex; flex-wrap: wrap; gap: 3px; max-width: 96px; padding-top: 3px; }
 @media (min-width: 640px) { .sqs { max-width: none; padding-top: 0; } }
 
+/* ---- every package as one square ---- */
+
+/* One cell per package, coloured by state and by nothing else, newest audit
+   first. It is the state bar with a second dimension: the same proportions,
+   plus when each verdict landed and which package each cell is. At ~1,300
+   packages almost every cell is one of the two grays, and that is the point
+   -- "this much has been read, and this is the part nothing has settled" in
+   one glance, with the exceptions impossible to miss.
+
+   The columns are auto-filled by CSS, so the grid reflows to any width with
+   no JavaScript and no measuring; aspect-ratio keeps the cells square as
+   they stretch to a flush right edge. GRID_CAP in app.js bounds how many
+   are drawn -- see the comment there for what happens as the corpus grows. */
+.squares { display: flex; flex-direction: column; gap: 8px; padding-top: 14px; border-top: 1px solid var(--line); }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(7px, 1fr)); gap: 2px; }
+.grid-cell { aspect-ratio: 1 / 1; border-radius: 1.5px; cursor: pointer; }
+.grid-cell:hover { outline: 1.5px solid var(--white); outline-offset: 1px; }
+
+/* The same five names, the same five colours, as everywhere else. */
+.gc-clean { background: var(--clean); }
+.gc-unknown { background: var(--none); }
+.gc-look { background: var(--look); }
+.gc-disputed { background: var(--disputed); }
+.gc-confirmed { background: var(--bad); }
+
+.grid-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; font-size: 11px; color: var(--muted); }
+.grid-legend > span { display: inline-flex; align-items: center; gap: 5px; }
+.grid-hint { color: var(--dim); }
+@media (min-width: 640px) {
+    .grid { grid-template-columns: repeat(auto-fill, minmax(10px, 1fr)); gap: 3px; }
+    .grid-cell { border-radius: 2px; }
+    .grid-legend { font-size: 12px; gap: 4px 14px; }
+    .grid-hint { margin-left: auto; }
+}
+@media (min-width: 1024px) {
+    .grid { grid-template-columns: repeat(auto-fill, minmax(11px, 1fr)); }
+}
+
 /* ---- coverage ---- */
 
 /* Sits in the footer beside the cost bars, and reads like the prose around
