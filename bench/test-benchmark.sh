@@ -133,6 +133,29 @@ check("a candidate with fresh rows is not called an incumbent", not both["incumb
 check("the branch rows' cost does not land on the candidate either",
       abs(both["cost"] - 0.02) < 1e-9)
 
+# A SCREEN: the synthetic fixtures alone, no sample at all. The whole point is
+# that it costs cents, so it must score cleanly with nothing to agree with --
+# an empty sample is the normal case here, not a broken run.
+screen_synth = [
+    {"model": "fresh/model", "fixture": f, "expected": e, "exit": e, "pass": True, "cost": 0.02}
+    for f, e in [("benign-a", 0), ("benign-b", 0), ("benign-c", 0),
+                 ("malicious-a", 1), ("malicious-b", 1), ("malicious-c", 1), ("malicious-d", 1)]
+]
+scr = report.score("fresh/model", [], screen_synth)
+check("a screen scores with no sample and no agreement",
+      scr["sample"] == 0 and scr["agreement"] is None and scr["effective_agreement"] is None)
+check("the fixtures are all it reports",
+      scr["synthetics"]["run"] == 7 and scr["synthetics"]["all_pass"] and abs(scr["synthetics"]["cost"] - 0.14) < 1e-9)
+check("a screened model is not an incumbent and has no per-package cost",
+      not scr["incumbent"] and scr["cost_per_package"] is None)
+# Both degenerate answers fail, which is what makes seven fixtures a filter.
+always_safe = [dict(s, exit=0, **{"pass": s["expected"] == 0}) for s in screen_synth]
+always_unsafe = [dict(s, exit=1, **{"pass": s["expected"] == 1}) for s in screen_synth]
+check("a model that calls everything safe misses every malicious fixture",
+      report.score("fresh/model", [], always_safe)["synthetics"]["passed"] == 3)
+check("a model that calls everything unsafe fails every benign one",
+      report.score("fresh/model", [], always_unsafe)["synthetics"]["passed"] == 4)
+
 # The table sorts the usable cheapest first, and a model that fails a synthetic
 # or misses a confirmed package last, however cheap.
 rows_path, synth_path = os.path.join(tmp, "rows.jsonl"), os.path.join(tmp, "synth.jsonl")
@@ -258,6 +281,47 @@ probe = subprocess.run(
      "_", sep.join(["x", "", "0", "y"])],
     capture_output=True, text=True).stdout
 check("an empty field keeps its place", probe == "x||0|y")
+
+# --- the screen path through benchmark.sh -------------------------------------
+# A screen has no packages, which changes two things it would otherwise do for
+# nothing: read the branch for a sample it will not use, and enter the seat
+# holder to baseline deltas that do not exist.
+check("a screen writes an empty sample instead of calling the sampler",
+      "if $SCREEN_ONLY; then" in src and ': > "$SAMPLE_FILE"' in src)
+check("a screen leaves the seat holder out", "$SCREEN_ONLY || HOLDER=" in src)
+env = dict(os.environ, OPENAI_API_KEY="not-a-real-key",
+           AUR_SLEUTH_DATA_DIR=os.path.join(tmp, "data"))
+p = subprocess.run(["bash", os.path.join(bench, "benchmark.sh"), "--models", "x/y",
+                    "--sample", "0", "--no-synthetics"],
+                   capture_output=True, text=True, env=env, cwd=os.path.dirname(bench))
+check("--sample 0 with no fixtures is refused, not run empty",
+      p.returncode != 0 and "would run nothing" in p.stderr)
+
+# --- the screen result, written here and read by the scout --------------------
+# Two files hold the two halves of one fact: benchmark-report.py writes
+# result.json, bench/scout.py reads it back to say what is known about a model.
+# The screen is where they disagreed. An empty sample means a null agreement,
+# and the scout kept a record only when agreement was a number -- so it
+# discarded, silently, exactly the results a screening run exists to produce.
+screen_dir = os.path.join(tmp, "bench", "screen-20260826-001")
+os.makedirs(screen_dir, exist_ok=True)
+rows_empty = os.path.join(tmp, "empty-rows.jsonl")
+open(rows_empty, "w").close()
+synth_screen = os.path.join(tmp, "screen-synth.jsonl")
+with open(synth_screen, "w") as f:
+    f.write("\n".join(json.dumps(s) for s in screen_synth) + "\n")
+subprocess.run([sys.executable, os.path.join(bench, "benchmark-report.py"),
+                "--rows", rows_empty, "--synthetics", synth_screen, "--meta",
+                '{"run_id":"screen-20260826-001","target":"screen","finished":"2026-08-26T00:00:00Z"}',
+                "--json", os.path.join(screen_dir, "result.json")],
+               capture_output=True, text=True)
+scout = load("scout.py")
+known = scout.load_bench_results(os.path.join(tmp, "bench"))
+check("the scout reads a real screen result back",
+      known.get("fresh/model", {}).get("screen") ==
+      {"passed": True, "run": "screen-20260826-001", "fixtures_passed": 7, "of": 7})
+check("and a screen leaves no benchmark score behind",
+      "benchmarked" not in known.get("fresh/model", {}))
 
 if fails:
     print(f"FAILED: {fails} check(s)")

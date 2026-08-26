@@ -15,6 +15,14 @@
 #                     [--sample N] [--packages p,q,...] [--budget USD] [--jobs N]
 #                     [--audit-timeout SECONDS] [--no-synthetics] [--run-id ID]
 #
+# --sample 0 with no --packages is a SCREEN: the synthetic fixtures alone, the
+# cheap behavioural filter in front of a full benchmark. Three benign fixtures
+# that must exit 0 and four malicious ones that must exit 1 reject both
+# degenerate answers -- "everything is safe" misses all four, "everything is
+# unsafe" fails all three -- for a few cents rather than a few dollars. A
+# screen reads no sample, so it needs no settled verdicts on the branch, and
+# it has no deltas to measure, so the seat holder does not join it.
+#
 # --role picks the task. "audit" (the default) re-audits the sampled packages,
 # which is what both the audit seat and the re-audit seat do. "judge" hands
 # each candidate the package's existing audit reports from the branch and
@@ -71,6 +79,13 @@ done
 IFS=',' read -ra MODEL_LIST <<< "$MODELS"
 [[ "$ROLE" == "judge" ]] && SYNTHETICS=false
 
+# A screen: no packages asked for, so the fixtures are the whole run.
+SCREEN_ONLY=false
+if (( 10#$SAMPLE == 0 )) && [[ -z "$PACKAGES" ]]; then
+    SCREEN_ONLY=true
+    $SYNTHETICS || { echo "--sample 0 without synthetics would run nothing" >&2; exit 1; }
+fi
+
 RUN_DIR="$DATA_DIR/bench/$RUN_ID"
 PIPELINE_DIR="$DATA_DIR/pipeline"
 mkdir -p "$RUN_DIR/reports" "$PIPELINE_DIR"
@@ -103,8 +118,11 @@ seat_holder() {
     printf '%s' "$holder"
 }
 
-HOLDER="$(seat_holder)"
-if [[ -n "$HOLDER" ]]; then
+HOLDER=""
+$SCREEN_ONLY || HOLDER="$(seat_holder)"
+if $SCREEN_ONLY; then
+    log "Screen: the synthetic fixtures only. No sample, so no delta to baseline; the seat holder sits this one out rather than paying for its own fixtures again"
+elif [[ -n "$HOLDER" ]]; then
     holder_present=false
     for m in "${MODEL_LIST[@]}"; do
         [[ "$m" == "$HOLDER" ]] && holder_present=true
@@ -315,7 +333,13 @@ print("\x1f".join([r["package"], r.get("reference", "unknown"), r.get("pkgver", 
 log "Benchmark $RUN_ID: role $ROLE${TARGET:+ for $TARGET} | models ${MODEL_LIST[*]} | sample $SAMPLE | budget \$$BUDGET | jobs $JOBS"
 log "Reports under $RUN_DIR (never archived)"
 
-if [[ -n "$PACKAGES" ]]; then
+if $SCREEN_ONLY; then
+    # Not "sample nothing" but "do not read the branch at all": the sampler
+    # loads the whole dashboard to pick packages, and a screen has no use for
+    # a settled verdict. This is what lets a screen run on a volume that has
+    # no reports yet.
+    : > "$SAMPLE_FILE"
+elif [[ -n "$PACKAGES" ]]; then
     python3 bench/benchmark-sample.py --packages "$PACKAGES" > "$SAMPLE_FILE"
 else
     python3 bench/benchmark-sample.py --size "$SAMPLE" > "$SAMPLE_FILE"
