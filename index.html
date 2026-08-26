@@ -249,23 +249,12 @@ code { font-family: var(--mono); }
 .sqs { display: inline-flex; flex-wrap: wrap; gap: 3px; max-width: 96px; padding-top: 3px; }
 @media (min-width: 640px) { .sqs { max-width: none; padding-top: 0; } }
 
-/* ---- funding ---- */
+/* ---- coverage ---- */
 
-.funding {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    padding: 10px 12px;
-    border: 1px solid var(--line);
-    border-radius: 6px;
-    background: var(--panel);
-}
-.funding-text { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
-.funding-lead { font-size: 14px; color: var(--text-2); }
-.funding-lead .n { font-family: var(--mono); font-weight: 600; color: var(--text); }
-.funding-inputs { display: block; font-size: 12px; color: var(--muted); }
-.funding-budget-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; font-size: 13px; color: var(--text-2); }
-.funding-budget-row .n { font-family: var(--mono); }
+/* Sits in the footer beside the cost bars, and reads like the prose around
+   it: no panel, no border, nothing that frames it as something to act on. */
+.coverage { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; color: var(--text-2); }
+.coverage .n { font-family: var(--mono); color: var(--text); }
 .meter { display: block; flex: 1 1 100%; height: 5px; border-radius: 3px; background: var(--none); overflow: hidden; }
 .meter-fill { display: block; height: 100%; background: var(--text-2); }
 .btn {
@@ -283,13 +272,9 @@ code { font-family: var(--mono); }
     cursor: pointer;
 }
 .btn:hover { color: var(--text); border-color: var(--muted); text-decoration: none; }
-.btn-strong { border-color: var(--text-2); color: var(--text); font-weight: 600; }
 @media (min-width: 640px) {
-    .funding { flex-direction: row; align-items: center; justify-content: space-between; gap: 24px; padding: 10px 14px; }
-    .funding-inputs { display: inline; font-size: 14px; }
     .meter { flex: 0 1 180px; }
     .btn { height: 28px; padding: 0 10px; }
-    .funding .btn { height: 32px; padding: 0 14px; }
 }
 
 /* ---- toolbar ---- */
@@ -554,16 +539,6 @@ code { font-family: var(--mono); }
             <div id="activity" class="week"></div>
         </section>
 
-        <!-- The ask: what auditing every AUR update costs, against what this
-             runs on. Hidden until data.json carries every number it needs. -->
-        <section id="funding" class="funding hidden">
-            <div class="funding-text">
-                <p class="funding-lead"><span id="funding-needed" class="n"></span> <span>a day would audit every AUR update.</span> <span id="funding-inputs" class="funding-inputs"></span></p>
-                <p class="funding-budget-row"><span id="funding-budget"></span><span id="funding-track" class="meter" title="Share of the AUR's daily updates the current budget can audit"><span id="funding-bar" class="meter-fill" style="width:0"></span></span></p>
-            </div>
-            <a id="funding-link" class="btn btn-strong hidden" href="#" rel="noopener" target="_blank">Chip in</a>
-        </section>
-
         <section class="toolbar">
             <input id="search" type="search" class="search" placeholder="Search packages" autocomplete="off" spellcheck="false">
             <div id="filter-buttons" class="filters">
@@ -622,6 +597,13 @@ code { font-family: var(--mono); }
             <div>
                 <div class="head"><h2>Cost by model</h2><span id="stat-cost" class="meta"></span></div>
                 <div id="model-chart" class="bars"></div>
+                <!-- How much of the AUR's daily churn this reaches. A fact
+                     about scale, stated where the other costs are; there is
+                     nothing to click. Hidden until every number exists. -->
+                <p id="coverage" class="coverage hidden">
+                    <span id="coverage-text"></span>
+                    <span id="coverage-track" class="meter" title="Share of the AUR's daily updates the current budget can audit"><span id="coverage-bar" class="meter-fill" style="width:0"></span></span>
+                </p>
                 <p>Open a package to see every report, the files each one flagged, and the lines it quoted.</p>
             </div>
         </footer>
@@ -680,8 +662,8 @@ async function init() {
     }
     renderHeadline();
     renderActivity();
-    renderFunding();
     renderModelCosts();
+    renderCoverage();
     renderTable();
     setupEventListeners();
     // A shareable link to one package: #pkg=<name>.
@@ -846,40 +828,32 @@ function renderActivity() {
 }
 
 // Every number here is computed in code at publish time (see
-// build_funding); nothing a model wrote reaches this card. The link is
-// set as a property, never markup, and only when it is an https URL.
-function renderFunding() {
-    const f = (DATA.summary && DATA.summary.funding) || null;
-    const card = document.getElementById('funding');
-    if (!f || !(Number(f.needed_per_day) > 0)) { card.classList.add('hidden'); return; }
-    card.classList.remove('hidden');
+// build_coverage); nothing a model wrote reaches it. It reports what the
+// AUR's daily churn would cost against what this actually runs on -- a
+// statement of scale, with nothing to click and nothing to ask for.
+function renderCoverage() {
+    const c = (DATA.summary && DATA.summary.coverage) || null;
+    const box = document.getElementById('coverage');
+    if (!c || !(Number(c.needed_per_day) > 0)) { box.classList.add('hidden'); return; }
+    box.classList.remove('hidden');
     const money = (v, digits) => '$' + Number(v).toFixed(digits);
+    const n = v => '<span class="n">' + escapeHtml(v) + '</span>';
 
-    document.getElementById('funding-needed').textContent = money(f.needed_per_day, 2);
-    document.getElementById('funding-inputs').textContent =
-        fmtNum(f.updates_per_day) + ' packages updated in the last 24 hours, at about '
-        + money(f.cost_per_package, 3) + ' each.';
+    let html = 'The AUR saw ' + n(fmtNum(c.updates_per_day)) + ' updates in the last 24 hours. '
+        + 'Auditing every one costs about ' + n(money(c.needed_per_day, 2)) + ' a day, at '
+        + n(money(c.cost_per_package, 3)) + ' a package.';
 
-    const budget = document.getElementById('funding-budget');
-    const track = document.getElementById('funding-track');
-    if (f.daily_budget != null && f.covered != null) {
-        const pct = Math.round(Number(f.covered) * 100);
-        budget.innerHTML = 'The current budget is <span class="n">' + escapeHtml(money(f.daily_budget, 2))
-            + '</span> a day and covers <span class="n">' + escapeHtml(pct < 1 ? 'under 1%' : pct + '%') + '</span>.';
-        document.getElementById('funding-bar').style.width = Math.max(1, Math.min(100, pct)) + '%';
+    const track = document.getElementById('coverage-track');
+    if (c.daily_budget != null && c.covered != null) {
+        const pct = Math.round(Number(c.covered) * 100);
+        html += ' This runs on ' + n(money(c.daily_budget, 2)) + ' a day, reaching '
+            + n(pct < 1 ? 'under 1%' : pct + '%') + ' of them.';
+        document.getElementById('coverage-bar').style.width = Math.max(1, Math.min(100, pct)) + '%';
         track.classList.remove('hidden');
     } else {
-        budget.textContent = '';
         track.classList.add('hidden');
     }
-
-    const link = document.getElementById('funding-link');
-    if (typeof f.url === 'string' && /^https:\/\/[^\s"'<>]+$/.test(f.url)) {
-        link.href = f.url;
-        link.classList.remove('hidden');
-    } else {
-        link.classList.add('hidden');
-    }
+    document.getElementById('coverage-text').innerHTML = html;
 }
 
 // What each model has cost, all time. Bars scale to the most expensive one;
@@ -1067,11 +1041,6 @@ async function toggleDetail(name) {
 // from the counts the state rule used. Nothing a model wrote goes in here.
 function explainState(pkg) {
     const state = packageState(pkg);
-    if (pkg.human) {
-        return (pkg.human.by || 'A reviewer') + ' reviewed the evidence'
-            + (pkg.human.since ? ' on ' + pkg.human.since : '')
-            + (pkg.human.verdict === 'safe' ? ' and cleared it.' : ' and confirmed it.');
-    }
     // Advisory reports are information, not votes: the explanation counts
     // only the audits the state rule counted.
     const audits = (pkg.audits || []).filter(a => !a.advisory);
@@ -1113,7 +1082,6 @@ function renderDetail(name, data) {
         String((b.frontmatter || {}).date || '').localeCompare(String((a.frontmatter || {}).date || '')));
     const judges = data.judges || [];
     const judgeSafe = pkg.judge_majority === 'safe';
-    const humanSafe = !!(pkg.human && pkg.human.verdict === 'safe');
     const confirmedCls = state === 'confirmed' ? ' confirmed' : '';
 
     let html = '<div class="detail-state">'
@@ -1121,15 +1089,6 @@ function renderDetail(name, data) {
         + '<span class="why">' + escapeHtml(explainState(pkg)) + '</span>'
         + '<a class="detail-link" href="#pkg=' + escapeAttr(encodeURIComponent(name)) + '">#pkg=' + escapeHtml(name) + '</a>'
         + '</div>';
-
-    // A settled verdict, and why. This outranks everything below it.
-    if (pkg.human && pkg.human.note) {
-        html += '<div class="detail-section"><div class="finding"><div class="head">'
-            + '<span class="file">Reviewed by ' + escapeHtml(pkg.human.by || 'a reviewer') + '</span>'
-            + (pkg.human.since ? '<span class="where">' + escapeHtml(pkg.human.since) + '</span>' : '')
-            + '<span class="summary">' + escapeHtml(pkg.human.note) + '</span>'
-            + '</div></div></div>';
-    }
 
     // What was flagged, first. Every file a report called unsafe, with the
     // lines the auditor quoted when it quoted any. Newest report first. Two
@@ -1159,7 +1118,7 @@ function renderDetail(name, data) {
             return '<div class="finding"><div class="head">'
                 + '<span class="file">' + escapeHtml(v.file || '') + '</span>'
                 + (start ? '<span class="where">line ' + start + '</span>' : '')
-                + '<span class="tag">flagged by ' + escapeHtml(joinNicely(f.models)) + (humanSafe ? ', overturned on review' : judgeSafe ? ', overturned by the judge' : '') + '</span>'
+                + '<span class="tag">flagged by ' + escapeHtml(joinNicely(f.models)) + (judgeSafe ? ', overturned by the judge' : '') + '</span>'
                 + f.summaries.map(s => '<span class="summary">' + escapeHtml(s) + '</span>').join('')
                 + '</div>'
                 + (v.evidence ? renderEvidence(v, state) : '')
