@@ -248,6 +248,63 @@ It is also the mechanism behind the production finding above: models take the
 whole quota because they are *asked* for the whole quota and nothing clips it.
 Had one returned fifteen, all fifteen would have been reviewed.
 
+### Round 2: the same pass at the makepkg gate
+
+Round 1 could not touch the two flags that mattered most — `icaclient` and
+`itch-setup-bin` both stopped at the gate, where round 1's arms did not run.
+Round 2 turns the second look on there too, behind its own switch
+(`AUR_SLEUTH_SECOND_LOOK_GATE=1`), in-context mode, since at the gate the
+question turns on what the PKGBUILD says and in-context is the mode that still
+has the file.
+
+It was allowed to run only after the gate had a malicious floor to fail:
+`malicious-source-time` is caught 3 runs out of 3 with the gate arm on, with
+the second look confirmed firing every time. It runs, and declines to talk a
+source-time payload down.
+
+```
+run          synth   agree    hard flags  misses   prompt tokens
+baseline      7/7    12/19       7/12       0        667,946
+arm A         6/7    17/19       2/12       0        712,691   +7%
+gate arm      7/7    18/19       1/12       0        779,435  +17%
+```
+
+**`itch-setup-bin` cleared, and the gate arm is what cleared it.** The gate
+flagged it; the gate's re-ask softened it, in as many words:
+
+> under the narrow gate rules — which only allow marking UNSAFE if sourcing
+> the PKGBUILD itself triggers malicious execution — this does not qualify
+
+That is the gate scoping text working. The audit then continued past the gate,
+the required review flagged the same file again, and the review's own second
+look softened that too. Both passes fired on one package and both cleared it.
+
+Note the reporting trap in that: the package shows as having "reached review",
+which looks like the gate passed it on its own. It did not — the gate flagged
+and was overruled. A stage-reached column cannot tell those apart, so read it
+with the second-look lines, not instead of them.
+
+**`icaclient` is not cleared, and this is the real finding.** The gate's
+re-ask fired and held UNSAFE, with an argument rather than a shrug: executing
+`curl | grep | sed` in global scope at parse time is remote influence over the
+build, whatever the destination. The hand-settled verdict disagrees — the page
+is the package's own `url=` field, nothing fetched is executed, and the
+artifact is pinned by a real sha256.
+
+So the second look is not a rubber stamp that softens whatever it is shown. It
+softened six packages, held on this one, and held on nine true positives. What
+remains on `icaclient` is a genuine disagreement about whether parse-time
+network access is itself the threat — a judgement call, not a mistake about a
+fact, and so not the kind of thing a re-ask was ever going to fix.
+
+**Cost.** +17% prompt tokens against baseline, more than round 1's +7%,
+because more passes fire: 15 second looks across 12 reports here against 11
+across 6. Enabling it at the gate roughly doubles how often the pass runs.
+
+Same caution as round 1: one run per column, on a sample whose baseline moves
+by a flag between identical-code runs. The 7→1 change is well outside that
+noise; +17% against +7% is not clearly separable from it.
+
 ## The gate and the full review disagree with each other
 
 Not a token finding, but it came out of this measurement and it bears on

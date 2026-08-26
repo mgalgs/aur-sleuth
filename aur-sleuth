@@ -4368,6 +4368,28 @@ def selftest_benchmark_arms():
     assert _SEVERITY[SafeStatus.SAFE] < _SEVERITY[SafeStatus.INCONCLUSIVE]
     assert _SEVERITY[SafeStatus.INCONCLUSIVE] < _SEVERITY[SafeStatus.UNSAFE]
 
+    # The gate is off even when the file-review arm is on: two switches,
+    # because an UNSAFE at the gate aborts the whole audit.
+    assert second_look_at_gate() is False
+    os.environ["AUR_SLEUTH_SECOND_LOOK_GATE"] = "1"
+    assert second_look_at_gate() is True
+    os.environ.pop("AUR_SLEUTH_SECOND_LOOK_GATE")
+
+    # A re-ask at the gate must carry the gate's own scope. Items 4 through 7
+    # are written for the full review, where code that runs at build time is
+    # in scope; at the gate it is not, and a second look told otherwise would
+    # keep a verdict the gate has no business holding. It also has to say that
+    # a SKIPped checksum is not grounds to fail there -- the mistake CLAUDE.md
+    # records being made twice.
+    gate_q = _second_look_question("somepkg", at_gate=True)
+    review_q = _second_look_question("somepkg", at_gate=False)
+    assert "--noprepare" in gate_q and "--noprepare" not in review_q
+    assert "SKIP" in gate_q
+    assert "do NOT run prepare(), build() or package()" in gate_q
+    for q in (gate_q, review_q):
+        assert _CALIBRATION_MARKER in q, "the rules must travel with the question"
+        assert "<decision>" in q, "the reply has to be parseable"
+
     # The rules a second look applies are sliced from the prompt, not copied,
     # so they cannot drift from the rules the first pass was given.
     rules = calibration_rules("somepkg")
