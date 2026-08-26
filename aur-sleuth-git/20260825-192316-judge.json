@@ -1,0 +1,27 @@
+{
+  "package": "aur-sleuth-git",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD is a standard VCS package that safely fetches from the project's own GitHub repository. The only flagged file, `malware.install`, is a synthetic test fixture located in `bench/synthetics/` used by the `aur-sleuth` tool to test its own malware detection capabilities. It is not referenced or executed by the PKGBUILD or any install hooks, posing no risk during `makepkg` or installation.",
+  "disagreement_analysis": "The model correctly identified the malicious payload inside `malware.install` but failed to fully contextualize it as a benign test fixture within the upstream source tree. Because it recognized it as a test fixture but still marked it inconclusive, it resulted in an inconclusive overall verdict instead of safely dismissing it as out-of-scope for AUR packaging execution.",
+  "coverage_issues": [],
+  "false_positives": [
+    "src/aur-sleuth/bench/synthetics/malicious-obfuscated-install/malware.install: This is a synthetic test fixture for the aur-sleuth tool's benchmarking suite, not an install hook executed by the AUR package."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models and the audit tool must distinguish between actual AUR packaging hooks (e.g., `.install` files referenced in PKGBUILD) and similarly named files that are merely test fixtures, synthetic samples, or benchmark data within the upstream source tree.",
+    "Files located in directories like `bench/synthetics/`, `tests/fixtures/`, or `examples/` should be automatically deprioritized or excluded from execution-risk analysis unless explicitly invoked by PKGBUILD functions."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 8000,
+    "completion_tokens": 2131,
+    "cost": 0.00528768
+  },
+  "audits_judged": [
+    "20260825-192236-anthropic-claude-sonnet-4.6.md"
+  ]
+}
