@@ -152,6 +152,80 @@ sample, not something the change introduced, and it is worth its own look:
 half of the hard negatives — packages a judge had already had to clear —
 were flagged again.
 
+## Can the auditor catch its own mistake?
+
+The audit seat's false flags are not gaps in what the model was shown. They are
+mistakes about facts it already had: on `itch-setup-bin` the makepkg gate read
+the same PKGBUILD and got it right — "checksums provided for all sources, no
+SKIP" — and the full review then called the same file an unverified download.
+
+Three arms were built to test whether asking again fixes that, all off unless
+their environment variable is set:
+
+- **A, `AUR_SLEUTH_SECOND_LOOK=incontext`** — one more turn in the same
+  conversation, so the model still has the file. Costs a full resend.
+- **B, `AUR_SLEUTH_SECOND_LOOK=fresh`** — a new model given only the verdict's
+  own reasoning, no file. Cheaper; can only catch an argument wrong on its face.
+- **C, `AUR_SLEUTH_FACTS=1`** — a deterministic block prepended to the review,
+  computed by parsing: how many remote sources carry a real checksum, whether
+  the global scope fetches from the package's own `url=` host, whether the
+  packaging names this file.
+
+Both second looks re-ask **only** on UNSAFE or INCONCLUSIVE and keep the answer
+**only if it softens**. A SAFE file is never re-asked, so the pass can undo an
+accusation and can never invent one. The rules it applies are items 4 through 7
+of `file_auditor`, sliced out of the prompt at runtime so they cannot drift
+from what the first pass was given.
+
+Round 1, 22 packages, qwen/qwen3-235b-a22b-2507, one run each:
+
+```
+run          synth   agree    hard flags  misses   prompt tokens
+baseline      7/7    12/19       7/12       0        667,946
+arm A         6/7    17/19       2/12       0        712,691   +7%
+arm B         7/7    17/19       2/12       0        690,130   +3%
+arm C         7/7    13/19       6/12       0        735,461  +10%
+arm A+C       7/7    17/19       2/12       0        667,957   +0%
+```
+
+**A and B each cleared five false flags** — `conky-lua-nv`, `customizepkg-git`,
+`f3`, `papirus-icon-theme-git`, `vicious-git` — with no misses and nothing
+newly flagged. Those five are every flag the arms could reach.
+
+**The other two were never tested.** `icaclient` and `itch-setup-bin` both
+stopped at the makepkg gate in every arm run, and round 1's arms do not run
+there. They are untested, not failures — reporting them as passes would count a
+coin that was not flipped.
+
+**C is not worth taking on its own**: one flag moved, the most tokens. But A+C
+matched A's accuracy at **no net token cost**, because the facts block makes
+the first pass flag less often and each flag avoided is a resend avoided.
+
+Two cautions on reading this table. Every column is one run, and this sample's
+run-to-run noise is real — the baseline itself moved between 6 and 7 hard flags
+across two identical-code runs. The 7→2 change is far outside that; the
+differences between A, B and A+C are not.
+
+And **arm A's failed fixture is not a softening.** The report has zero "Second
+look" lines and `tools/gen-config.py` was never reviewed at all: the selection
+picked two other files and missed the payload, so the arm never ran. Which is
+its own finding —
+
+### The review ceiling was never enforced in code
+
+`decide_next_files_to_review()` returned the model's list unclipped.
+`num_additional_files_to_review` appeared only in the prompt text, as "choose
+UP TO N files". Nothing truncated the answer.
+
+So `-n 0` never meant zero. It asked the model for up to zero files and took
+whatever came back — which is why `benchmark.sh`, which passes `-n 0` for every
+fixture to isolate the required-file path, has been running an unintended
+additional pass on every synthetic in every benchmark ever run.
+
+It is also the mechanism behind the production finding above: models take the
+whole quota because they are *asked* for the whole quota and nothing clips it.
+Had one returned fifteen, all fifteen would have been reviewed.
+
 ## The gate and the full review disagree with each other
 
 Not a token finding, but it came out of this measurement and it bears on
