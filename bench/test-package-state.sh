@@ -41,17 +41,10 @@ def check(name, cond, got=None):
 now = datetime(2026, 8, 25, 12, 0, tzinfo=timezone.utc)
 
 # --- package_state on summaries ---------------------------------------------
-def ps(audit=None, latest=None, unsafe_models=0, escalations=0, human=None):
-    d = {"audit_majority": audit, "judge_latest": latest,
-         "unsafe_models": unsafe_models, "escalations": escalations}
-    if human:
-        d["human"] = {"verdict": human}
-    return d
+def ps(audit=None, latest=None, unsafe_models=0, escalations=0):
+    return {"audit_majority": audit, "judge_latest": latest,
+            "unsafe_models": unsafe_models, "escalations": escalations}
 
-check("a settled safe verdict is clean whatever the models said",
-      gd.package_state(ps("unsafe", "unsafe", 2, human="safe")) == "clean")
-check("a settled unsafe verdict is confirmed",
-      gd.package_state(ps("safe", "safe", 0, human="unsafe")) == "confirmed")
 check("two distinct models unsafe and the judge agreeing: confirmed",
       gd.package_state(ps("unsafe", "unsafe", 2)) == "confirmed")
 check("one model unsafe twice and the judge agreeing: look, not confirmed",
@@ -118,7 +111,7 @@ judges = [
     judge("s", "20260824-090100", "unsafe", ["x", "y", "z"], "still bad"),
     judge("s", "20260824-110100", "unsafe", ["x", "y", "z", "w"], "still bad, really"),
 ]
-index = gd.build_index_data(audits, judges, now, human={})
+index = gd.build_index_data(audits, judges, now)
 P, R, S = index["packages"]["p"], index["packages"]["r"], index["packages"]["s"]
 
 check("a re-archived ruling is folded into one", len(P["judges"]) == 2, P["judges"])

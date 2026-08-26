@@ -79,10 +79,12 @@ page only reads them:
 ever made: each ruling reads every report there is, so a later one has
 strictly more evidence — the escalation audit it was convened to weigh.
 
-A verdict settled outside the pipeline lives in `bench/verdicts.json` and
-outranks the models everywhere: the page, and the benchmark's references
-("disagreeing with one of these is being wrong"). Its `by` field names who
-decided, honestly.
+Nothing overrides the models. There was a file of hand-settled verdicts that
+did (`bench/verdicts.json`), and it went: both entries in it were false
+positives on files in the downloaded upstream tree, and the fix for a false
+positive is the detection -- here, the boundary rule in `CLAUDE.md` -- not a
+list of exceptions to it. A package the pipeline has wrong gets a re-audit or
+a code fix, never an edit to the answer.
 
 ## The three seats, and the free voices
 

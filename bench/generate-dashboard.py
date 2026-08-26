@@ -147,11 +147,12 @@ def package_state(ps):
     """How settled a package's verdict is: confirmed, look, disputed, clean,
     or other.
 
-    A verdict settled outside the pipeline (bench/verdicts.json, attached to
-    the summary as "human") outranks the pipeline's models: a settled "safe"
-    makes the package clean, a settled "unsafe" makes it confirmed. The
-    pipeline can be re-run; the reviewer named in "by" read the evidence and
-    decided.
+    The models decide, and nothing overrides them. There was a file of
+    hand-settled verdicts that outranked the pipeline; both entries in it were
+    false positives on upstream files, and the fix for a false positive is
+    the detection, not a list of exceptions to it. A package the pipeline
+    gets wrong is re-audited or its cause is fixed in code; it is not edited
+    into the right answer.
 
     "confirmed" is deliberately narrow -- the audits agreed on unsafe AND the
     judge agreed with them. Only that may be presented as a finding.
@@ -169,12 +170,6 @@ def package_state(ps):
     disagree, and the pipeline stops spending on it. Terminal until a person
     settles it.
     """
-    human = (ps.get("human") or {}).get("verdict")
-    if human == "safe":
-        return "clean"
-    if human == "unsafe":
-        return "confirmed"
-
     audit = ps.get("audit_majority")
     # The judge's LATEST ruling, not a majority over every ruling it ever
     # made. Each ruling reads every report there is, so a later one has
@@ -360,41 +355,13 @@ def load_reports():
     return audits, judges
 
 
-def load_human_verdicts():
-    """bench/verdicts.json: verdicts settled outside the pipeline by whoever
-    read the evidence and decided -- "by" names them honestly, a person or a
-    model adjudicating on their behalf, and the page shows that name. Ships
-    with the image, so the page rebuilt at publish time carries them. The
-    benchmark reads the same file through its own loader in
-    benchmark-sample.py."""
-    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "verdicts.json")
-    try:
-        with open(path, encoding="utf-8") as f:
-            data = json.load(f)
-    except (OSError, ValueError):
-        return {}
-    out = {}
-    for name, entry in (data.get("packages") or {}).items():
-        if isinstance(entry, dict) and entry.get("verdict") in ("safe", "unsafe"):
-            out[name] = {
-                "verdict": entry["verdict"],
-                "since": str(entry.get("since", "")),
-                "by": str(entry.get("by", "")),
-                "note": str(entry.get("note", "")),
-            }
-    return out
-
-
-def build_index_data(audits, judges, now=None, funding_inputs=None, human=None):
+def build_index_data(audits, judges, now=None, funding_inputs=None):
     """Build the index JSON structure for the dashboard.
 
     `funding_inputs` is {updates_per_day, daily_budget, url}, each optional;
-    see build_funding for what becomes of them. `human` is the verdicts a
-    person settled ({package: {verdict, since, note}}); None loads them from
-    bench/verdicts.json.
+    see build_funding for what becomes of them.
     """
     now = now or datetime.now(timezone.utc)
-    human = load_human_verdicts() if human is None else human
     packages = defaultdict(lambda: {"audits": [], "judges": []})
 
     for a in audits:
@@ -530,10 +497,6 @@ def build_index_data(audits, judges, now=None, funding_inputs=None, human=None):
             "escalations": sum(1 for a in pkg_audits
                                if a.get("triggered_by") and not a.get("advisory")),
         }
-        # A human-settled verdict rides on the summary so package_state()
-        # and the drill-down both see it.
-        if pkg_name in human:
-            pkg_summaries[pkg_name]["human"] = human[pkg_name]
         # The state is decided here, once, and the page reads it. The page
         # used to carry its own copy of package_state() in JavaScript, and
         # nothing checked that the two copies agreed.
@@ -672,10 +635,9 @@ def build_index_data(audits, judges, now=None, funding_inputs=None, human=None):
     return {"summary": summary, "packages": pkg_summaries}
 
 
-def build_package_details(audits, judges, human=None):
+def build_package_details(audits, judges):
     """Build per-package detail JSON with full report bodies."""
     packages = defaultdict(lambda: {"audits": [], "judges": []})
-    human = load_human_verdicts() if human is None else human
 
     for a in audits:
         packages[a["package"]]["audits"].append({
@@ -689,10 +651,6 @@ def build_package_details(audits, judges, human=None):
             "filename": j["filename"],
             "data": j["data"],
         })
-
-    for name, entry in human.items():
-        if name in packages:
-            packages[name]["human"] = entry
 
     return dict(packages)
 
@@ -802,11 +760,10 @@ def commit_to_branch(files):
 def build_files(audits, judges, now=None, funding_inputs=None):
     """Everything the page reads, as {path: content}, from loaded reports."""
     now = now or datetime.now(timezone.utc)
-    human = load_human_verdicts()
-    index_data = build_index_data(audits, judges, now, funding_inputs, human=human)
+    index_data = build_index_data(audits, judges, now, funding_inputs)
     index_data["generated_at"] = now.strftime("%Y-%m-%dT%H:%M:%SZ")
     files = {"_dashboard/data.json": json.dumps(index_data, separators=(",", ":"))}
-    for pkg_name, detail in build_package_details(audits, judges, human=human).items():
+    for pkg_name, detail in build_package_details(audits, judges).items():
         files[f"_dashboard/pkg/{pkg_name}.json"] = json.dumps(detail, separators=(",", ":"))
     return files
 

@@ -185,22 +185,11 @@ def score(model, rows, synth):
     hard = [r for r in scored if r["reference"] == "safe" and r.get("overridden")]
     hard_flags = sum(1 for r in hard if r["result"] == "unsafe")
 
-    # The same, split by who settled the reference. Disagreeing with a
-    # hand-settled verdict (bench/verdicts.json; 'by' names who decided) is
-    # being wrong; disagreeing with one the pipeline's own models settled may
-    # be right -- the first run "missed" a package whose reference was a
-    # single audit's false positive. Only the hand-settled misses disqualify.
-    def tally(rows_):
-        return {
-            "scored": len(rows_),
-            "agree": sum(1 for r in rows_ if r["result"] == r["reference"]),
-            "false_flags": sum(1 for r in rows_ if r["reference"] == "safe" and r["result"] == "unsafe"),
-            "of_safe": sum(1 for r in rows_ if r["reference"] == "safe"),
-            "misses": sum(1 for r in rows_ if r["reference"] == "unsafe" and r["result"] == "safe"),
-            "of_unsafe": sum(1 for r in rows_ if r["reference"] == "unsafe"),
-        }
-    human = tally([r for r in scored if r.get("reference_source") == "human"])
-    pipeline = tally([r for r in scored if r.get("reference_source") != "human"])
+    # Every reference was settled by the pipeline's own models, so a miss is a
+    # disagreement that may be right -- the first run "missed" a package whose
+    # reference was a single audit's false positive -- and nothing here
+    # disqualifies a model on its own. (The split against hand-settled
+    # verdicts went with the file that held them.)
     # Rows copied from the branch are the current models' own past results:
     # the incumbents. Their verdicts helped settle the pipeline references, so
     # their agreement there is an upper bound; their cost is what it was.
@@ -221,8 +210,6 @@ def score(model, rows, synth):
     return {
         "model": model,
         "incumbent": incumbent,
-        "human": human,
-        "pipeline": pipeline,
         "sample": len(mine),
         "scored": len(scored),
         "asked": len(asked),
@@ -271,34 +258,32 @@ def money(v):
 
 
 def table(models):
-    head = (f"{'model':<36} {'synth':>6} {'acc':>6} {'agree':>6} {'human f/m':>10} {'pipe f/m':>9} "
+    head = (f"{'model':<36} {'synth':>6} {'acc':>6} {'agree':>6} {'false':>7} {'miss':>6} "
             f"{'hard':>6} {'inc':>4} {'$/pkg':>8} {'$':>8} {'s/pkg':>6}")
     lines = [head, "-" * len(head)]
     for m in models:
         s = m["synthetics"]
         synth = f"{s['passed']}/{s['run']}" if s["run"] else "—"
-        h, p = m["human"], m["pipeline"]
         name = m["model"] + (" *" if m["incumbent"] else "")
         lines.append(
             f"{name:<36} {synth:>6} {pct(m['effective_agreement']):>6} {pct(m['agreement']):>6} "
-            f"{h['false_flags']}/{h['of_safe']} {h['misses']}/{h['of_unsafe']:<4} "
-            f"{p['false_flags']}/{p['of_safe']} {p['misses']}/{p['of_unsafe']:<3} "
+            f"{m['false_flags']}/{m['of_safe']:<4} {m['misses']}/{m['of_unsafe']:<3} "
             f"{m['hard_flags']}/{m['of_hard']:<4} {m['inconclusive']:>4} "
             f"{money(m['cost_per_package']):>8} {money(m['cost']):>8} "
             f"{'—' if m['mean_seconds'] is None else m['mean_seconds']:>6}"
         )
     lines.append("")
-    lines.append("Sorted best first: accuracy, then cost; a failed synthetic or a hand-settled")
-    lines.append("miss sinks a model to the bottom at any price.")
+    lines.append("Sorted best first: accuracy, then cost; a failed synthetic sinks a model to")
+    lines.append("the bottom at any price.")
     lines.append("* = a current model, scored from its own reports on the branch (its verdicts")
-    lines.append("helped settle the pipeline references, so its agreement is an upper bound; its")
-    lines.append("cost is real). synth: fixtures passed. acc: matches over everything ASKED --")
-    lines.append("an error or a shrug on a settled package counts against it; the ranking uses")
-    lines.append("this. agree: matches over everything scored (answers only).")
-    lines.append("human f/m: false flags / misses against hand-settled verdicts -- a miss")
-    lines.append("here disqualifies. pipe f/m: the same against verdicts the pipeline's own")
-    lines.append("models settled -- a disagreement, which may be right. hard: false flags on")
-    lines.append("packages a judge had already had to clear. inc: inconclusive.")
+    lines.append("helped settle the references, so its agreement is an upper bound; its cost")
+    lines.append("is real). synth: fixtures passed. acc: matches over everything ASKED -- an")
+    lines.append("error or a shrug on a settled package counts against it; the ranking uses")
+    lines.append("this. agree: matches over everything scored (answers only). false / miss:")
+    lines.append("false flags on settled-safe packages / misses on settled-unsafe ones. The")
+    lines.append("references are the pipeline's own settled verdicts, so a disagreement may be")
+    lines.append("right. hard: false flags on packages a judge had already had to clear.")
+    lines.append("inc: inconclusive.")
     return "\n".join(lines)
 
 
@@ -309,7 +294,7 @@ def main():
         rp.add_argument("--model", required=True)
         rp.add_argument("--package", required=True)
         rp.add_argument("--reference", default="unknown")
-        rp.add_argument("--reference-source", default="", choices=["", "human", "models"])
+        rp.add_argument("--reference-source", default="", choices=["", "models"])
         rp.add_argument("--support", type=int, default=0)
         rp.add_argument("--ref-pkgver", default="")
         rp.add_argument("--overridden", action="store_true")
@@ -323,7 +308,7 @@ def main():
         rp.add_argument("--model", required=True)
         rp.add_argument("--package", required=True)
         rp.add_argument("--reference", default="unknown")
-        rp.add_argument("--reference-source", default="", choices=["", "human", "models"])
+        rp.add_argument("--reference-source", default="", choices=["", "models"])
         rp.add_argument("--support", type=int, default=0)
         rp.add_argument("--ref-pkgver", default="")
         rp.add_argument("--overridden", action="store_true")
@@ -358,13 +343,12 @@ def main():
 
     models = [score(m, rows, synth) for m in names]
     # Best candidate first: accuracy, then cost. A model that fails a
-    # synthetic or misses a hand-settled package is not a candidate at any
-    # price, so it sorts last. Accuracy is effective_agreement -- non-answers
-    # on settled packages count against it -- so a model that sat out the
-    # hard calls cannot outrank one that engaged them all.
+    # synthetic is not a candidate at any price, so it sorts last. Accuracy
+    # is effective_agreement -- non-answers on settled packages count against
+    # it -- so a model that sat out the hard calls cannot outrank one that
+    # engaged them all.
     models.sort(key=lambda m: (
         not (m["synthetics"]["all_pass"] or m["synthetics"]["run"] == 0),
-        m["human"]["misses"] > 0,
         m["scored"] == 0,
         -(m["effective_agreement"] or 0),
         -(m["agreement"] or 0),

@@ -40,9 +40,8 @@ def load(name):
 report = load("benchmark-report.py")
 
 def row(model, pkg, ref, res, cost, **kw):
-    # Package "a" is the one a person settled; the rest were settled by the pipeline.
     r = {"model": model, "package": pkg, "reference": ref, "result": res, "cost": cost, "seconds": 10,
-         "reference_source": "human" if pkg == "a" else ("models" if ref in ("safe", "unsafe") else "")}
+         "reference_source": "models" if ref in ("safe", "unsafe") else ""}
     r.update(kw)
     return r
 
@@ -88,9 +87,6 @@ check("the disagreement is listed", [d["package"] for d in cheap["disagreements"
 
 misser = report.score("misser", rows, synth)
 check("a miss is counted", misser["misses"] == 1)
-check("a miss against a human-settled verdict is a human miss",
-      misser["human"]["misses"] == 1 and misser["pipeline"]["misses"] == 0)
-check("the split adds up", misser["human"]["scored"] + misser["pipeline"]["scored"] == misser["scored"])
 check("a candidate is not an incumbent", not misser["incumbent"])
 check("a false flag on an overturned package is a hard flag", misser["hard_flags"] == 1)
 check("a failed synthetic is recorded", not misser["synthetics"]["all_pass"])
@@ -106,16 +102,15 @@ check("effective agreement counts every asked package",
 check("a model that answered everything keeps its score",
       report.score("cheap", rows, synth)["effective_agreement"] == 0.75)
 
-# A miss against a verdict only the pipeline settled is a disagreement, not a
+# A miss against a verdict the pipeline settled is a disagreement, not a
 # disqualification: the reference may be the false positive.
 rows2 = rows + [
     row("doubter", "a", "unsafe", "unsafe", 0.01),
     row("doubter", "b", "safe", "safe", 0.01),
-    row("doubter", "h", "unsafe", "safe", 0.01),   # pipeline-settled unsafe, called safe
+    row("doubter", "h", "unsafe", "safe", 0.01),   # settled unsafe, called safe
 ]
 doubter = report.score("doubter", rows2, synth)
-check("a pipeline miss is counted as such",
-      doubter["pipeline"]["misses"] == 1 and doubter["human"]["misses"] == 0)
+check("a miss is counted as such", doubter["misses"] == 1)
 # The incumbents: rows copied from the branch.
 rows2 += [row("current/model", p, ref, ref, 0.02, from_branch=True) for p, ref in [("a", "unsafe"), ("b", "safe"), ("c", "safe")]]
 cur = report.score("current/model", rows2, synth)
@@ -161,7 +156,7 @@ order = [m["model"] for m in obj["models"]]
 # and sorts below it despite a 100% score over its answers. Sitting out the
 # hard calls stopped being a winning strategy when icaclient's judge
 # benchmark showed every "100%" model had simply dodged the one hard call.
-check("engagement-adjusted accuracy first; the human miss last",
+check("engagement-adjusted accuracy first; the failed synthetic last",
       order == ["cheap", "pricey", "absent", "misser"])
 with open(rows_path, "w") as f:
     f.write("\n".join(json.dumps(r) for r in rows2) + "\n")
@@ -193,9 +188,9 @@ def read_row(*extra):
                         "--report", rep, "--model", "m", "--package", "foo", *extra],
                        capture_output=True, text=True)
     return json.loads(p.stdout)
-r = read_row("--reference", "safe", "--reference-source", "human", "--support", "3",
+r = read_row("--reference", "safe", "--reference-source", "models", "--support", "3",
              "--ref-pkgver", "1.1", "--seconds", "42", "--exit", "1", "--overridden")
-check("row carries the reference's provenance", r["reference_source"] == "human" and r["support"] == 3)
+check("row carries the reference's provenance", r["reference_source"] == "models" and r["support"] == 3)
 check("row reads the verdict, cost and version", r["result"] == "unsafe" and r["cost"] == 0.0123 and r["pkgver"] == "1.2")
 check("row names the first unsafe file", r["summary"] == "foo.install: curl | sh: bad")
 check("row carries what it was told", r["reference"] == "safe" and r["ref_pkgver"] == "1.1"
@@ -217,7 +212,7 @@ def read_judge(*extra):
                         "--judge-file", jf, "--model", "j/x", "--package", "foo", *extra],
                        capture_output=True, text=True)
     return json.loads(p.stdout)
-r = read_judge("--reference", "unsafe", "--reference-source", "human")
+r = read_judge("--reference", "unsafe", "--reference-source", "models")
 check("judgerow reads the ruling and the cost", r["result"] == "unsafe" and r["cost"] == 0.0123 and r["summary"] == "because")
 r = read_judge("--exit", "124")
 check("a judge timeout is a timeout", r["result"] == "timeout")
@@ -237,19 +232,17 @@ pool = (
     + [pkg(f"hard{i}", "clean", f"2026-06-{10+i:02d}", True) for i in range(6)]
     + [pkg(f"ok{i}", "clean", f"2026-06-{10+i:02d}") for i in range(10)]
     + [pkg("maybe", "look", "2026-06-30"), pkg("nothing", "unknown", "2026-06-30")]
-    + [dict(pkg("settled", "look", "2026-06-01"), reference="safe", reference_source="human")]
 )
 picked = sample.select(pool, 11)
 names = [p["package"] for p in picked]
 check("every confirmed package is in", all(f"bad{i}" in names for i in range(3)))
 check("the size is honoured", len(picked) == 11)
 check("half the clean slots go to overturned packages",
-      sum(1 for p in picked if p["overridden"]) == 3)  # 11 - 4 settled = 7 slots, half of them
+      sum(1 for p in picked if p["overridden"]) == 4)  # 11 - 3 confirmed = 8 slots, half of them
 check("unsettled packages are never sampled", "maybe" not in names and "nothing" not in names)
-check("a package a person settled is always in, whatever its state", "settled" in names)
 check("newest first within a group", names.index("ok9") < names.index("ok6"))
 check("a tiny size still fits", len(sample.select(pool, 2)) == 2)
-check("a size larger than the pool takes what there is", len(sample.select(pool, 100)) == 20)
+check("a size larger than the pool takes what there is", len(sample.select(pool, 100)) == 19)
 
 # --- the row splitter in benchmark.sh ----------------------------------------
 # bench_package and judge_package split a sample row into shell variables.

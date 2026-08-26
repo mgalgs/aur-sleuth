@@ -16,15 +16,13 @@ skips the selection; a named package with no settled verdict is still emitted,
 with reference "unknown", so the run can show what the candidate said even when
 nothing can be scored.
 
-Two kinds of reference, and the report keeps them apart:
-  human  -- a hand-settled verdict from bench/verdicts.json (its 'by' field
-            names who decided: a person, or a model adjudicating). Disagreeing
-            with one of these is being wrong.
-  models -- the pipeline's own settled verdict (package_state). Disagreeing
-            with one of these is disagreeing with the current models, which
-            may be right: the first benchmark "missed" a package whose
-            reference was a single audit's false positive.
-"support" is how many unsafe reports a model-settled unsafe rests on.
+The reference is the pipeline's own settled verdict (package_state), and
+disagreeing with it is disagreeing with the current models, which may be
+right: the first benchmark "missed" a package whose reference was a single
+audit's false positive. "support" is how many unsafe reports a settled unsafe
+rests on. (A file of hand-settled verdicts once outranked the models here; it
+went, because every entry in it was a detection bug with an exception filed
+instead of a fix.)
 
 "branch" carries the current models' own latest report on the package (with
 its path on the branch), and "branch_judges" what the judge ruled, so the
@@ -63,21 +61,6 @@ def reference_for(state):
     if state == "clean":
         return "safe"
     return "unknown"
-
-
-def load_human_verdicts():
-    """bench/verdicts.json: {package: verdict}. Missing file means none."""
-    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "verdicts.json")
-    try:
-        with open(path, encoding="utf-8") as f:
-            data = json.load(f)
-    except (OSError, ValueError):
-        return {}
-    out = {}
-    for name, entry in (data.get("packages") or {}).items():
-        if isinstance(entry, dict) and entry.get("verdict") in ("safe", "unsafe"):
-            out[name] = entry["verdict"]
-    return out
 
 
 def latest_by_model(audits):
@@ -120,10 +103,9 @@ def judges_by_package(judges):
     return out
 
 
-def rows(gd, human=None):
+def rows(gd):
     audits, judges = gd.load_reports()
     index = gd.build_index_data(audits, judges)
-    human = load_human_verdicts() if human is None else human
     branch = latest_by_model(audits)
     judged = judges_by_package(judges)
     out = []
@@ -134,8 +116,6 @@ def rows(gd, human=None):
             support = int(ps.get("unsafe_audits", 0))
         elif ref == "safe":
             support = int(ps.get("audit_count", 0))
-        if name in human:
-            ref, source, support = human[name], "human", 0
         out.append({
             "package": name,
             "reference": ref,
@@ -153,13 +133,11 @@ def rows(gd, human=None):
 
 
 def select(all_rows, size):
-    """Every human-settled package and every confirmed one, then the clean ones,
-    newest first, split between the overturned and the ordinary."""
-    confirmed = sorted((r for r in all_rows
-                        if r.get("reference_source") == "human" or r["state"] == "confirmed"),
+    """Every confirmed package, then the clean ones, newest first, split
+    between the overturned and the ordinary."""
+    confirmed = sorted((r for r in all_rows if r["state"] == "confirmed"),
                        key=lambda r: r["date"], reverse=True)
-    clean = sorted((r for r in all_rows
-                    if r["state"] == "clean" and r.get("reference_source") != "human"),
+    clean = sorted((r for r in all_rows if r["state"] == "clean"),
                    key=lambda r: r["date"], reverse=True)
     overridden = [r for r in clean if r["overridden"]]
     ordinary = [r for r in clean if not r["overridden"]]
@@ -204,8 +182,7 @@ def main():
           f"{sum(1 for r in picked if r['reference'] == 'unsafe')} unsafe, "
           f"{sum(1 for r in picked if r['reference'] == 'safe')} safe "
           f"({sum(1 for r in picked if r['overridden'])} overturned by a judge), "
-          f"{sum(1 for r in picked if r['reference'] == 'unknown')} unscored; "
-          f"{sum(1 for r in picked if r['reference_source'] == 'human')} hand-settled",
+          f"{sum(1 for r in picked if r['reference'] == 'unknown')} unscored",
           file=sys.stderr)
     return 0
 

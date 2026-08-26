@@ -44,15 +44,16 @@ the benchmark as the one experiment runner.
 
 One named, comparable number per model: **sleuthbench, 0 to 1.0**, computed
 by the existing benchmark machinery over a FIXED, versioned evaluation set
-(sleuthbench-v1: every hand-settled verdict, the synthetic fixtures, and a
-pinned stratified sample of settled packages heavy on hard negatives).
-Comparable means the set is the same for every model and every run of the
-same version; the set re-pins only with a version bump.
+(sleuthbench-v1: the synthetic fixtures and a pinned stratified sample of
+settled packages heavy on hard negatives). Comparable means the set is the
+same for every model and every run of the same version; the set re-pins
+only with a version bump.
 
 - Score = effective agreement over the set (non-answers count against),
-  with hard gates that zero it: any miss or false flag against a
-  hand-settled verdict, or a failed synthetic, is not a low score — it is
-  a fail.
+  with one hard gate that zeroes it: a failed synthetic is not a low score
+  — it is a fail. (An earlier draft also gated on hand-settled verdicts;
+  that file is gone, and the fixtures are the only references a model can
+  be wrong against without argument.)
 - **Trust rule**: a model's verdicts count only once it holds a passing
   sleuthbench (threshold configurable, e.g. 0.9). Until then it is
   advisory: its reports may ADD scrutiny (trigger a judge look) but never
