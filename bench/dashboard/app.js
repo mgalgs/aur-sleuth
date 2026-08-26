@@ -50,8 +50,8 @@ async function init() {
     }
     renderHeadline();
     renderActivity();
-    renderFunding();
     renderModelCosts();
+    renderCoverage();
     renderTable();
     setupEventListeners();
     // A shareable link to one package: #pkg=<name>.
@@ -216,40 +216,32 @@ function renderActivity() {
 }
 
 // Every number here is computed in code at publish time (see
-// build_funding); nothing a model wrote reaches this card. The link is
-// set as a property, never markup, and only when it is an https URL.
-function renderFunding() {
-    const f = (DATA.summary && DATA.summary.funding) || null;
-    const card = document.getElementById('funding');
-    if (!f || !(Number(f.needed_per_day) > 0)) { card.classList.add('hidden'); return; }
-    card.classList.remove('hidden');
+// build_coverage); nothing a model wrote reaches it. It reports what the
+// AUR's daily churn would cost against what this actually runs on -- a
+// statement of scale, with nothing to click and nothing to ask for.
+function renderCoverage() {
+    const c = (DATA.summary && DATA.summary.coverage) || null;
+    const box = document.getElementById('coverage');
+    if (!c || !(Number(c.needed_per_day) > 0)) { box.classList.add('hidden'); return; }
+    box.classList.remove('hidden');
     const money = (v, digits) => '$' + Number(v).toFixed(digits);
+    const n = v => '<span class="n">' + escapeHtml(v) + '</span>';
 
-    document.getElementById('funding-needed').textContent = money(f.needed_per_day, 2);
-    document.getElementById('funding-inputs').textContent =
-        fmtNum(f.updates_per_day) + ' packages updated in the last 24 hours, at about '
-        + money(f.cost_per_package, 3) + ' each.';
+    let html = 'The AUR saw ' + n(fmtNum(c.updates_per_day)) + ' updates in the last 24 hours. '
+        + 'Auditing every one costs about ' + n(money(c.needed_per_day, 2)) + ' a day, at '
+        + n(money(c.cost_per_package, 3)) + ' a package.';
 
-    const budget = document.getElementById('funding-budget');
-    const track = document.getElementById('funding-track');
-    if (f.daily_budget != null && f.covered != null) {
-        const pct = Math.round(Number(f.covered) * 100);
-        budget.innerHTML = 'The current budget is <span class="n">' + escapeHtml(money(f.daily_budget, 2))
-            + '</span> a day and covers <span class="n">' + escapeHtml(pct < 1 ? 'under 1%' : pct + '%') + '</span>.';
-        document.getElementById('funding-bar').style.width = Math.max(1, Math.min(100, pct)) + '%';
+    const track = document.getElementById('coverage-track');
+    if (c.daily_budget != null && c.covered != null) {
+        const pct = Math.round(Number(c.covered) * 100);
+        html += ' This runs on ' + n(money(c.daily_budget, 2)) + ' a day, reaching '
+            + n(pct < 1 ? 'under 1%' : pct + '%') + ' of them.';
+        document.getElementById('coverage-bar').style.width = Math.max(1, Math.min(100, pct)) + '%';
         track.classList.remove('hidden');
     } else {
-        budget.textContent = '';
         track.classList.add('hidden');
     }
-
-    const link = document.getElementById('funding-link');
-    if (typeof f.url === 'string' && /^https:\/\/[^\s"'<>]+$/.test(f.url)) {
-        link.href = f.url;
-        link.classList.remove('hidden');
-    } else {
-        link.classList.add('hidden');
-    }
+    document.getElementById('coverage-text').innerHTML = html;
 }
 
 // What each model has cost, all time. Bars scale to the most expensive one;

@@ -131,8 +131,6 @@ SITE_BRANCH="site"
 REVIEW_JSON_IN=""
 # shellcheck disable=SC2034
 DATA_DIR="$tmp/data"
-# shellcheck disable=SC2034
-FUNDING_URL=""
 trusted="$(python3 bench/generate-dashboard.py --print-html | git hash-object --stdin)"
 
 # A page the audit stage could have planted, and a review record it could have
@@ -193,12 +191,12 @@ else
     ok "a stale per-package file is dropped"
 fi
 
-echo "== the funding card's inputs reach the page, and only as numbers and a URL =="
-# Without inputs (the build above) the card is left out, not shown empty.
-if printf '%s' "$built_data" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["summary"]["funding"] is None'; then
-    ok "no inputs: summary.funding is null"
+echo "== the coverage line's inputs reach the page, and only as numbers =="
+# Without inputs (the build above) the line is left out, not shown empty.
+if printf '%s' "$built_data" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["summary"]["coverage"] is None'; then
+    ok "no inputs: summary.coverage is null"
 else
-    bad "no inputs: summary.funding should be null"
+    bad "no inputs: summary.coverage should be null"
 fi
 # A real report dated today, so the trailing cost window has something in it;
 # the AUR dump names one package modified just now; effective.json carries the
@@ -214,21 +212,21 @@ funded_base="$(GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_C
 mkdir -p "$DATA_DIR/pipeline"
 printf '{"AUR_SLEUTH_DAILY_BUDGET":"1.00","AUR_SLEUTH_JOBS":"<script>"}' > "$DATA_DIR/pipeline/effective.json"
 printf '[{"Name":"a","LastModified":%s},{"Name":"b","LastModified":1}]' "$(date +%s)" | gzip > "$tmp/meta.json.gz"
-funded="$(FUNDING_URL="https://example.com/chip-in" GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t \
+funded="$(GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t \
     rewrite_dashboard_html "$repo" "$funded_base" "$tmp/meta.json.gz" 2>/dev/null)"
 funded_data="$(git --git-dir="$repo" show "${funded}:_dashboard/data.json")"
 if printf '%s' "$funded_data" | python3 -c '
 import json, sys
-f = json.load(sys.stdin)["summary"]["funding"]
+f = json.load(sys.stdin)["summary"]["coverage"]
 assert f["updates_per_day"] == 1, f
 assert f["cost_per_package"] == 0.01, f
 assert f["needed_per_day"] == 0.01, f
 assert f["daily_budget"] == 1.0 and f["covered"] == 1.0, f
-assert f["url"] == "https://example.com/chip-in", f
+assert "url" not in f, f
 '; then
-    ok "updates x cost, the budget and the link land in summary.funding"
+    ok "updates x cost and the budget land in summary.coverage"
 else
-    bad "summary.funding is wrong: $(printf '%s' "$funded_data" | head -c 300)"
+    bad "summary.coverage is wrong: $(printf '%s' "$funded_data" | head -c 300)"
 fi
 if [[ "$funded_data" == *"<script>"* ]]; then
     bad "a string planted in effective.json reached the page"
@@ -764,7 +762,7 @@ publish_dry() (
     # shellcheck disable=SC2030,SC2031,SC2034
     GIT_STORE="$1" DATA_DIR="$tmp/data" SRC_DIR="$tmp/src" MODE=publish \
         FETCH_URL=https://example.invalid/r.git PUBLISH_DRY_RUN=true \
-        EXPECT_HEAD="${2:-}" REVIEW_JSON_IN="" FUNDING_URL="" SITE_BRANCH=site \
+        EXPECT_HEAD="${2:-}" REVIEW_JSON_IN="" SITE_BRANCH=site \
         AUR_METADATA_URL="file://$tmp/no-such-dump"
     # shellcheck disable=SC2329  # both called by do_publish
     die() { echo "die: $*"; exit 1; }
@@ -825,7 +823,7 @@ publish_live() (
         FETCH_URL="$origin" PUSH_URL="$origin" PUBLISH_DRY_RUN=false \
         SSH_KEY="$tmp/deploy-key" KNOWN_HOSTS="$tmp/known-hosts" HOME="$tmp/home" \
         GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t \
-        EXPECT_HEAD="" REVIEW_JSON_IN="" FUNDING_URL="" SITE_BRANCH=site \
+        EXPECT_HEAD="" REVIEW_JSON_IN="" SITE_BRANCH=site \
         AUR_METADATA_URL="file://$tmp/no-such-dump"
     # shellcheck disable=SC2329
     die() { echo "die: $*"; exit 1; }

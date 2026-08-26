@@ -33,7 +33,7 @@ drives everything described here without a terminal.
    one round whatever their state. (Before the rounds, a re-audit was one
    audit whose ruling came a run later — if a run with budget ever came.)
 5. **Dashboard.** `bench/generate-dashboard.py` rebuilds the page data from
-   the branch: per-package state, evidence, costs, the funding numbers.
+   the branch: per-package state, evidence, costs, the coverage numbers.
 6. **Scout.** `bench/scout.py` compares the cached OpenRouter catalog
    against each seat's price and writes a shortlist of models that could
    undercut a seat, with the seats' shares of recent spend. Code only.

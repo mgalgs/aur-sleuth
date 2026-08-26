@@ -237,11 +237,6 @@ def safe_int(v, default=0):
 # within two weeks rather than being buried under months of the old one.
 COST_WINDOW_DAYS = 14
 
-# A funding link must be https and carry nothing that could break out of an
-# attribute. The page escapes it again on render; this is the outer bound.
-FUNDING_URL_RE = re.compile(r"^https://[A-Za-z0-9._~:/?#@!$&()*+,;=%-]+$")
-
-
 def count_aur_updates(path, now=None):
     """Packages the AUR modified in the 24 hours before `now`, or None.
 
@@ -250,7 +245,7 @@ def count_aur_updates(path, now=None):
     touched twice in a week shows once, on the later day). The last 24 hours
     is the one window that does not: nothing has been modified "after" it yet.
     That makes it noisier than a weekly mean, and honest, which matters more
-    for a number that sets a funding target.
+    for a number the page states as fact.
     """
     import gzip
     try:
@@ -286,9 +281,9 @@ def read_daily_budget(path):
     return value if value >= 0 else None
 
 
-def build_funding(pkg_summaries, by_date, now, updates_per_day=None,
-                  daily_budget=None, url=None):
-    """The funding block of data.json, or None when a number it needs is missing.
+def build_coverage(pkg_summaries, by_date, now, updates_per_day=None,
+                   daily_budget=None):
+    """The coverage block of data.json, or None when a number it needs is missing.
 
     The per-package cost is everything the pipeline spent in the trailing
     window (audits, judges, re-audits) over the packages it audited in that
@@ -303,7 +298,7 @@ def build_funding(pkg_summaries, by_date, now, updates_per_day=None,
         return None
     per_package = cost / packages
     needed = updates_per_day * per_package
-    funding = {
+    coverage = {
         "updates_per_day": int(updates_per_day),
         "cost_per_package": round(per_package, 4),
         "cost_window_days": COST_WINDOW_DAYS,
@@ -311,12 +306,11 @@ def build_funding(pkg_summaries, by_date, now, updates_per_day=None,
         "needed_per_day": round(needed, 2),
         "daily_budget": None,
         "covered": None,
-        "url": url if url and FUNDING_URL_RE.match(url) else None,
     }
     if daily_budget is not None:
-        funding["daily_budget"] = round(daily_budget, 2)
-        funding["covered"] = round(min(1.0, daily_budget / needed), 4) if needed > 0 else None
-    return funding
+        coverage["daily_budget"] = round(daily_budget, 2)
+        coverage["covered"] = round(min(1.0, daily_budget / needed), 4) if needed > 0 else None
+    return coverage
 
 
 def load_reports():
@@ -355,11 +349,11 @@ def load_reports():
     return audits, judges
 
 
-def build_index_data(audits, judges, now=None, funding_inputs=None):
+def build_index_data(audits, judges, now=None, coverage_inputs=None):
     """Build the index JSON structure for the dashboard.
 
-    `funding_inputs` is {updates_per_day, daily_budget, url}, each optional;
-    see build_funding for what becomes of them.
+    `coverage_inputs` is {updates_per_day, daily_budget}, each optional;
+    see build_coverage for what becomes of them.
     """
     now = now or datetime.now(timezone.utc)
     packages = defaultdict(lambda: {"audits": [], "judges": []})
@@ -629,7 +623,7 @@ def build_index_data(audits, judges, now=None, funding_inputs=None):
         # What auditing every AUR update would cost, against the budget the
         # pipeline runs with. None until every input is known; the page then
         # leaves the card out rather than showing a confident zero.
-        "funding": build_funding(pkg_summaries, by_date, now, **(funding_inputs or {})),
+        "coverage": build_coverage(pkg_summaries, by_date, now, **(coverage_inputs or {})),
     }
 
     return {"summary": summary, "packages": pkg_summaries}
@@ -757,10 +751,10 @@ def commit_to_branch(files):
             os.remove(tmpindex)
 
 
-def build_files(audits, judges, now=None, funding_inputs=None):
+def build_files(audits, judges, now=None, coverage_inputs=None):
     """Everything the page reads, as {path: content}, from loaded reports."""
     now = now or datetime.now(timezone.utc)
-    index_data = build_index_data(audits, judges, now, funding_inputs)
+    index_data = build_index_data(audits, judges, now, coverage_inputs)
     index_data["generated_at"] = now.strftime("%Y-%m-%dT%H:%M:%SZ")
     files = {"_dashboard/data.json": json.dumps(index_data, separators=(",", ":"))}
     for pkg_name, detail in build_package_details(audits, judges).items():
@@ -788,13 +782,12 @@ def main():
     def opt(flag):
         return args[args.index(flag) + 1] if flag in args else None
 
-    # The funding card's inputs. Each is optional; without one the card is
+    # The coverage line's inputs. Each is optional; without one the line is
     # left out. --aur-metadata is the AUR's packages-meta-v1.json.gz, counted
     # against the clock, not the commit: the dump is as fresh as its download.
-    funding_inputs = {
+    coverage_inputs = {
         "updates_per_day": count_aur_updates(opt("--aur-metadata")) if opt("--aur-metadata") else None,
         "daily_budget": read_daily_budget(opt("--effective")) if opt("--effective") else None,
-        "url": opt("--funding-url"),
     }
 
     if "--emit" in args:
@@ -813,7 +806,7 @@ def main():
             now = datetime.fromisoformat(stamp).astimezone(timezone.utc)
         except ValueError:
             now = None
-        files = build_files(audits, judges, now, funding_inputs)
+        files = build_files(audits, judges, now, coverage_inputs)
         for path, content in files.items():
             full = os.path.join(out_dir, path)
             os.makedirs(os.path.dirname(full), exist_ok=True)
@@ -837,7 +830,7 @@ def main():
     print(f"  {len(audits)} audit reports, {len(judges)} judge reports")
 
     print("Building the page's data...")
-    files = build_files(audits, judges, funding_inputs=funding_inputs)
+    files = build_files(audits, judges, coverage_inputs=coverage_inputs)
     files["index.html"] = generate_html()
     files[".nojekyll"] = ""
 

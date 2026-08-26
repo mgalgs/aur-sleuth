@@ -138,7 +138,6 @@ Set as environment variables on the container.
 | `AUR_SLEUTH_EXPECT_HEAD` | publish | — | The commit a review approved; publish pushes exactly that commit, and refuses if the branch no longer contains it |
 | `AUR_SLEUTH_SITE_BRANCH` | publish | `site` | The branch the public page is pushed to; point GitHub Pages at it |
 | `AUR_SLEUTH_REVIEW_JSON` | publish | — | The review's `REVIEW_JSON` object, written to the branch as `_dashboard/review.json` |
-| `AUR_SLEUTH_FUNDING_URL` | publish | — | An https link for the public page's funding card ("Chip in"). Unset hides the button; the card's numbers still show |
 | `AUR_SLEUTH_INTERNAL_STRINGS` | review, quarantine, publish | `svc.cluster.local` | Fixed strings that name your own infrastructure; a report carrying one is never published |
 | `AUR_SLEUTH_REVIEW_MODEL` | review | `deepseek/deepseek-v4-flash` | The model for the advisory read |
 | `AUR_SLEUTH_REVIEW_WORKERS` | review | `16` | Read requests in flight; clamped to 1..64 |
