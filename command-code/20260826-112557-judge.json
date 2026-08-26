@@ -1,0 +1,35 @@
+{
+  "package": "command-code",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The AUR packaging (PKGBUILD, .SRCINFO) is clean: fetches from official npm registry with SHA-512 checksums, uses --ignore-scripts to prevent lifecycle script execution, and contains no malicious code in build/install functions. The 'inconclusive' verdict from claude-sonnet-4.6 was triggered by (1) a tool error (413 Request Entity Too Large) on upstream file cli.mjs, and (2) a concern about upstream obfuscation (javascript-obfuscator in package.json). Per the threat model, upstream application behavior\u2014including obfuscation of proprietary code\u2014is the vendor's product, not an AUR injection. The AUR maintainer did not inject this; they package a pre-built npm artifact with proper integrity verification. The 413 error is a tool limitation, not a security finding.",
+  "disagreement_analysis": "claude-sonnet-4.6 flagged upstream obfuscation as a 'notable trust concern' and hit a 413 error on cli.mjs, leading to INCONCLUSIVE. However, obfuscation is upstream behavior explicitly outside the AUR threat model ('What the application does when it runs is the vendor's product, not an injection'). The 413 error prevented review of an upstream file, but the AUR packaging itself was fully audited and found safe by all models that completed successfully.",
+  "coverage_issues": [
+    "claude-sonnet-4.6 could not review src/package/dist/cli.mjs due to 413 Request Entity Too Large error",
+    "openrouter/free (advisory) had a tool error and could not parse model response"
+  ],
+  "false_positives": [
+    "Upstream obfuscation concern (javascript-obfuscator in package.json): This is upstream application behavior, not an AUR injection. The threat model explicitly excludes 'what the application does when it runs' from verdict consideration. Obfuscation of proprietary code is a normal IP protection practice."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models should be explicitly instructed that upstream application characteristics (obfuscation, telemetry, proprietary licensing) are outside the AUR threat model and should not influence the verdict",
+    "Tool errors (413, timeouts) on upstream files should not trigger INCONCLUSIVE verdicts when the AUR packaging itself has been fully audited and found safe",
+    "The audit tool should distinguish between 'could not review upstream file' and 'could not review AUR packaging' - only the latter should affect the verdict",
+    "When multiple models agree on PKGBUILD safety and the disagreement stems from upstream concerns, the adjudicator should recognize this as a shared false positive pattern"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 8035,
+    "completion_tokens": 1720,
+    "cost": 0.004772800000000001
+  },
+  "audits_judged": [
+    "20260826-111454-qwen-qwen3-235b-a22b-2507.md",
+    "20260826-111508-deepseek-deepseek-v4-flash.md",
+    "20260824-094124-anthropic-claude-sonnet-4.6.md",
+    "20260825-033358-openrouter-free.md"
+  ]
+}
