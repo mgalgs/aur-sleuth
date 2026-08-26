@@ -12,6 +12,39 @@ from datetime import datetime, timedelta, timezone
 
 REPORTS_BRANCH = "audit-reports"
 
+# The command line, in one place. Flags that take a value are listed apart
+# from the ones that do not, because main() checks every argument against
+# these before it runs anything -- see the guard there for why.
+VALUE_FLAGS = {"--emit", "--git-dir", "--ref", "--aur-metadata", "--effective"}
+BARE_FLAGS = {"--print-html"}
+
+USAGE = """\
+usage: generate-dashboard.py [--print-html | --emit DIR] [options]
+
+Builds the public page at mgalgs.io/aur-sleuth from the audit-reports branch:
+one inlined index.html, _dashboard/data.json, and one _dashboard/pkg/<name>.json
+per package.
+
+Modes:
+  (no arguments)    Build all of it and COMMIT to the local audit-reports
+                    branch. This is the only mode that writes to a repository.
+  --print-html      Write index.html to stdout. Reads no repository.
+  --emit DIR        Write the JSON files under DIR. Commits nothing.
+
+Options, with --emit:
+  --git-dir DIR     Read the branch from this repository rather than the one
+                    in the working directory.
+  --ref BRANCH      Read reports from this ref rather than audit-reports.
+  --aur-metadata F  The AUR's packages-meta-v1.json.gz, for the coverage line.
+  --effective F     The effective settings file, for the daily budget and the
+                    escalation queue.
+
+  -h, --help        Show this and exit.
+
+To preview a change to bench/dashboard/ without touching any branch, use
+--emit and --print-html together; never the no-argument form.
+"""
+
 # Set by --git-dir: read the branch from this repository instead of the one
 # in the working directory. The publish stage uses it to build the page's
 # JSON from its own throwaway repository, never running git in the shared
@@ -840,11 +873,37 @@ def build_files(audits, judges, now=None, coverage_inputs=None, escalation_input
 
 def main():
     global GIT_DIR
+    args = sys.argv[1:]
+
+    if "-h" in args or "--help" in args:
+        sys.stdout.write(USAGE)
+        return
+
+    # Every argument is checked before anything runs. An unrecognised one used
+    # to fall through to the no-argument path, which commits: `--help` itself
+    # rebuilt the page and rewrote the branch. Now a typo is an error, and the
+    # branch is only written when the command line asked for nothing else.
+    i = 0
+    while i < len(args):
+        flag = args[i]
+        if flag in VALUE_FLAGS:
+            if i + 1 >= len(args):
+                print(f"{flag} needs a value.\n", file=sys.stderr)
+                sys.stderr.write(USAGE)
+                sys.exit(2)
+            i += 2
+        elif flag in BARE_FLAGS:
+            i += 1
+        else:
+            print(f"Unrecognised argument: {flag}\n", file=sys.stderr)
+            sys.stderr.write(USAGE)
+            sys.exit(2)
+
     # The publish stage rewrites index.html from this template instead of
     # trusting the copy on the branch, which the audit stage can write. That
     # rewrite happens before any repository is staged, so printing the template
     # must not touch git.
-    if "--print-html" in sys.argv[1:]:
+    if "--print-html" in args:
         sys.stdout.write(generate_html())
         return
 
@@ -853,8 +912,6 @@ def main():
     # the files to the commit it makes, so the published data is built by
     # trusted code from the branch as it stands -- the audit stage's copy on
     # the branch never goes out.
-    args = sys.argv[1:]
-
     def opt(flag):
         return args[args.index(flag) + 1] if flag in args else None
 
