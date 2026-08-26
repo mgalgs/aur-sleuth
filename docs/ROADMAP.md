@@ -13,6 +13,20 @@ the benchmark as the one experiment runner.
    that undercut a seat, with recent per-seat spend shares so a price reads
    in whole-pipeline terms. Next: track what the operator has already seen,
    so the card can say "new since your last look".
+   **Model screening** — DONE 2026-08-26. A price ceiling and an output-length
+   floor in the scout, a `screen` container stage that runs each unscreened
+   candidate against the synthetic fixtures alone (cents a model, cheapest
+   first, within a budget it will not exceed), and three groups on the card:
+   `candidates`, `new_arrivals`, `rejected`. It was built because the
+   shortlist was ten sub-$0.07/Mtok models nobody would seat, while
+   `z-ai/glm-5.3-flash` — 90% under the judge seat, 1M context — ranked 32nd
+   by price and could never appear. Measured on the way: the old per-seat cap
+   was never the cause. Undercutting is monotone in price, so the seat lists
+   are nested and any per-seat top-N is just the N globally cheapest, however
+   it is written. Price rank itself was the blindness, and recency is the fix.
+   Next: rank a seat's slice by measured cost-per-package once enough models
+   carry one, so the card stops ranking on a catalog price the screen has
+   already improved on.
 2. **Benchmark image override** (queued 2026-08-23). Let a benchmark run a
    candidate IMAGE built from a reviewed branch, so prompt and code
    experiments run through the same scoring as model candidates.

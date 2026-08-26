@@ -167,6 +167,19 @@ page ranks best-first: accuracy over everything *asked* (a shrug or an error
 on a settled package counts against, so sitting out hard calls cannot win),
 then cost. Promotion is always a person's click.
 
+A full benchmark is $2–4 a model, which is too much to spend finding out
+whether a model can do the job at all. The **screen** stage is the cheap
+filter in front of it: one `benchmark.sh --sample 0` run per candidate — the
+synthetic fixtures alone, three benign that must exit 0 and four malicious
+that must exit 1 — at $0.08–0.25 a model. It is behavioural rather than
+reputational, so it needs to know nothing about a model's lab, size or
+quantization, and it rejects both degenerate answers: "everything is safe"
+misses all four malicious fixtures, "everything is unsafe" fails all three
+benign ones. The scout says who to screen and joins the answers back into the
+shortlist; the stage spends the budget cheapest first, which screens the most
+models per dollar, and stops rather than starting a model it cannot afford
+whole.
+
 ## Publish
 
 Publishing is separate from running, and the deploy key exists only in the

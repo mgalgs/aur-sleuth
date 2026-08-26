@@ -31,6 +31,11 @@
 #             STAGE EXECUTES UNTRUSTED CODE, exactly like audit: it runs
 #             `makepkg` on real AUR packages, so it must run under the same
 #             protections (egress gate, no credential, proxied LLM key).
+#   screen    Run each unscreened candidate the scout lists against the
+#             synthetic fixtures alone, cheapest first, until the budget is
+#             gone: cents a model, and it is what makes the shortlist worth
+#             reading. Same writes, same key, same protections as benchmark
+#             (it runs `makepkg` on the fixtures).
 #
 # The split exists so the git write credential never shares a process, an
 # environment, or a filesystem with a hostile PKGBUILD. See deploy/container/README.md.
@@ -425,6 +430,200 @@ do_benchmark() {
 
     log "Starting benchmark: ${flags[*]}"
     exec bash bench/benchmark.sh "${flags[@]}"
+}
+
+# --- screen -------------------------------------------------------------------
+
+# The cheap filter in front of the benchmark: run each unscreened candidate
+# against the synthetic fixtures alone and record whether it cleared them.
+# Three benign fixtures that must exit 0 and four malicious ones that must
+# exit 1, for a few cents a model instead of a few dollars, and behavioural
+# rather than reputational -- it does not care whether a model is quantized,
+# distilled, MoE or from a lab nobody has heard of, only whether it clears the
+# benign ones and catches the malicious ones. It also rejects both degenerate
+# answers: "everything is safe" misses all four malicious fixtures, and
+# "everything is unsafe" fails all three benign ones.
+#
+# Who to screen is the scout's answer, from the same structural filters the
+# shortlist uses (bench/scout.py screen-list) -- one implementation, so the
+# stage that spends the money has no second opinion about what is screenable.
+# This stage only spends it, cheapest first, which is simply the order that
+# screens the most models per dollar.
+#
+# The budget binds BETWEEN models, not inside one: a model's seven fixtures
+# are the indivisible unit of spend, so the stage refuses to start a model it
+# cannot afford (priced from the catalog at SCREEN_TOKENS_PER_MODEL) rather
+# than truncating one halfway. Cheapest first means the first model it cannot
+# afford is also the last, so it stops there.
+#
+# It runs makepkg on the fixtures, so it carries every protection audit and
+# benchmark do.
+SCREEN_TOKENS_PER_MODEL=200000
+
+# What one screening run spent: the fixtures are the whole cost, but read the
+# audit rows too so the number stays right if a screen ever carries packages.
+screen_run_cost() {
+    python3 - "$1" <<'PY'
+import json, sys
+try:
+    with open(sys.argv[1], encoding="utf-8") as f:
+        result = json.load(f)
+except (OSError, ValueError):
+    print("0.000000")
+    raise SystemExit(0)
+total = 0.0
+for m in result.get("models") or []:
+    total += float(m.get("cost") or 0)
+    total += float((m.get("synthetics") or {}).get("cost") or 0)
+print(f"{total:.6f}")
+PY
+}
+
+# One line saying what the fixtures said, and the failures by name: a model
+# that misses a malicious fixture and one that flags a benign one are
+# different problems, and the log is where a person sees which.
+screen_verdict() {
+    python3 - "$1" "$2" <<'PY'
+import json, sys
+try:
+    with open(sys.argv[1], encoding="utf-8") as f:
+        result = json.load(f)
+except (OSError, ValueError):
+    print("no result")
+    raise SystemExit(0)
+for m in result.get("models") or []:
+    if m.get("model") != sys.argv[2]:
+        continue
+    synth = m.get("synthetics") or {}
+    ran, passed = int(synth.get("run") or 0), int(synth.get("passed") or 0)
+    if not ran:
+        print("no fixtures ran")
+        raise SystemExit(0)
+    failed = [f.get("fixture", "?") for f in synth.get("fixtures") or [] if not f.get("pass")]
+    verdict = "PASSED" if synth.get("all_pass") else "REJECTED"
+    print(f"{verdict} {passed}/{ran}" + (f" (failed: {', '.join(failed)})" if failed else ""))
+    raise SystemExit(0)
+print("not in the result")
+PY
+}
+
+do_screen() {
+    [[ -n "${OPENAI_API_KEY:-}" ]] || die "OPENAI_API_KEY is not set"
+    [[ -d "$GIT_STORE" ]] || die "$GIT_STORE missing; run the prepare stage first"
+    cd "$SRC_DIR"
+
+    # Environment for the scheduled path, flags for a person at a shell. The
+    # budget has no default on either: a screening run with no ceiling could
+    # spend a month's audits in an afternoon.
+    local budget="${AUR_SLEUTH_SCREEN_BUDGET:-}"
+    local since_days="${AUR_SLEUTH_SCREEN_SINCE_DAYS:-45}"
+    local max_price="${AUR_SLEUTH_SCREEN_MAX_PRICE:-2.00}"
+    local limit="${AUR_SLEUTH_SCREEN_LIMIT:-0}"
+    local seats="${AUR_SLEUTH_SCREEN_SEATS:-}"
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --budget) budget="$2"; shift 2 ;;
+            --since-days) since_days="$2"; shift 2 ;;
+            --max-price-per-mtok) max_price="$2"; shift 2 ;;
+            --limit) limit="$2"; shift 2 ;;
+            --seats) seats="$2"; shift 2 ;;
+            *) die "unknown screen option '$1'" \
+                   "(want --budget, --since-days, --max-price-per-mtok, --limit or --seats)" ;;
+        esac
+    done
+
+    [[ -n "$budget" ]] || die "no budget: set AUR_SLEUTH_SCREEN_BUDGET or pass --budget USD"
+    [[ "$budget" =~ ^[0-9]+(\.[0-9]+)?$ ]] || die "the budget must be a number, got '$budget'"
+    [[ "$since_days" =~ ^[0-9]+$ ]] || die "--since-days must be a whole number, got '$since_days'"
+    [[ "$max_price" =~ ^[0-9]+(\.[0-9]+)?$ ]] || die "--max-price-per-mtok must be a number, got '$max_price'"
+    [[ "$limit" =~ ^[0-9]+$ ]] || die "--limit must be a whole number, got '$limit'"
+
+    local catalog="$DATA_DIR/models-catalog.json"
+    local scout_json="$DATA_DIR/bench/scout.json"
+    [[ -f "$catalog" ]] || die "$catalog is missing; the audit stage caches it, so run one first"
+
+    # What "undercuts a seat" means, from whichever copy of the seats exists.
+    # The pipeline's model settings live in a ConfigMap this stage does not
+    # read; the last scout run wrote them into its own output.
+    local seat_flags=()
+    if [[ -n "$seats" ]]; then
+        seat_flags=(--seats "$seats")
+    elif [[ -f "$scout_json" ]]; then
+        seat_flags=(--seats-from "$scout_json")
+    else
+        die "no seats: set AUR_SLEUTH_SCREEN_SEATS, or run a pipeline so the scout writes $scout_json"
+    fi
+
+    mkdir -p "$DATA_DIR/bench"
+    local list="$DATA_DIR/bench/screen-candidates.jsonl"
+    python3 bench/scout.py screen-list --catalog "$catalog" \
+        --bench-dir "$DATA_DIR/bench" "${seat_flags[@]}" \
+        --since-days "$since_days" --max-price-per-mtok "$max_price" \
+        --limit "$limit" > "$list" || die "the scout could not list candidates"
+
+    local total
+    total="$(wc -l < "$list")"
+    log "$total candidate(s) unscreened at \$$max_price/Mtok or less, created in the last $since_days day(s); budget \$$budget"
+    if (( total == 0 )); then
+        log "Nothing to screen"
+        return 0
+    fi
+
+    local stamp spent="0" n=0 screened=0 passed=0 blanks=0
+    stamp="$(date -u +%Y%m%d-%H%M%S)"
+
+    local line model price estimate remaining run_id result rc
+    while IFS= read -r line; do
+        [[ -n "$line" ]] || continue
+        model="$(printf '%s' "$line" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
+        price="$(printf '%s' "$line" | python3 -c 'import json,sys; print(json.load(sys.stdin)["blended_per_mtok"])')"
+        remaining="$(python3 -c "print(f'{max(0.0, $budget - $spent):.4f}')")"
+        estimate="$(python3 -c "print(f'{$price * $SCREEN_TOKENS_PER_MODEL / 1e6:.4f}')")"
+        if python3 -c "import sys; sys.exit(0 if $estimate > $remaining else 1)"; then
+            log "\$$remaining left, and the next model ($model) needs about \$$estimate; stopping with $(( total - n )) candidate(s) unscreened"
+            break
+        fi
+        n=$(( n + 1 ))
+        run_id="screen-$stamp-$(printf '%03d' "$n")"
+        log "[$n/$total] screening $model (\$$price/Mtok, about \$$estimate); \$$remaining of \$$budget left"
+
+        rc=0
+        bash bench/benchmark.sh --models "$model" --sample 0 --target screen \
+            --budget "$remaining" --run-id "$run_id" \
+            ${AUR_SLEUTH_AUDIT_TIMEOUT:+--audit-timeout "$AUR_SLEUTH_AUDIT_TIMEOUT"} \
+            || rc=$?
+
+        result="$DATA_DIR/bench/$run_id/result.json"
+        if [[ -f "$result" ]]; then
+            local cost verdict
+            cost="$(screen_run_cost "$result")"
+            spent="$(python3 -c "print(f'{$spent + $cost:.6f}')")"
+            verdict="$(screen_verdict "$result" "$model")"
+            log "[$n/$total] $model: $verdict (\$$cost; \$$spent of \$$budget spent)"
+            screened=$(( screened + 1 ))
+            [[ "$verdict" == PASSED* ]] && passed=$(( passed + 1 ))
+            blanks=0
+        else
+            # No result at all is not a rejection: the model was never asked.
+            # One is a bad provider; three in a row is this stage being
+            # broken, and grinding through the list would only prove it again.
+            blanks=$(( blanks + 1 ))
+            log "WARNING: $model produced no result (benchmark exit $rc); not screened"
+            (( blanks < 3 )) || die "three candidates in a row produced no result; stopping"
+        fi
+    done < "$list"
+
+    log "Screened $screened model(s) for \$$spent: $passed passed, $(( screened - passed )) rejected"
+
+    # Refresh the card now rather than at the next pipeline run, so the page
+    # shows what this just cost money to learn. Code only, and its failure
+    # costs the page nothing but freshness.
+    if [[ -f "$scout_json" ]]; then
+        python3 bench/scout.py --catalog "$catalog" --out "$scout_json" \
+            --bench-dir "$DATA_DIR/bench" --data-dir "$DATA_DIR" \
+            --seats-from "$scout_json" --max-price-per-mtok "$max_price" \
+            || log "WARNING: the scout failed; the page keeps the old shortlist"
+    fi
 }
 
 # --- reading the shared store safely ------------------------------------------
@@ -1228,7 +1427,8 @@ case "$MODE" in
     publish)    do_publish ;;
     bundle)     do_bundle ;;
     benchmark)  do_benchmark ;;
+    screen)     do_screen "$@" ;;
     *)          die "unknown stage '$MODE'" \
                     "(want prepare, audit, review, quarantine," \
-                    "publish, bundle or benchmark)" ;;
+                    "publish, bundle, benchmark or screen)" ;;
 esac

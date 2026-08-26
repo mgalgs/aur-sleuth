@@ -180,14 +180,20 @@ SAFE verdicts, and do not let it run without the malicious fixtures in the gate.
 - `bench/test.sh` — runs every offline suite (`bench/test-*.sh`, the script's selftest)
   and fails if any fails. `--live` adds the synthetics. Run it before every commit.
 - `deploy/container/` — the image and its entrypoint: the `prepare`, `audit`, `review`,
-  `quarantine`, `publish`, `bundle` and `benchmark` stages. `bench/review-pending.py` is
-  the review stage's summary and advisory model read.
+  `quarantine`, `publish`, `bundle`, `benchmark` and `screen` stages.
+  `bench/review-pending.py` is the review stage's summary and advisory model read.
 - `bench/dashboard/` — the public page's source (`index.html`, `app.css`, `app.js`);
   `bench/generate-dashboard.py` inlines them and builds the page's JSON from the branch.
 - `bench/benchmark.sh` — scores candidate models against the verdicts settled on the
   branch (synthetics first, then a stratified sample of real packages). Writes only
   under `$DATA_DIR/bench/`, never to the branch. `bench/test-benchmark.sh` covers the
   scoring offline. The ops UI runs it as the `benchmark` container stage.
+- `bench/scout.py` — the code-only shortlist of catalog models that could undercut a
+  seat, and (`screen-list`) the one answer to which of them to screen next. The
+  `screen` container stage runs `benchmark.sh --sample 0` over that list, cheapest
+  first, within a budget: the synthetic fixtures alone, cents a model, which is what
+  makes the shortlist worth reading. `bench/test-scout.sh` and `bench/test-screen.sh`
+  cover both offline.
 - `.claude/skills/self-improve/` — the audit-review-improve loop.
 - `docs/PIPELINE.md` — the machinery, end to end; `docs/ROADMAP.md` — queued
   improvements, so intent survives the chat it came from.
