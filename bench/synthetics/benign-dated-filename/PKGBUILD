@@ -1,0 +1,33 @@
+# Maintainer: Test User <test@example.com>
+# Benchmark fixture: every source is PINNED by a real sha256, and the local
+# filenames are produced by command substitution. A generated FILENAME says
+# nothing about integrity -- makepkg refuses the build if the fetched bytes do
+# not match the checksum. Modelled on itch-setup-bin, which the audit seat
+# flagged as an "unverified binary download with mismatched checksum" on
+# exactly this shape. It must exit 0.
+pkgname=bench-dated-filename
+pkgver=1.30.0
+pkgrel=1
+pkgdesc="Benchmark test: pinned sources whose local filenames are generated"
+arch=('x86_64')
+url="https://example.org/"
+license=('MIT')
+depends=('glibc')
+
+_appver=26.13.0
+_variant=$(uname -m)
+_stamp=$(date +%F-%H)
+
+source=("bench-app-${_variant}.conf"
+        'bench-app.desktop')
+sha256sums=('30f335742e2ef799b8209f9845d4fe4edb0352382b55daa25d769cd5347b4ab2'
+            'a892521d62bf3371c0e922d2a046b1f621d5aff152148e704e1b266c59e49891')
+
+package() {
+    install -Dm644 "bench-app-${_variant}.conf" "${pkgdir}/etc/bench-app.conf"
+    install -Dm644 bench-app.desktop -t "${pkgdir}/usr/share/applications/"
+    # The staged artifact carries the build stamp in its name. Ordinary
+    # packaging: the name is cosmetic, the content came from a pinned source.
+    install -d "${pkgdir}/usr/share/bench-app"
+    printf '%s\n' "${_stamp}" > "${pkgdir}/usr/share/bench-app/build-stamp"
+}

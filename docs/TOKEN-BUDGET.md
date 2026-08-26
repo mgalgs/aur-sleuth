@@ -103,11 +103,18 @@ Content is the minority, and it is concentrated: the median reviewed file is
 3,658 characters, and only 13 of 159 review calls exceeded 20,000. The
 `MAX_FILE_CHARS` cap of 120,000 almost never binds.
 
-At the time of measurement the provider reported **no prompt caching**, so
-cost tracks tokens one for one. That is worth re-checking before any work
-aimed at cost rather than tokens: a cached prefix is billed at a discount but
-still counted, and the two questions then have different answers.
-`bench/token-ledger.py` reports cached tokens separately for this reason.
+**Prompt caching moves, so re-measure it rather than citing this page.** On
+2026-08-25 the provider reported no cached tokens at all on the sample above,
+and cost tracked tokens one for one. Later the same day a single audit of
+papirus-icon-theme-git came back with 4,542 cached prompt tokens, 10.3% of its
+prompt. Nothing in the loop changed between them; the routing did.
+
+So the earlier figure was a measurement on a day, not a fact about the
+provider, and any claim about cost needs its own reading. A cached prefix is
+billed at a discount but still counted, so "halve the tokens" and "halve the
+bill" have different answers whenever caching is live.
+`bench/token-ledger.py` reports cached tokens separately for this reason, and
+says so explicitly when a provider reports none.
 
 ## What has been taken
 
@@ -156,6 +163,195 @@ Six false flags out of nineteen is the incumbent's own behaviour on this
 sample, not something the change introduced, and it is worth its own look:
 half of the hard negatives — packages a judge had already had to clear —
 were flagged again.
+
+## Can the auditor catch its own mistake?
+
+The audit seat's false flags are not gaps in what the model was shown. They are
+mistakes about facts it already had: on `itch-setup-bin` the makepkg gate read
+the same PKGBUILD and got it right — "checksums provided for all sources, no
+SKIP" — and the full review then called the same file an unverified download.
+
+Three arms were built to test whether asking again fixes that, all off unless
+their environment variable is set:
+
+- **A, `AUR_SLEUTH_SECOND_LOOK=incontext`** — one more turn in the same
+  conversation, so the model still has the file. Costs a full resend.
+- **B, `AUR_SLEUTH_SECOND_LOOK=fresh`** — a new model given only the verdict's
+  own reasoning, no file. Cheaper; can only catch an argument wrong on its face.
+- **C, `AUR_SLEUTH_FACTS=1`** — a deterministic block prepended to the review,
+  computed by parsing: how many remote sources carry a real checksum, whether
+  the global scope fetches from the package's own `url=` host, whether the
+  packaging names this file.
+
+Both second looks re-ask **only** on UNSAFE or INCONCLUSIVE and keep the answer
+**only if it softens**. A SAFE file is never re-asked, so the pass can undo an
+accusation and can never invent one. The rules it applies are items 4 through 7
+of `file_auditor`, sliced out of the prompt at runtime so they cannot drift
+from what the first pass was given.
+
+Round 1, 22 packages, qwen/qwen3-235b-a22b-2507, one run each:
+
+```
+run          synth   agree    hard flags  misses   prompt tokens
+baseline      7/7    12/19       7/12       0        667,946
+arm A         6/7    17/19       2/12       0        712,691   +7%
+arm B         7/7    17/19       2/12       0        690,130   +3%
+arm C         7/7    13/19       6/12       0        735,461  +10%
+arm A+C       7/7    17/19       2/12       0        667,957   +0%
+```
+
+**A and B each cleared five false flags** — `conky-lua-nv`, `customizepkg-git`,
+`f3`, `papirus-icon-theme-git`, `vicious-git` — with no misses and nothing
+newly flagged. Those five are every flag the arms could reach.
+
+**The other two were never tested.** `icaclient` and `itch-setup-bin` both
+stopped at the makepkg gate in every arm run, and round 1's arms do not run
+there. They are untested, not failures — reporting them as passes would count a
+coin that was not flipped.
+
+**C is not worth taking on its own**: one flag moved, the most tokens. But A+C
+matched A's accuracy at **no net token cost**, because the facts block makes
+the first pass flag less often and each flag avoided is a resend avoided.
+
+Two cautions on reading this table. Every column is one run, and this sample's
+run-to-run noise is real — the baseline itself moved between 6 and 7 hard flags
+across two identical-code runs. The 7→2 change is far outside that; the
+differences between A, B and A+C are not.
+
+And **arm A's failed fixture is not a softening.** The report has zero "Second
+look" lines and `tools/gen-config.py` was never reviewed at all: the selection
+picked two other files and missed the payload, so the arm never ran.
+
+Asked directly — every malicious fixture, both arms, three runs each, at a
+ceiling that reaches the payload — a second look has never talked one down:
+
+```
+arm         fixture                        caught  fired  softened
+off         all four                        3/3      -       -
+incontext   curl-exfil                      3/3     3/3      0
+incontext   deep-payload                    3/3     3/3      0
+incontext   obfuscated-install              3/3     3/3      0
+fresh       curl-exfil                      3/3     3/3      0
+fresh       deep-payload                    3/3     3/3      0
+fresh       obfuscated-install              3/3     3/3      0
+```
+
+`fired` is the column that matters: counting a "pass" on a run where the pass
+never ran would be counting a coin that was not flipped. It fired on nine true
+positives per arm and softened none of them. `source-time` shows `fired` 0
+because its flag is at the gate, which round 1's arms do not reach.
+
+`deep-payload` was caught 3 out of 3 here, at `-n 10`. It was flaky under
+`benchmark.sh` only because of what that harness passes — which is its own
+finding:
+
+### The review ceiling was never enforced in code
+
+`decide_next_files_to_review()` returned the model's list unclipped.
+`num_additional_files_to_review` appeared only in the prompt text, as "choose
+UP TO N files". Nothing truncated the answer.
+
+So `-n 0` never meant zero. It asked the model for up to zero files and took
+whatever came back — which is why `benchmark.sh`, which passes `-n 0` for every
+fixture to isolate the required-file path, has been running an unintended
+additional pass on every synthetic in every benchmark ever run.
+
+It is also the mechanism behind the production finding above: models take the
+whole quota because they are *asked* for the whole quota and nothing clips it.
+Had one returned fifteen, all fifteen would have been reviewed.
+
+### Round 2: the same pass at the makepkg gate
+
+Round 1 could not touch the two flags that mattered most — `icaclient` and
+`itch-setup-bin` both stopped at the gate, where round 1's arms did not run.
+Round 2 turns the second look on there too, behind its own switch
+(`AUR_SLEUTH_SECOND_LOOK_GATE=1`), in-context mode, since at the gate the
+question turns on what the PKGBUILD says and in-context is the mode that still
+has the file.
+
+It was allowed to run only after the gate had a malicious floor to fail:
+`malicious-source-time` is caught 3 runs out of 3 with the gate arm on, with
+the second look confirmed firing every time. It runs, and declines to talk a
+source-time payload down.
+
+```
+run          synth   agree    hard flags  misses   prompt tokens
+baseline      7/7    12/19       7/12       0        667,946
+arm A         6/7    17/19       2/12       0        712,691   +7%
+gate arm      7/7    18/19       1/12       0        779,435  +17%
+```
+
+**`itch-setup-bin` cleared, and the gate arm is what cleared it.** The gate
+flagged it; the gate's re-ask softened it, in as many words:
+
+> under the narrow gate rules — which only allow marking UNSAFE if sourcing
+> the PKGBUILD itself triggers malicious execution — this does not qualify
+
+That is the gate scoping text working. The audit then continued past the gate,
+the required review flagged the same file again, and the review's own second
+look softened that too. Both passes fired on one package and both cleared it.
+
+Note the reporting trap in that: the package shows as having "reached review",
+which looks like the gate passed it on its own. It did not — the gate flagged
+and was overruled. A stage-reached column cannot tell those apart, so read it
+with the second-look lines, not instead of them.
+
+**`icaclient` is not cleared, and this is the real finding.** The gate's
+re-ask fired and held UNSAFE, with an argument rather than a shrug: executing
+`curl | grep | sed` in global scope at parse time is remote influence over the
+build, whatever the destination. The hand-settled verdict disagrees — the page
+is the package's own `url=` field, nothing fetched is executed, and the
+artifact is pinned by a real sha256.
+
+So the second look is not a rubber stamp that softens whatever it is shown. It
+softened six packages, held on this one, and held on nine true positives. What
+remains on `icaclient` is a genuine disagreement about whether parse-time
+network access is itself the threat — a judgement call, not a mistake about a
+fact, and so not the kind of thing a re-ask was ever going to fix.
+
+**Cost.** +17% prompt tokens against baseline, more than round 1's +7%,
+because more passes fire: 15 second looks across 12 reports here against 11
+across 6. Enabling it at the gate roughly doubles how often the pass runs.
+
+Same caution as round 1: one run per column, on a sample whose baseline moves
+by a flag between identical-code runs. The 7→1 change is well outside that
+noise; +17% against +7% is not clearly separable from it.
+
+## The gate and the full review disagree with each other
+
+Not a token finding, but it came out of this measurement and it bears on
+anything that tries to reduce false flags.
+
+`itch-setup-bin` was audited twice on identical code, minutes apart. Both runs
+flagged the same line of the same file — `evidence_line: 30`, the
+`source_x86_64` entry whose local filename carries `$(date +%F-%H)` and whose
+bytes are pinned by a real `sha256sums_x86_64`. The two runs did not agree on
+anything else:
+
+```
+run A   1 verdict   PKGBUILD unsafe   "Command substitution in source enables
+                                       code execution during sourcing"
+run B   2 verdicts  itch.sh safe      "Unverified binary download with
+        PKGBUILD unsafe                mismatched checksum"
+```
+
+One verdict means the makepkg gate refused and the audit stopped there. Two
+means the gate passed the same file — and then the required review flagged it,
+for a different reason. So the same PKGBUILD is a source-time execution risk or
+an unverified download depending on which stage happens to look at it, and
+which stage looks at it depends on the run.
+
+Neither reading survives the facts: the artifact is pinned, and a generated
+local *filename* has no bearing on integrity, since makepkg refuses a build
+whose bytes do not match. But the useful part is not that a stage is wrong. It
+is that the two stages are not consistent with each other on the same input,
+which is the strongest argument for asking again before an accusation stands —
+and for asking at both ends rather than one.
+
+It also means a single benchmark run cannot measure a change at either stage on
+a package like this: the run-to-run flip moves the package between stages, so a
+result has to say which stage the run actually reached before it says whether
+the change did anything.
 
 ## What is left, and why it was not taken
 
