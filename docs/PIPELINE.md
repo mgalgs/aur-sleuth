@@ -170,3 +170,21 @@ deployment) plus an advisory model read for operator leaks — then a
 rebuilt from it to `site`, atomically. The page's data is rebuilt at publish
 time from the image, so a code or verdict change reaches the public page at
 the next publish, no audit run needed.
+
+Pushing `site` is not the same as serving it. GitHub's branch-based Pages
+build silently stopped deploying roughly a third of those pushes — no build,
+no deployment, no error, while the publish Job exited green either way, and
+the page sat two days behind the branch. `.github/workflows/pages.yml` now
+owns the deploy: every ten minutes it compares the live page's
+`generated_at` against the branch's, deploys when they differ, and fails the
+run if the deploy does not reach the page. A publish therefore goes live
+within about ten minutes rather than at the moment it is pushed, and a
+failure is a red run in the Actions tab instead of silence. Run it by hand
+(`workflow_dispatch`, `force` to redeploy an already-current page) when that
+wait is not wanted.
+
+It polls rather than triggering on the push because a `push` workflow is
+read from the branch that was pushed, and `site` holds page data only:
+putting a workflow there would let the publish deploy key push code that
+Actions executes, which is a far larger blast radius than the inert data it
+can push today.

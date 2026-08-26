@@ -1,0 +1,115 @@
+---
+# Deploy the published page.
+#
+# The `site` branch holds the page; a publish pushes it there (see
+# docs/PIPELINE.md). GitHub's own branch-based Pages build used to deploy it,
+# and it stopped firing for roughly a third of pushes -- no build, no
+# deployment, no error, while every publish job still exited green. The page
+# sat two days stale that way. This workflow replaces that implicit trigger
+# with a run that is visible when it works and noisy when it does not.
+#
+# It cannot run `on: push` to `site`: for a push event GitHub reads the
+# workflow from the branch that was pushed, and `site` holds page data only.
+# Putting a workflow there would mean the publish deploy key could push code
+# that Actions executes, which is a much larger blast radius than the inert
+# data it can push today. So this polls instead, from the default branch.
+#
+# It deploys only when the live page disagrees with the branch, so a quiet
+# repository costs one HTTP request per run and no deployment at all.
+name: pages
+
+"on":
+  schedule:
+    # Every ten minutes. GitHub runs schedules in UTC and may delay them
+    # under load, so treat this as "within the hour", not a clock.
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Deploy even when the live page already matches"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never two deploys at once, and never cancel one in flight: a half-applied
+# page is worse than a late one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+env:
+  PAGE_URL: https://mgalgs.io/aur-sleuth/_dashboard/data.json
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      stale: ${{ steps.compare.outputs.stale }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: site
+      - id: compare
+        name: Does the live page match the branch?
+        run: |
+          set -euo pipefail
+          branch="$(jq -r '.generated_at // ""' _dashboard/data.json)"
+          if [ -z "$branch" ]; then
+            echo "::error::the site branch has no generated_at"
+            exit 1
+          fi
+          # A failed fetch counts as stale: better one redundant deploy
+          # than a silent skip, which is the failure this workflow ends.
+          live="$(curl -fsSL --max-time 30 "$PAGE_URL" \
+            | jq -r '.generated_at // ""' || true)"
+          echo "branch=$branch live=${live:-<unreachable>}"
+          if [ "$branch" = "$live" ]; then
+            echo "stale=false" >> "$GITHUB_OUTPUT"
+            echo "The live page is current." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "stale=true" >> "$GITHUB_OUTPUT"
+            echo "Deploying \`${live:-unreachable}\` -> \`$branch\`." \
+              >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  deploy:
+    needs: check
+    if: needs.check.outputs.stale == 'true' || inputs.force
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: site
+      - name: The artifact is the page, not the repository
+        run: rm -rf .git
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+      - id: deployment
+        uses: actions/deploy-pages@v4
+      - name: Confirm the deploy reached the live page
+        # deploy-pages reporting success is what used to be believed.
+        # Check the page itself, so this run fails when it did not take.
+        run: |
+          set -euo pipefail
+          expected="$(jq -r '.generated_at // ""' _dashboard/data.json)"
+          for _ in $(seq 1 12); do
+            live="$(curl -fsSL --max-time 30 "$PAGE_URL" \
+              | jq -r '.generated_at // ""' || true)"
+            if [ "$live" = "$expected" ]; then
+              echo "Live at \`$expected\`." >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "::error::deploy reported success but the live page reads \
+          ${live:-unreachable}, wanted $expected"
+          exit 1
