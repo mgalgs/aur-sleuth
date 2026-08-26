@@ -711,7 +711,12 @@ function nextStep(pkg) {
         + ' — a fresh audit by a stronger model that has not read it, then a fresh ruling.';
     if (pkg.queue_position) {
         const ql = esc && typeof esc.queue_length === 'number' ? esc.queue_length : null;
-        let clause = 'It is ' + ordinal(pkg.queue_position) + (ql ? ' of ' + ql : '') + ' packages waiting';
+        // "1st of 1 packages waiting" is where the queue ends up as it
+        // drains, so the noun agrees; with no length known, the position
+        // alone has to make a sentence on its own.
+        let clause = ql
+            ? 'It is ' + ordinal(pkg.queue_position) + ' of ' + ql + ' package' + (ql === 1 ? '' : 's') + ' waiting'
+            : 'It is ' + ordinal(pkg.queue_position) + ' in the queue';
         const bits = [];
         if (esc && typeof esc.per_run === 'number') bits.push('a run starts up to ' + esc.per_run);
         if (esc && typeof esc.runs_per_day === 'number') bits.push('there are ' + esc.runs_per_day + ' runs a day');
