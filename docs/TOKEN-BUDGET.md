@@ -208,8 +208,30 @@ differences between A, B and A+C are not.
 
 And **arm A's failed fixture is not a softening.** The report has zero "Second
 look" lines and `tools/gen-config.py` was never reviewed at all: the selection
-picked two other files and missed the payload, so the arm never ran. Which is
-its own finding —
+picked two other files and missed the payload, so the arm never ran.
+
+Asked directly — every malicious fixture, both arms, three runs each, at a
+ceiling that reaches the payload — a second look has never talked one down:
+
+```
+arm         fixture                        caught  fired  softened
+off         all four                        3/3      -       -
+incontext   curl-exfil                      3/3     3/3      0
+incontext   deep-payload                    3/3     3/3      0
+incontext   obfuscated-install              3/3     3/3      0
+fresh       curl-exfil                      3/3     3/3      0
+fresh       deep-payload                    3/3     3/3      0
+fresh       obfuscated-install              3/3     3/3      0
+```
+
+`fired` is the column that matters: counting a "pass" on a run where the pass
+never ran would be counting a coin that was not flipped. It fired on nine true
+positives per arm and softened none of them. `source-time` shows `fired` 0
+because its flag is at the gate, which round 1's arms do not reach.
+
+`deep-payload` was caught 3 out of 3 here, at `-n 10`. It was flaky under
+`benchmark.sh` only because of what that harness passes — which is its own
+finding:
 
 ### The review ceiling was never enforced in code
 
