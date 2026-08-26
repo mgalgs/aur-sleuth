@@ -51,6 +51,7 @@ async function init() {
     renderHeadline();
     renderActivity();
     renderEvidenceLine();
+    renderPipelineModels();
     renderRecent();
     renderModelCosts();
     renderCoverage();
@@ -274,6 +275,127 @@ function renderEvidenceLine() {
         parts.push(countLink('overridden', fmtNum(overridden) + ' flag' + (overridden === 1 ? '' : 's') + ' overturned by a judge'));
     }
     box.innerHTML = parts.length ? 'so far: ' + parts.join(' · ') : '';
+}
+
+// --- The audit row of the pipeline diagram ------------------------------
+// The rest of the diagram is static markup; this row is drawn from the
+// data, so the picture follows the seat. Every model that cast votes this
+// week gets a box; every model that only advised gets the same box, joined
+// by a dashed edge that says so. Escalation models are the Escalation
+// stage, so they are left out here.
+
+// Which models audited this week, and in what capacity. The week's counts
+// say who ran; the reports on the branch say how each one's audits were
+// tagged, and the majority tag is the model's role. Models under 5% of the
+// top seat are noise (a trial, a rate-limited free voice) and are dropped.
+function auditRow() {
+    const s = DATA.summary || {};
+    const week = (s.week && s.week.by_model) || {};
+    const counts = Object.keys(week).length ? week
+        : Object.fromEntries(Object.entries(s.by_model || {}).map(([m, v]) => [m, Number(v.count || 0)]));
+    const kinds = {};
+    for (const pkg of Object.values(DATA.packages || {})) {
+        for (const a of pkg.audits || []) {
+            const k = kinds[a.model] || (kinds[a.model] = {vote: 0, advisory: 0, reaudit: 0});
+            k[a.advisory ? 'advisory' : a.reaudit ? 'reaudit' : 'vote']++;
+        }
+    }
+    const top = Math.max(0, ...Object.values(counts).map(Number));
+    const seat = [], advisory = [];
+    for (const [m, n0] of Object.entries(counts)) {
+        const n = Number(n0), k = kinds[m];
+        if (!k || !(n > 0) || n < top * 0.05) continue;
+        if (k.advisory >= k.vote && k.advisory >= k.reaudit) advisory.push({model: m, n});
+        else if (k.vote >= k.reaudit) seat.push({model: m, n});
+    }
+    const byN = (a, b) => b.n - a.n;
+    return {seat: seat.sort(byN).slice(0, 6), advisory: advisory.sort(byN).slice(0, 2)};
+}
+
+// A model name inside a box of a given width, in the diagram's monospace:
+// one line if it fits, else two lines split at a separator near the
+// middle, else cut. Widths are estimated from the character count, not
+// measured, because the diagram may be display:none when this runs.
+function fitLabel(name, maxW) {
+    const width = (t, fs) => t.length * fs * 0.6;
+    for (const fs of [9.5, 9, 8.5, 8]) if (width(name, fs) <= maxW) return {lines: [name], size: fs};
+    // A dot is a version's own separator ("5.2"), so it is the last resort;
+    // among equal splits the later wins, so a ":free" tag stays whole.
+    let best = null;
+    for (const re of [/[-\/:_]/g, /[.]/g]) {
+        for (const m of name.matchAll(re)) {
+            const a = name.slice(0, m.index + 1), b = name.slice(m.index + 1);
+            const w = Math.max(a.length, b.length);
+            if (b && (!best || w <= best.w)) best = {a, b, w};
+        }
+        if (best) break;
+    }
+    if (best) {
+        for (const fs of [9, 8.5, 8, 7.5]) {
+            if (width(best.a, fs) <= maxW && width(best.b, fs) <= maxW) return {lines: [best.a, best.b], size: fs};
+        }
+    }
+    const fs = 8, n = Math.max(3, Math.floor(maxW / (fs * 0.6)) - 1);
+    return {lines: [name.slice(0, n) + '\u2026'], size: fs};
+}
+
+function renderPipelineModels() {
+    const g = document.getElementById('dg-models');
+    if (!g) return;
+    let {seat, advisory} = auditRow();
+    // Old data, or a quiet week: the shape of the seat, with no names.
+    if (!seat.length) { seat = [{label: 'model A'}, {label: 'model B'}]; advisory = [{label: 'free model'}]; }
+    const label = m => {
+        const short = shortModel(m);
+        return short.length >= 5 ? short : m;
+    };
+    const boxes = seat.map(b => ({...b, kind: 'seat'})).concat(advisory.map(b => ({...b, kind: 'advisory'})));
+
+    // The grid the static part is drawn on: the repository box ends at
+    // y 80, the reports box starts at y 176 with its centre at x 110.
+    const X0 = 16, X1 = 344, GAP = 6, GROUP = 12, TOP = 100, H = 44, TRUNK = 110, BUS = 92, JOIN = 160, NEXT = 176;
+    const k = boxes.length;
+    const w = (X1 - X0 - GAP * (k - 1) - (seat.length && advisory.length ? GROUP : 0)) / k;
+    let x = X0, html = '';
+    const seatCx = [], advCx = [];
+    let advRight = 0;
+    boxes.forEach((b, i) => {
+        if (i === seat.length && seat.length) x += GROUP;
+        const cx = x + w / 2;
+        const fit = fitLabel(b.label || label(b.model), w - 8);
+        const two = fit.lines.length === 2;
+        html += '<rect class="box" x="' + x.toFixed(1) + '" y="' + TOP + '" width="' + w.toFixed(1) + '" height="' + H + '" rx="3"/>';
+        fit.lines.forEach((line, j) => {
+            html += '<text class="mono mid" style="font-size:' + fit.size + 'px" x="' + cx.toFixed(1) + '" y="'
+                + (two ? 114 + 10 * j : 117) + '">' + escapeHtml(line) + '</text>';
+        });
+        if (b.n) {
+            html += '<text class="m mid" x="' + cx.toFixed(1) + '" y="' + (two ? 136 : 133) + '">' + fmtNum(b.n) + ' audits</text>';
+        }
+        html += '<title>' + escapeHtml((b.model || b.label) + (b.n ? ': ' + fmtNum(b.n) + ' audits this week' : '')
+            + (b.kind === 'advisory' ? ' (advisory: read by the judge, never a vote)' : ' (votes)')) + '</title>';
+        (b.kind === 'seat' ? seatCx : advCx).push(cx);
+        if (b.kind === 'advisory') advRight = x + w;
+        x += w + GAP;
+    });
+
+    // The bus from the repository: one trunk, one rail, one arrow per box.
+    const all = seatCx.concat(advCx);
+    const f = v => v.toFixed(1);
+    html += '<path class="edge" d="M' + TRUNK + ',80 V' + BUS + '"/>'
+        + '<path class="edge" d="M' + f(Math.min(TRUNK, ...all)) + ',' + BUS + ' H' + f(Math.max(TRUNK, ...all)) + '"/>'
+        + all.map(cx => '<path class="arrow" d="M' + f(cx) + ',' + BUS + ' V' + (TOP - 1) + '"/>').join('');
+    // The votes converge on the reports box; an advisory edge is dashed
+    // and joins the same rail, because the judge reads the same pile.
+    html += seatCx.map(cx => '<path class="edge" d="M' + f(cx) + ',' + (TOP + H) + ' V' + JOIN + '"/>').join('')
+        + '<path class="edge" d="M' + f(Math.min(TRUNK, ...seatCx)) + ',' + JOIN + ' H' + f(Math.max(TRUNK, ...seatCx)) + '"/>'
+        + '<path class="arrow" d="M' + TRUNK + ',' + JOIN + ' V' + (NEXT - 1) + '"/>';
+    if (advCx.length) {
+        html += advCx.map(cx => '<path class="edge edge-adv" d="M' + f(cx) + ',' + (TOP + H) + ' V' + JOIN + '"/>').join('')
+            + '<path class="edge edge-adv" d="M' + f(Math.max(TRUNK, ...seatCx)) + ',' + JOIN + ' H' + f(Math.max(...advCx)) + '"/>'
+            + '<text class="m end" x="' + f(advRight) + '" y="' + (JOIN + 12) + '">advisory: read, never a vote</text>';
+    }
+    g.innerHTML = html;
 }
 
 // A preview of the table: the packages a reader would look at first. What

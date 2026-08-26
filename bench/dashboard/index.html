@@ -30,7 +30,7 @@
              the packages it counts; the bar is the same counts as one line.
              Then what this week added. Shared by both views. -->
         <section class="answer">
-            <p class="lede only-overview">Two cheap models read every file an AUR maintainer committed &mdash; the <code>PKGBUILD</code>, the <code>.install</code> hooks, the patches &mdash; looking for one thing: code injected into the packaging. A stronger model rules on anything they flag. The application itself is never judged.</p>
+            <p class="lede only-overview">Independent models read every file an AUR maintainer committed &mdash; the <code>PKGBUILD</code>, the <code>.install</code> hooks, the patches &mdash; looking for one thing: code injected into the packaging. They vote, and a stronger model rules on anything they flag. The application itself is never judged.</p>
             <div id="headline" class="headline"></div>
             <div id="state-bar" class="state-bar" role="img"></div>
             <div id="activity" class="week"></div>
@@ -44,8 +44,13 @@
                 <h2>How a verdict is reached</h2>
                 <span id="evidence-line" class="meta"></span>
             </div>
+            <!-- Drawn on a 360-wide grid: the main column is x 16..204, the
+                 verdict pills x 224..346, and a stage is a box in the main
+                 column with its exits as pills to the right. Adding a stage
+                 means inserting a box and moving everything below it down
+                 by its height; the audit row is the one part drawn by code. -->
             <svg class="dg dg-pipeline" viewBox="0 0 360 516" role="img" aria-labelledby="dg1-title">
-                <title id="dg1-title">The pipeline: the AUR repository is read and upstream sources are not; two models audit; a judge rules on flags; escalation adds a fresh audit and ruling up to twice; every verdict is published.</title>
+                <title id="dg1-title">The pipeline: the AUR repository is read and upstream sources are not; each model on the audit seat reads every file and votes, and advisory models are read but never counted; a judge rules on flags; escalation adds a fresh audit and ruling up to twice; every verdict is published.</title>
                 <defs>
                     <marker id="ah1" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
                         <path d="M0,0 L8,4 L0,8 z"/>
@@ -65,34 +70,29 @@
                 <text class="m" x="236" y="54">downloads is theirs,</text>
                 <text class="m" x="236" y="67">and is never read</text>
 
-                <path class="arrow" d="M110,80 V98"/>
+                <!-- 2. the audit. One box per model, drawn from the data
+                     by renderPipelineModels(): the same box whether the
+                     model votes or only advises; the edges differ. The bus
+                     from the repository, the boxes at y 100..144, and the
+                     edges into the reports box are all in this group. -->
+                <g id="dg-models"></g>
 
-                <!-- 2. the audit -->
-                <rect class="box" x="16" y="100" width="188" height="154" rx="4"/>
-                <text class="h" x="26" y="118">Audit</text>
-                <text x="26" y="133">two cheap models, each reads</text>
-                <text x="26" y="146">every file on its own</text>
-                <rect class="box-in" x="26" y="154" width="82" height="30" rx="3"/>
-                <text class="mono mid" x="67" y="167">model A</text>
-                <text class="m mid" x="67" y="178">its own verdict</text>
-                <rect class="box-in" x="112" y="154" width="82" height="30" rx="3"/>
-                <text class="mono mid" x="153" y="167">model B</text>
-                <text class="m mid" x="153" y="178">its own verdict</text>
-                <rect class="box-dash" x="26" y="192" width="168" height="30" rx="3"/>
-                <text class="m" x="34" y="204">free models: advisory only,</text>
-                <text class="m" x="34" y="216">information, never a vote</text>
+                <rect class="box" x="16" y="176" width="188" height="78" rx="4"/>
+                <text class="h" x="26" y="194">The reports</text>
+                <text x="26" y="209">one verdict per voting model,</text>
+                <text x="26" y="222">with the lines that earned it</text>
                 <text class="s" x="26" y="237">&#x21bb; second look: any accusing verdict</text>
                 <text class="s" x="26" y="248">is asked again, kept only if it softens</text>
 
-                <path class="arrow" d="M204,146 H222"/>
-                <rect class="pill" x="224" y="130" width="122" height="32" rx="8"/>
-                <text class="p t-clean" x="234" y="144">clean</text>
-                <text class="m" x="234" y="156">both said safe</text>
+                <path class="arrow" d="M204,198 H222"/>
+                <rect class="pill" x="224" y="182" width="122" height="32" rx="8"/>
+                <text class="p t-clean" x="234" y="196">clean</text>
+                <text class="m" x="234" y="208">every vote said safe</text>
 
-                <path class="arrow" d="M204,222 H222"/>
-                <rect class="pill" x="224" y="206" width="122" height="32" rx="8"/>
-                <text class="p t-none" x="234" y="220">no verdict</text>
-                <text class="m" x="234" y="232">no answer either way</text>
+                <path class="arrow" d="M204,236 H222"/>
+                <rect class="pill" x="224" y="220" width="122" height="32" rx="8"/>
+                <text class="p t-none" x="234" y="234">no verdict</text>
+                <text class="m" x="234" y="246">no answer either way</text>
 
                 <path class="arrow" d="M110,254 V284"/>
                 <text class="m" x="118" y="268">they disagree, or</text>
@@ -143,7 +143,7 @@
             </svg>
             <ol class="steps">
                 <li><strong>The boundary.</strong> Only the files in the package&rsquo;s AUR repository are read &mdash; every one of them, wherever it sits, whatever it is called. What <code>makepkg</code> downloads from upstream is upstream&rsquo;s and is never read: a malicious upstream is not an AUR attack, and an AUR maintainer cannot inject into it.</li>
-                <li><strong>Two audits.</strong> Two cheap models each read every file on their own and return a verdict with the lines that earned it. Free models add advisory reads: information a judge may use, never a vote. Any verdict that accuses is asked once more against the rules and kept only if it softens &mdash; a pass that can undo a false alarm and never create one.</li>
+                <li><strong>The audits.</strong> Cheap models &mdash; two or more, so they can disagree &mdash; each read every file on their own and return a verdict with the lines that earned it. Free models add advisory reads: the same audit, but the judge only reads it and it counts toward nothing. Any verdict that accuses is asked once more against the rules and kept only if it softens &mdash; a pass that can undo a false alarm and never create one.</li>
                 <li><strong>The judge.</strong> When the audits disagree, or agree on a warning, a stronger model reads every report and rules. Most flags end here, cleared.</li>
                 <li><strong>Escalation.</strong> A package still flagged gets a fresh audit from a stronger model that has not read it, then a fresh ruling &mdash; twice at most. Two distinct models saying unsafe with the judge agreeing is <span class="st-confirmed">confirmed</span>; still split after two rounds is <span class="st-disputed">models disagree</span>.</li>
                 <li><strong>Published.</strong> Every report, every ruling and every quoted line lands on this page. Nothing is edited by hand: a package the pipeline gets wrong is audited again, or the code is fixed.</li>
@@ -268,7 +268,7 @@
         <footer class="footer">
             <div>
                 <div class="head"><h2>How to read this page</h2></div>
-                <p class="prose">Each square is one report. Two cheap models audit every package, and a judge &mdash; a stronger model &mdash; reads the reports when they disagree or flag something. A package&rsquo;s state is the most settled reading of its reports:</p>
+                <p class="prose">Each square is one report. Cheap models audit every package &mdash; two or more, so they can disagree &mdash; and a judge, a stronger model, reads the reports when they disagree or flag something. A package&rsquo;s state is the most settled reading of its reports:</p>
                 <dl class="key">
                     <dt class="st-clean">Clean</dt><dd>nothing found, or a flag a judge or a later review overturned.</dd>
                     <dt class="st-unknown">No verdict</dt><dd>no model reached an answer either way. Missing information, not a suspicion.</dd>
