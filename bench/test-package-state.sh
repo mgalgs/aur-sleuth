@@ -15,7 +15,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 python3 - "$PWD/bench" "${1:-}" <<'PY'
-import importlib.util, os, sys
+import importlib.util, json, os, shutil, sys, tempfile
 from datetime import datetime, timezone
 
 bench = sys.argv[1]
@@ -164,6 +164,125 @@ check("a named package every model has read gets the first model again",
       ("look3", "a/strong") in got, got)
 check("a name with no reports is skipped, not crashed",
       not any(n == "nope" for n, _ in got), got)
+
+# --- the queue position gd publishes: must agree with pe.worklist() ----------
+# A package every listed escalation model has already read is skipped by
+# pe.worklist() (nothing left to ask -- see "a package every model has read
+# is left out" above), so it is not actually waiting in line. It must not
+# get a queue_position, and the packages after it must be numbered without
+# a gap for the one that was skipped.
+esc_models = ["a/strong", "o/strong"]
+q_audits = [
+    audit("zzz-look", "q/cheap", "unsafe", "2026-08-23T10:00:00Z"),
+    audit("aaa-look", "q/cheap", "unsafe", "2026-08-23T10:00:00Z"),
+    # mmm-look sits alphabetically between aaa and nnn, and both escalation
+    # models have already read it (as plain audits, not escalations, so it
+    # stays under the escalation cap and its state is still "look").
+    audit("mmm-look", "q/cheap", "unsafe", "2026-08-23T10:00:00Z"),
+    audit("mmm-look", "a/strong", "unsafe", "2026-08-23T10:01:00Z"),
+    audit("mmm-look", "o/strong", "unsafe", "2026-08-23T10:02:00Z"),
+    # nnn-look has heard from only one of the two -- still queued.
+    audit("nnn-look", "q/cheap", "unsafe", "2026-08-23T10:00:00Z"),
+    audit("nnn-look", "a/strong", "unsafe", "2026-08-24T09:00:00Z", triggered_by="j1"),
+    audit("clean-pkg", "q/cheap", "safe", "2026-08-23T10:00:00Z"),
+    audit("disputed-pkg", "q/cheap", "unsafe", "2026-08-23T10:00:00Z"),
+    audit("disputed-pkg", "a/strong", "safe", "2026-08-24T09:00:00Z", triggered_by="j2"),
+    audit("disputed-pkg", "o/strong", "safe", "2026-08-24T10:00:00Z", triggered_by="j3"),
+]
+q_judges = [
+    # Without a judge ruling unsafe, the two "safe" escalations would
+    # outvote the one "unsafe" audit and this package would be clean, not
+    # disputed -- see how "s" earns "disputed" above.
+    judge("disputed-pkg", "20260824-110000", "unsafe", ["x", "y"], "still bad"),
+]
+q_index = gd.build_index_data(
+    q_audits, q_judges, now,
+    escalation_inputs={"per_run": 3, "runs_per_day": 6, "models": esc_models})
+q_packages = q_index["packages"]
+look_names = sorted(n for n, p in q_packages.items() if p["state"] == "look")
+queued_expected = ["aaa-look", "nnn-look", "zzz-look"]
+queued = sorted((p["queue_position"], n) for n, p in q_packages.items() if "queue_position" in p)
+
+check("look packages exist as expected", look_names == ["aaa-look", "mmm-look", "nnn-look", "zzz-look"], look_names)
+check("mmm-look, heard from every escalation model, is exhausted",
+      q_packages["mmm-look"].get("escalation_exhausted") is True, q_packages["mmm-look"])
+check("a package heard from only one of two escalation models is not exhausted",
+      "escalation_exhausted" not in q_packages["nnn-look"], q_packages["nnn-look"])
+check("only non-exhausted look packages carry queue_position",
+      {n for n, p in q_packages.items() if "queue_position" in p} == set(queued_expected),
+      queued)
+check("positions are 1-based and contiguous, skipping the exhausted package",
+      [pos for pos, _ in queued] == list(range(1, len(queued_expected) + 1)), queued)
+check("gd's queue order matches alphabetical order among the non-exhausted",
+      [n for _, n in queued] == queued_expected, queued)
+check("pe.worklist(packages, models) agrees with gd's queue order",
+      [n for n, _ in pe.worklist(q_packages, esc_models)] == queued_expected,
+      pe.worklist(q_packages, esc_models))
+check("pe.worklist(packages, models) also skips the exhausted package",
+      not any(n == "mmm-look" for n, _ in pe.worklist(q_packages, esc_models)),
+      pe.worklist(q_packages, esc_models))
+check("the fixtures are clean and disputed, as intended",
+      q_packages["clean-pkg"]["state"] == "clean" and q_packages["disputed-pkg"]["state"] == "disputed",
+      (q_packages["clean-pkg"]["state"], q_packages["disputed-pkg"]["state"]))
+check("clean and disputed packages carry no queue_position",
+      "queue_position" not in q_packages["clean-pkg"]
+      and "queue_position" not in q_packages["disputed-pkg"])
+
+# --- escalation_exhausted: every listed escalation model already read it ----
+exh_audits = [
+    audit("one-model", "q/cheap", "unsafe", "2026-08-23T10:00:00Z"),
+    audit("one-model", "a/strong", "unsafe", "2026-08-24T09:00:00Z", triggered_by="j1"),
+]
+exh_index = gd.build_index_data(
+    exh_audits, [], now, escalation_inputs={"per_run": None, "runs_per_day": None, "models": ["a/strong"]})
+check("exhausted when the sole listed escalation model has already read it",
+      exh_index["packages"]["one-model"].get("escalation_exhausted") is True,
+      exh_index["packages"]["one-model"])
+check("an exhausted package carries no queue_position",
+      "queue_position" not in exh_index["packages"]["one-model"],
+      exh_index["packages"]["one-model"])
+
+no_models_index = gd.build_index_data(
+    exh_audits, [], now, escalation_inputs={"per_run": None, "runs_per_day": None, "models": []})
+check("escalation_exhausted is never set when the models list is empty",
+      "escalation_exhausted" not in no_models_index["packages"]["one-model"],
+      no_models_index["packages"]["one-model"])
+check("with no known escalation models, a look package is queued instead",
+      no_models_index["packages"]["one-model"].get("queue_position") == 1,
+      no_models_index["packages"]["one-model"])
+
+# --- read_escalation_settings: only ints/None and plain strings come out ----
+esc_dir = tempfile.mkdtemp()
+
+def esc_file(name, content):
+    path = os.path.join(esc_dir, name)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(content)
+    return path
+
+empty = {"per_run": None, "runs_per_day": None, "models": []}
+check("missing path: empty settings",
+      gd.read_escalation_settings(os.path.join(esc_dir, "nope.json")) == empty)
+check("invalid JSON: empty settings",
+      gd.read_escalation_settings(esc_file("bad.json", "{not json")) == empty)
+check("a JSON document that is not an object: empty settings",
+      gd.read_escalation_settings(esc_file("arr.json", "[1, 2, 3]")) == empty)
+check("junk values (wrong types, an oversized model string) are dropped",
+      gd.read_escalation_settings(esc_file("junk.json", json.dumps({
+          "AUR_SLEUTH_ESCALATIONS_PER_RUN": "not-a-number",
+          "AUR_SLEUTH_RUNS_PER_DAY": "3.5",
+          "AUR_SLEUTH_REAUDIT_MODEL": "x" * 201,
+          "AUR_SLEUTH_TIEBREAK_MODEL": ["not", "a", "string"],
+      }))) == empty)
+check("a good file parses cleanly",
+      gd.read_escalation_settings(esc_file("good.json", json.dumps({
+          "AUR_SLEUTH_ESCALATIONS_PER_RUN": "3",
+          "AUR_SLEUTH_RUNS_PER_DAY": "6",
+          "AUR_SLEUTH_REAUDIT_MODEL": "a/strong",
+          "AUR_SLEUTH_TIEBREAK_MODEL": "o/strong",
+      }))) == {"per_run": 3, "runs_per_day": 6, "models": ["a/strong", "o/strong"]})
+
+shutil.rmtree(esc_dir)
 
 if fails:
     print(f"FAILED: {fails} check(s)")

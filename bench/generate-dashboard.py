@@ -281,6 +281,45 @@ def read_daily_budget(path):
     return value if value >= 0 else None
 
 
+def _whole_number(v, minimum):
+    """v as an int, or None unless it is a whole number >= minimum."""
+    f = safe_float(v, None)
+    if f is None or not float(f).is_integer():
+        return None
+    n = int(f)
+    return n if n >= minimum else None
+
+
+def read_escalation_settings(path):
+    """How many escalations a run may start, how many runs a day, and which
+    models the escalation seat holds -- from pipeline/effective.json.
+
+    Same discipline as read_daily_budget: the audit stage that writes this
+    file runs hostile code, so every field is validated and only whole
+    numbers and plain model ids come out of it.
+    """
+    empty = {"per_run": None, "runs_per_day": None, "models": []}
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return empty
+    if not isinstance(data, dict):
+        return empty
+
+    models = []
+    for key in ("AUR_SLEUTH_REAUDIT_MODEL", "AUR_SLEUTH_TIEBREAK_MODEL"):
+        v = data.get(key)
+        if isinstance(v, str) and v and len(v) <= 200:
+            models.append(v)
+
+    return {
+        "per_run": _whole_number(data.get("AUR_SLEUTH_ESCALATIONS_PER_RUN"), 0),
+        "runs_per_day": _whole_number(data.get("AUR_SLEUTH_RUNS_PER_DAY"), 1),
+        "models": models,
+    }
+
+
 def build_coverage(pkg_summaries, by_date, now, updates_per_day=None,
                    daily_budget=None):
     """The coverage block of data.json, or None when a number it needs is missing.
@@ -349,11 +388,15 @@ def load_reports():
     return audits, judges
 
 
-def build_index_data(audits, judges, now=None, coverage_inputs=None):
+def build_index_data(audits, judges, now=None, coverage_inputs=None, escalation_inputs=None):
     """Build the index JSON structure for the dashboard.
 
     `coverage_inputs` is {updates_per_day, daily_budget}, each optional;
     see build_coverage for what becomes of them.
+
+    `escalation_inputs` is {per_run, runs_per_day, models}, from
+    read_escalation_settings, each optional. `models` decides which "look"
+    packages get `escalation_exhausted`; it is never itself published.
     """
     now = now or datetime.now(timezone.utc)
     packages = defaultdict(lambda: {"audits": [], "judges": []})
@@ -496,6 +539,29 @@ def build_index_data(audits, judges, now=None, coverage_inputs=None):
         # nothing checked that the two copies agreed.
         pkg_summaries[pkg_name]["state"] = package_state(pkg_summaries[pkg_name])
 
+    # The escalation worklist, exactly as bench/pending-escalations.py builds
+    # it: every "look" package, alphabetical, MINUS the ones every listed
+    # escalation model has already read -- pe.worklist() skips exactly those
+    # (nothing left to ask), so they are not actually waiting in line, and
+    # numbering them in would overstate every later package's wait. A
+    # package that model set has exhausted gets escalation_exhausted and no
+    # queue_position: stuck, not queued. When the models are unknown (no
+    # --effective), exhaustion cannot be decided, so every "look" package is
+    # queued, same as before.
+    look_names = sorted(name for name, ps in pkg_summaries.items() if ps["state"] == "look")
+    escalation_models = (escalation_inputs or {}).get("models") or []
+    queued_names = []
+    for name in look_names:
+        ps = pkg_summaries[name]
+        if escalation_models:
+            heard = {a.get("model") for a in ps["audits"] if not a.get("advisory")}
+            if all(m in heard for m in escalation_models):
+                ps["escalation_exhausted"] = True
+                continue
+        queued_names.append(name)
+    for i, name in enumerate(queued_names, start=1):
+        pkg_summaries[name]["queue_position"] = i
+
     # Aggregate stats
     audit_cost = sum(safe_float(a["frontmatter"].get("cost")) for a in audits)
     judge_cost = sum((j["data"].get("_judge_usage", {}).get("cost") or 0) for j in judges)
@@ -624,6 +690,16 @@ def build_index_data(audits, judges, now=None, coverage_inputs=None):
         # pipeline runs with. None until every input is known; the page then
         # leaves the card out rather than showing a confident zero.
         "coverage": build_coverage(pkg_summaries, by_date, now, **(coverage_inputs or {})),
+        # The escalation cadence: what a "look" package's queue position
+        # means in practice. per_run/runs_per_day are None when
+        # pipeline/effective.json was not given or did not carry them; the
+        # page then drops just those clauses of the sentence.
+        "escalation": {
+            "cap": ESCALATION_CAP,
+            "queue_length": len(queued_names),
+            "per_run": (escalation_inputs or {}).get("per_run"),
+            "runs_per_day": (escalation_inputs or {}).get("runs_per_day"),
+        },
     }
 
     return {"summary": summary, "packages": pkg_summaries}
@@ -751,10 +827,10 @@ def commit_to_branch(files):
             os.remove(tmpindex)
 
 
-def build_files(audits, judges, now=None, coverage_inputs=None):
+def build_files(audits, judges, now=None, coverage_inputs=None, escalation_inputs=None):
     """Everything the page reads, as {path: content}, from loaded reports."""
     now = now or datetime.now(timezone.utc)
-    index_data = build_index_data(audits, judges, now, coverage_inputs)
+    index_data = build_index_data(audits, judges, now, coverage_inputs, escalation_inputs)
     index_data["generated_at"] = now.strftime("%Y-%m-%dT%H:%M:%SZ")
     files = {"_dashboard/data.json": json.dumps(index_data, separators=(",", ":"))}
     for pkg_name, detail in build_package_details(audits, judges).items():
@@ -789,6 +865,7 @@ def main():
         "updates_per_day": count_aur_updates(opt("--aur-metadata")) if opt("--aur-metadata") else None,
         "daily_budget": read_daily_budget(opt("--effective")) if opt("--effective") else None,
     }
+    escalation_inputs = read_escalation_settings(opt("--effective")) if opt("--effective") else None
 
     if "--emit" in args:
         global REPORTS_BRANCH
@@ -806,7 +883,7 @@ def main():
             now = datetime.fromisoformat(stamp).astimezone(timezone.utc)
         except ValueError:
             now = None
-        files = build_files(audits, judges, now, coverage_inputs)
+        files = build_files(audits, judges, now, coverage_inputs, escalation_inputs)
         for path, content in files.items():
             full = os.path.join(out_dir, path)
             os.makedirs(os.path.dirname(full), exist_ok=True)
@@ -830,7 +907,7 @@ def main():
     print(f"  {len(audits)} audit reports, {len(judges)} judge reports")
 
     print("Building the page's data...")
-    files = build_files(audits, judges, coverage_inputs=coverage_inputs)
+    files = build_files(audits, judges, coverage_inputs=coverage_inputs, escalation_inputs=escalation_inputs)
     files["index.html"] = generate_html()
     files[".nojekyll"] = ""
 
