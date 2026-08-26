@@ -171,8 +171,11 @@ mistakes about facts it already had: on `itch-setup-bin` the makepkg gate read
 the same PKGBUILD and got it right — "checksums provided for all sources, no
 SKIP" — and the full review then called the same file an unverified download.
 
-Three arms were built to test whether asking again fixes that, all off unless
-their environment variable is set:
+Three arms were built to test whether asking again fixes that, each behind an
+environment variable. They were measured off; after the two rounds below the
+in-context second look became the default, at the file review and at the gate
+(`AUR_SLEUTH_SECOND_LOOK=off` and `AUR_SLEUTH_SECOND_LOOK_GATE=0` turn them
+off; the facts block stays off):
 
 - **A, `AUR_SLEUTH_SECOND_LOOK=incontext`** — one more turn in the same
   conversation, so the model still has the file. Costs a full resend.

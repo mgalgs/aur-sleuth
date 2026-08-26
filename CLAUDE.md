@@ -153,6 +153,20 @@ as the checksum case showed twice — they leak into the verdict even when told 
 Keep the prompt for genuine judgment: does this code do something the package has no
 reason to do?
 
+### The second look
+
+A verdict that accuses -- UNSAFE or INCONCLUSIVE, at the gate or in the file review --
+is asked again, in the same conversation, against items 4-7 of the prompt (the gate
+against its own narrower scope). The answer is kept only if it softens. That asymmetry
+is the whole design: the pass cannot create a failure, only undo one, so it is the
+opposite of the escalation the checksum history warns about. It is on by default
+(`AUR_SLEUTH_SECOND_LOOK=incontext`; `off` disables it, `AUR_SLEUTH_SECOND_LOOK_GATE=0`
+keeps it out of the gate) because it was measured first: six of seven judge-cleared
+false flags softened, no true positive ever softened across every malicious fixture,
+and `bench/synthetics/malicious-source-time` is the floor that would catch it talking
+the gate out of a real one. `docs/TOKEN-BUDGET.md` has both rounds. Do not widen it to
+SAFE verdicts, and do not let it run without the malicious fixtures in the gate.
+
 ## Repo layout
 
 - `aur-sleuth` — the whole tool, one Python script. `SYSTEM_PROMPTS` (prompts),
