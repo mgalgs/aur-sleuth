@@ -48,9 +48,11 @@ async function init() {
             '<tr><td colspan="7" class="empty">Failed to load data. Are you serving from the audit-reports branch root?</td></tr>';
         return;
     }
+    renderVerdict();
     renderHeadline();
     renderGrid();
     renderActivity();
+    renderDays();
     renderEvidenceLine();
     renderPipelineModels();
     renderRecent();
@@ -192,6 +194,31 @@ function countStates() {
     return counts;
 }
 
+// The page's one-sentence answer. Only the confirmed count can make it say
+// yes: a flag no judge has settled is usually a false positive about
+// behaviour the application is supposed to have, and saying "yes, malicious"
+// on one would be a claim the evidence does not carry. Everything here is a
+// count of states the generator decided; nothing a model wrote reaches it.
+function renderVerdict() {
+    const counts = countStates();
+    const total = Object.keys(DATA.packages || {}).length;
+    const unsettled = counts.look + counts.disputed;
+
+    document.getElementById('verdict-answer').innerHTML = counts.confirmed
+        ? '<span class="st-confirmed">Yes &mdash; ' + fmtNum(counts.confirmed) + ' package'
+          + (counts.confirmed === 1 ? '' : 's') + ' confirmed malicious.</span>'
+        : 'Nothing confirmed.';
+
+    // The scope, always: this has read a fraction of the AUR, so the total
+    // it is talking about is stated rather than implied.
+    const cls = counts.look ? 'st-look' : 'st-disputed';
+    const tail = unsettled
+        ? ', <span class="' + cls + '">' + fmtNum(unsettled) + ' still unsettled</span>.'
+        : ', nothing flagged.';
+    document.getElementById('verdict-sub').innerHTML =
+        'Out of <span class="n">' + fmtNum(total) + '</span> packages read so far' + tail;
+}
+
 function renderHeadline() {
     const s = DATA.summary || {};
     const counts = countStates();
@@ -206,13 +233,19 @@ function renderHeadline() {
     const stat = (filter, n, label, cls) =>
         '<button type="button" class="stat ' + escapeAttr(cls) + '" data-filter="' + escapeAttr(filter) + '" title="Show these in the table below">'
         + '<span class="n">' + fmtNum(n) + '</span><span class="stat-label">' + escapeHtml(label) + '</span></button>';
+
+    // One big number, then the states as a wrapping line of links. Six tiles
+    // of equal weight made the reader do the ranking; the total is the fact
+    // worth a tile, and the rest are the same numbers and the same filters
+    // in a fraction of the space. A state nothing is in is left out: the
+    // verdict line above has already said none are confirmed or flagged.
+    const order = ['confirmed', 'look', 'disputed', 'clean', 'unknown'];
+    const line = order.filter(k => counts[k] > 0).map(k =>
+        countLink(k, '<span class="n">' + fmtNum(counts[k]) + '</span> ' + escapeHtml(STATE_LABEL[k]),
+                  k === 'clean' || k === 'unknown' ? '' : 'st-' + k)).join('');
     document.getElementById('headline').innerHTML =
         stat('all', total, 'packages audited', 'total')
-        + stat('confirmed', counts.confirmed, STATE_LABEL.confirmed, counts.confirmed ? 'st-confirmed' : '')
-        + stat('look', counts.look, STATE_LABEL.look, counts.look ? 'st-look' : '')
-        + (counts.disputed ? stat('disputed', counts.disputed, STATE_LABEL.disputed, 'st-disputed') : '')
-        + stat('clean', counts.clean, STATE_LABEL.clean, 'st-clean')
-        + stat('unknown', counts.unknown, STATE_LABEL.unknown, 'st-unknown');
+        + '<span class="states-line">' + line + '</span>';
 
     // The bar: the same counts as shares of one line, in the order the
     // filters list them. A state with nothing in it gets no segment.
@@ -282,29 +315,90 @@ function renderActivity() {
     // nothing: show the totals and leave the breakdown out.
     const counted = Object.prototype.hasOwnProperty.call(p, 'confirmed');
     const confirmed = Number(p.confirmed || 0);
-    const dot = '<span class="sep"> · </span>';
     const n = v => '<span class="n tab">' + fmtNum(v) + '</span>';
+
+    // One sentence, not a chain of dot-separated readouts. Every number the
+    // chain carried is still here and every state is still a link; the
+    // punctuation is doing the ranking now instead of leaving six equal
+    // fragments for the reader to sort out.
     let html = '<span class="lead">This week</span> '
-        + '<span>' + n(p.updated) + ' packages audited, ' + fmtNum(p.new) + ' new</span>';
-    if (counted) {
-        html += dot + countLink('clean', n(p.green) + ' clean')
-            + dot + countLink('unknown', n(p.unknown) + ' no verdict')
-            + dot + countLink('look', n(p.look) + ' worth a closer look', 'st-look')
-            + (Number(p.disputed || 0)
-                ? dot + countLink('disputed', n(p.disputed) + ' models disagree', 'st-disputed')
-                : '')
-            + dot + (confirmed
-                ? countLink('confirmed', n(confirmed) + ' confirmed malicious', 'st-confirmed')
-                : '<span>none confirmed</span>');
-    }
+        + n(p.updated) + ' packages read, ' + fmtNum(p.new) + ' of them new';
     if (wk.audits_total) {
         const by = Object.entries(wk.by_model || {}).slice(0, 6)
             .map(([m, c]) => shortModel(m) + ' (' + fmtNum(c) + ')');
-        html += dot + '<span class="muted" title="' + escapeAttr(by.length ? 'by ' + joinNicely(by) : '') + '">'
+        html += ', over <span class="muted" title="' + escapeAttr(by.length ? 'by ' + joinNicely(by) : '') + '">'
             + n(wk.audits_total) + ' audits</span>';
+    }
+    html += '.';
+    if (counted) {
+        const parts = [countLink('clean', n(p.green) + ' clean'),
+                       countLink('unknown', n(p.unknown) + ' no verdict')];
+        if (Number(p.look || 0)) parts.push(countLink('look', n(p.look) + ' worth a closer look', 'st-look'));
+        if (Number(p.disputed || 0)) parts.push(countLink('disputed', n(p.disputed) + ' models disagree', 'st-disputed'));
+        html += ' ' + joinNicely(parts) + ' &mdash; <span class="lead">' + (confirmed
+            ? countLink('confirmed', n(confirmed) + ' confirmed malicious', 'st-confirmed')
+            : 'none confirmed') + '</span>.';
     }
 
     activity.innerHTML = html;
+}
+
+// --- Audits a day -------------------------------------------------------
+
+// A fixed window, so the strip is the same shape however long the project
+// runs, and long enough to hold the current week plus the run before it.
+const DAY_WINDOW = 30;
+
+// summary.by_date carries only the days something happened. The window is
+// filled in day by day from it, so a day nothing ran is an empty track and
+// not a missing column -- the pipeline has already had one six-week gap,
+// and a bar per entry would have drawn it as continuous work.
+function renderDays() {
+    const box = document.getElementById('days');
+    if (!box) return;
+    const by = (DATA.summary || {}).by_date || null;
+    if (!by || !Object.keys(by).length) { box.classList.add('hidden'); return; }
+    box.classList.remove('hidden');
+
+    // Anchored to the data's own stamp, not the clock: the same data.json
+    // draws the same strip whenever it is read.
+    const end = String(DATA.generated_at || '').split('T')[0]
+        || Object.keys(by).sort().pop();
+    const endMs = Date.parse(end + 'T00:00:00Z');
+    const days = [];
+    for (let i = DAY_WINDOW - 1; i >= 0; i--) {
+        const key = new Date(endMs - i * 86400000).toISOString().split('T')[0];
+        days.push([key, by[key] || {}]);
+    }
+
+    const audits = d => Number(d.audits) || 0;
+    const max = Math.max(1, ...days.map(([, d]) => audits(d)));
+    const total = days.reduce((sum, [, d]) => sum + audits(d), 0);
+    const ran = days.filter(([, d]) => audits(d)).length;
+
+    const bars = days.map(([key, d]) => {
+        const a = audits(d);
+        const j = Number(d.judges) || 0;
+        // A floor, so a one-audit day is a mark and not a rounding error;
+        // a day nothing ran is a dim tick on the baseline, which is why
+        // there is no track behind the bars.
+        const pct = a ? Math.max(6, 100 * a / max) : 0;
+        const title = a
+            ? key + ' — ' + fmtNum(a) + ' audits' + (j ? ', ' + fmtNum(j) + ' rulings' : '')
+            : key + ' — nothing ran';
+        return '<span class="day" title="' + escapeAttr(title) + '">'
+            + (pct ? '<span class="day-fill" style="height:' + pct.toFixed(1) + '%"></span>'
+                   : '<span class="day-fill none" style="height:2px"></span>')
+            + '</span>';
+    }).join('');
+
+    box.innerHTML = '<div class="day-strip" role="img" aria-label="'
+        + escapeAttr('Audits a day over the last ' + DAY_WINDOW + ' days: ' + fmtNum(total)
+            + ' audits across ' + ran + ' days it ran, at most ' + fmtNum(max) + ' in a day') + '">'
+        + bars + '</div>'
+        + '<div class="day-axis"><span>' + escapeHtml(days[0][0]) + '</span>'
+        + '<span>' + fmtNum(total) + ' audits, ' + ran + ' days it ran</span>'
+        + '<span>' + escapeHtml(days[days.length - 1][0]) + '</span></div>';
 }
 
 // The numbers behind the diagram: how often the later stages have run. All
