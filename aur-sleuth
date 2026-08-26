@@ -83,7 +83,10 @@ def setup_logging():
     logging.getLogger().addHandler(console_handler)
 
     # Disable noisy logs from openai library (and deps) that were messing up the TUI
+    # openai 1 logs every request through httpx, openai 3 through httpx2 (the
+    # renamed successor); the script pins neither, so silence both.
     logging.getLogger("httpx").setLevel(logging.ERROR)
+    logging.getLogger("httpx2").setLevel(logging.ERROR)
 
 logger = logging.getLogger("aur-sleuth")
 
@@ -3205,7 +3208,13 @@ def selftest_error_description():
     """An API error's body never reaches a report line, a failed command
     contributes its program and status but not its arguments, and this
     program's own errors pass through."""
-    import httpx
+    # openai 3 depends on httpx2, the renamed successor of httpx; openai 1
+    # on httpx. The script pins neither, so the name depends on when the
+    # environment was resolved. The selftest only builds fake responses.
+    try:
+        import httpx
+    except ImportError:
+        import httpx2 as httpx
     from openai import RateLimitError
 
     body = {"error": {"message": "free-models-per-day exceeded for user_secret", "code": 429}}
@@ -3250,7 +3259,13 @@ def selftest_quota_reset():
     """A per-day 429 yields its reset epoch, in seconds; a per-minute one,
     or any other error, yields nothing; a per-day one that does not say
     when means the next 00:00 UTC. The note lands where the pipeline asked."""
-    import httpx
+    # openai 3 depends on httpx2, the renamed successor of httpx; openai 1
+    # on httpx. The script pins neither, so the name depends on when the
+    # environment was resolved. The selftest only builds fake responses.
+    try:
+        import httpx
+    except ImportError:
+        import httpx2 as httpx
     from openai import AuthenticationError, RateLimitError
 
     def err(message, headers=None, status=429):
