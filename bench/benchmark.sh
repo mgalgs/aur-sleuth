@@ -197,7 +197,7 @@ run_synthetics() {
         # One directory per fixture: --pkgdir names the report after pkgname,
         # not the directory, so this is how the report is found again.
         report_dir="$RUN_DIR/reports/$slug/synthetics/$name"
-        rc="$(audit_one "$model" "$report_dir" "$name" --pkgdir "$fixture" -n 0)"
+        rc="$(audit_one "$model" "$report_dir" "$name" --pkgdir "$fixture")"
         report="$(find "$report_dir" -maxdepth 1 -name 'aur-sleuth-report-*.txt' | head -1)"
         cost="$(report_field "${report:-/dev/null}" cost)"
         cost="${cost:-0}"

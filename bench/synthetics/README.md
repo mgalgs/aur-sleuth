@@ -11,9 +11,12 @@ it takes to add a fixture:
 
 A fixture may carry extra flags in `<name>.args`, a file beside its
 directory (not inside it — anything inside is part of the package under
-audit). One flag per line, `#` comments allowed. Without one, a fixture runs
-with `-n 0`: no additional-file pass, which isolates what is being tested
-and spends nothing on the rest of the tree.
+audit). One flag per line, `#` comments allowed.
+
+A fixture directory stands in for the package's AUR repository: every file
+in it is reviewed, unconditionally, because every file in it is the
+maintainer's (`CLAUDE.md`, "The boundary"). The sources a fixture's PKGBUILD
+names are local files, so nothing is downloaded and the whole run is offline.
 
 ## What each one covers
 
@@ -23,54 +26,39 @@ and spends nothing on the rest of the tree.
 | `benign-skip-checksums` | safe | `sha256sums=('SKIP')`. Ordinary AUR practice, and the single most common way this tool has been made to fail wrongly. See CLAUDE.md, "The checksum distinction". |
 | `malicious-curl-exfil` | unsafe | `package()` posts `/etc/shadow` and an ssh key to an unrelated host. |
 | `malicious-obfuscated-install` | unsafe | An `.install` hook whose payload is assembled from an encoded blob. |
-| `malicious-deep-payload` | unsafe | The payload is **not** in a required file. See below. |
+| `malicious-deep-payload` | unsafe | The payload is in a file no `source=` array names. See below. |
 
 ## `malicious-deep-payload`, and why it exists
 
-Every other fixture puts its payload in the PKGBUILD or the `.install` hook
-— files the audit reviews unconditionally. So none of them can tell you
-anything about the review budget: they pass at `-n 0`, with the
-additional-file pass switched off entirely.
+The other two malicious fixtures put their payload in the PKGBUILD or the
+`.install` hook — the files every reading of "review the packaging" covers.
+This one puts it where a narrower reading would not look, and it is the
+regression test for the boundary rule.
 
-That left a real question unanswerable. The additional pass is roughly 70%
-of what an audit spends, and production audits use the whole quota — of 1,795
-reports on the audit-reports branch, 61% reviewed 11 to 13 files, which is
-the required files plus all ten additional. Cutting the ceiling is therefore
-the largest single token lever there is. But every settled verdict on the
-branch is `safe`, so a smaller ceiling would score as "accuracy unchanged" on
-the benchmark **by construction**: reviewing fewer files cannot produce a
-wrong answer about a package that is clean. Nothing in the kit could detect
-the harm.
+Its PKGBUILD is clean and reads as ordinary packaging; `prepare()` calls
+`python tools/gen-config.py`, which is exactly what a thousand honest
+packages do. The payload is inside the generator: a base64 blob that decodes
+to `curl … | sh`, run before the header is written, behind an
+environment-variable opt-out so a casual read of the build log shows
+nothing. `tools/gen-config.py` is not in `source=`, is not an `.install`
+hook, and is not a patch. It is simply a file the maintainer committed
+beside the PKGBUILD and invoked by path.
 
-This fixture is that missing evidence. Its PKGBUILD is clean and reads as
-ordinary packaging; `prepare()` calls `python tools/gen-config.py`, which is
-exactly what a thousand honest packages do. The payload is inside the
-generator: a base64 blob that decodes to `curl … | sh`, run before the header
-is written, behind an environment-variable opt-out so a casual read of the
-build log shows nothing.
-
-`tools/` is in `_LOW_VALUE_DIRS`, so the generator is demoted a tier and has
-to compete for a slot against a dozen plausible packaging companions —
-service units, completion scripts, icon installers, a release helper. That is
-the point: it fails when the budget stops reaching far enough, which is the
-thing being measured.
+Under the boundary rule that is enough: every file in the AUR repository is
+reviewed, so the generator is read whatever it is called and wherever it
+sits, with a dozen plausible packaging companions beside it — service
+units, completion scripts, icon installers, a release helper — that must
+not crowd it out. A rule that reviewed only the files `source=` and
+`install=` name would miss it silently, which is the failure this fixture
+exists to catch.
 
 Nothing here executes. The audit runs `makepkg --nobuild --nodeps
 --noprepare`, so `prepare()` never runs, and the host the fixture would
 contact does not exist.
 
-### What it can and cannot test
-
-It has a cliff, which is what makes its passes evidence rather than a fixture
-that is merely easy: against qwen/qwen3-235b-a22b-2507 it is caught 3 times
-out of 3 at ceilings from 10 down to 3, and missed 3 times out of 3 at 2 — a
-clean `safe` verdict on a package that fetches and runs a remote script at
-build time.
-
-**It cannot exercise a binding ceiling above 6.** The tree offers about
-thirteen candidates and the model selects six of them whether it is offered
-ten slots or six, so every ceiling from 6 upward is the same run. Do not read
-a pass at 8 or 10 as having tested anything the pass at 6 did not. Testing
-the ceiling where production actually sits — where 61% of audits take the
-whole quota — needs a fixture with a tree big enough that the model wants all
-ten slots.
+Before the boundary rule the loop sampled the upstream tree with a review
+ceiling, and this fixture measured that ceiling: caught 3 of 3 at ceilings
+from 10 down to 3 on qwen/qwen3-235b-a22b-2507, missed 3 of 3 at 2 — a
+clean `safe` on a package that fetches and runs a remote script at build
+time. That cliff is what made its passes evidence rather than a fixture
+that is merely easy. `docs/TOKEN-BUDGET.md` keeps the measurement.

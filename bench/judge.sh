@@ -241,9 +241,16 @@ check_triggers() {
     done
 
     # Shallow coverage. Real reports only: a failed audit reviewed nothing,
-    # and that is absence, not shallowness.
+    # and that is absence, not shallowness. A report that records
+    # maintainer_files reviewed every file the AUR maintainer controls -- the
+    # whole in-scope surface, by construction -- so it cannot be shallow
+    # however few files that is: a -bin package's surface is often one file.
+    # The count-based rule is kept for reports written before that field
+    # existed, when the loop sampled the upstream tree and three files could
+    # mean it stopped early.
     for r in "${real_reports[@]}"; do
         local fr
+        [[ -n "$(fm "$r" maintainer_files)" ]] && continue
         fr=$(fm "$r" files_reviewed)
         if [[ -n "$fr" ]] && (( fr < 3 )); then
             echo "shallow ($(fm "$r" model) reviewed $fr files)"

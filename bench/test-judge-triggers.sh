@@ -87,6 +87,29 @@ else
     bad "expected no trigger, got: $got"
 fi
 
+echo "== the whole maintainer surface is never shallow =="
+# A report that records maintainer_files reviewed every file the AUR
+# maintainer controls. One file is the entire surface of many -bin packages,
+# and calling that shallow would summon a paid judge read on every one.
+report a pkg-binsurface safe 0.01 1
+printf -- '---\npackage: pkg-binsurface\nmodel: a\ndate: 2026-08-25T10:00:00Z\nresult: safe\ncost: 0.01\nfiles_reviewed: 1\nmaintainer_files: 1\n---\nbody\n' \
+    > "$REPORTS_DIR/a/aur-sleuth-report-pkg-binsurface.txt"
+got="$(trigger pkg-binsurface)"
+if [[ "$got" == "1 " ]]; then
+    ok "one file, when it is every maintainer file, is full coverage"
+else
+    bad "expected no trigger for a complete one-file surface, got: $got"
+fi
+# A report from before the field existed keeps the old rule: three files
+# from a sampled upstream tree may mean the loop stopped early.
+report a pkg-oldshallow safe 0.01 2
+got="$(trigger pkg-oldshallow)"
+if [[ "$got" == 0\ shallow* ]]; then
+    ok "a report without maintainer_files still trips the count rule"
+else
+    bad "expected the legacy shallow trigger, got: $got"
+fi
+
 echo "== agreed means more than one model =="
 report a pkg-one unsafe 0.01
 got="$(trigger pkg-one)"

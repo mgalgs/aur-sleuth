@@ -9,19 +9,51 @@ It does not rate how dangerous an application is.
 The attacker is someone who injects malicious code into the AUR packaging pipeline:
 
 - A malicious AUR maintainer, who puts a payload in the `PKGBUILD`, an `.install` hook,
-  or a `.patch`.
+  a `.patch`, or any other file committed to the package's repository.
 - An account takeover of a trusted maintainer, who then pushes a malicious update.
-- A swapped or compromised upstream artifact that the `PKGBUILD` pulls in unverified.
+- A `PKGBUILD` that fetches an artifact nothing pins, so whoever controls the URL can
+  swap the bytes later.
 
 The user's decision we support is narrow: **is it safe to run `makepkg` on this package
 and install the result?** Not "is this application well written", and not "is this
 application trustworthy with my data".
 
+### The boundary: the AUR repository, and nothing makepkg fetches
+
+An AUR package is a git repository, `aur.archlinux.org/<pkgbase>.git`. The maintainer
+controls exactly the files committed to it, and nothing else. That is the boundary, and
+it is decided in code (`maintainer_files()`), never by a directory name or a file
+extension — an attacker chooses both:
+
+- **Every file in the AUR repository is reviewed, unconditionally.** Wherever it sits,
+  whatever it is called, whether or not `source=` names it: `prepare()` can invoke a
+  file by path that no array lists, so a file that "nothing references" is still the
+  maintainer's code. `bench/synthetics/malicious-deep-payload` is the regression test —
+  a clean PKGBUILD whose `prepare()` runs `tools/gen-config.py`, and the payload is in
+  the generator.
+- **Everything makepkg downloads is upstream's, and it is never read.** If upstream is
+  malicious, that is not an AUR supply-chain attack, and an AUR maintainer cannot inject
+  into upstream's tree. So the downloaded sources are out of scope by decision: not their
+  functionality, not their vulnerabilities, not their privacy practices, and not a script
+  in them that `prepare()` runs by path. That last case is *recorded* — the PKGBUILD
+  review notes which upstream files the build functions invoke, in code
+  (`find_upstream_invocations()`), as a fact for the reader — and read no further.
+- **What is left of the upstream concern lives in the `PKGBUILD`, which is read:** is
+  the artifact pinned (`find_unpinned_remote_sources()`), where does `source=` fetch
+  from, and what do the build functions do with it.
+
+The boundary is "what was in the package directory before makepkg ran": `git ls-files`
+in a clone, a snapshot of the directory for `--pkgdir`. It replaced a heuristic that
+softened verdicts on files under `tests/`, `samples/` and the like, which meant a
+payload under `tests/` got a softer verdict than one beside the PKGBUILD. Measured on
+2026-08-25 before the change, the upstream-tree pass was 75% of every prompt token the
+loop sent, and four of the six false flags on the benchmark sample were upstream files.
+
 ### In scope
 
-- Code that runs at build time or install time: `PKGBUILD` functions, `.install` hooks,
-  and any script the package invokes during a build.
-- Code injected into the upstream tree: patches, diffs, and added files.
+- Every file in the AUR repository: `PKGBUILD` functions, `.install` hooks, patches and
+  diffs (maintainer-authored code injected into upstream), local `source=` files, helper
+  scripts, and anything else committed beside them.
 - Fetching or executing remote content from an unexpected host.
 - Obfuscation that hides what the code does.
 - Anything that leaves the installed artifact unverifiable, so an attacker can swap it
@@ -29,9 +61,11 @@ application trustworthy with my data".
 
 ### Out of scope
 
-Do not report these. Each one is either the application behaving as designed, or a
-problem that is not AUR-specific:
+Do not report these. Each one is either upstream's, the application behaving as
+designed, or a problem that is not AUR-specific:
 
+- **The downloaded sources, entirely.** See the boundary above. Everything below is a
+  consequence of it, spelled out because each one has produced false flags.
 - **Upstream application functionality.** A VPN client that rewrites routes, or a
   browser that reads the filesystem, does what it says it does.
 - **Vulnerabilities in upstream code.** We look for injected malice, not for bugs.
@@ -122,9 +156,9 @@ reason to do?
 ## Repo layout
 
 - `aur-sleuth` — the whole tool, one Python script. `SYSTEM_PROMPTS` (prompts),
-  `audit_file()` (per-file audit), `decide_next_files_to_review()` (file selection),
-  `file_security_priority()` (selection ranking), `check_pkgbuild()` (the `makepkg`
-  safety gate).
+  `check_pkgbuild()` (the `makepkg` safety gate), `maintainer_files()` (the review set:
+  the boundary above), `audit_file()` (per-file audit), `find_upstream_invocations()`
+  and `find_unpinned_remote_sources()` (facts recorded in code).
 - `bench/pipeline.sh` — the automated audit loop. Runs discover → audit → judge →
   re-audit → dashboard → push. Feeds the dashboard at mgalgs.io/aur-sleuth.
 - `bench/run-synthetic-tests.sh` — regression tests. Run after every prompt change.
@@ -155,7 +189,7 @@ bash bench/test.sh                        # every bench/test-*.sh and the selfte
 Run both of these as well after any prompt or audit-logic change:
 
 ```bash
-bash bench/run-synthetic-tests.sh -q     # benign exits 0, both malicious exit 1
+bash bench/run-synthetic-tests.sh -q     # every benign exits 0, every malicious exits 1
 ./aur-sleuth <the-package-that-motivated-the-change> --output plain
 ```
 

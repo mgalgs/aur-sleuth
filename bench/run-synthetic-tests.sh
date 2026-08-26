@@ -18,11 +18,9 @@ run_test() {
     local pkgdir="$1" expected_exit="$2" label="$3"
     local actual_exit=0
 
-    # Most fixtures put their payload in a required file, so -n 0 is right:
-    # it isolates what is being tested and spends nothing on the rest of the
-    # tree. A fixture that hides its payload deeper needs the additional pass
-    # to run, and says so in a .args file beside its directory.
-    local -a extra=(-n 0)
+    # A fixture may carry extra flags in a .args file beside its directory
+    # (never inside it: everything inside is the package under audit).
+    local -a extra=()
     local argsfile="${pkgdir%/}.args"
     if [[ -f "$argsfile" ]]; then
         # shellcheck disable=SC2207  # deliberate word splitting: it is a flag list

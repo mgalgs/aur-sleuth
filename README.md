@@ -114,8 +114,6 @@ The tool can be configured with environment variables:
 - `OPENAI_BASE_URL`: The API endpoint. Defaults to OpenRouter if not set.
 - `OPENAI_MODEL`: The model to use. Defaults to `qwen/qwen3-235b-a22b-2507`.
 - `MAX_LLM_JOBS`: Max concurrent LLM calls. Defaults to `3`.
-- `NUM_FILES_TO_REVIEW`: The number of files to review in addition to those listed in
-  the `source` array. Defaults to `10`.
 - `LLM_TEMPERATURE`: The temperature parameter for the LLM (0.0-2.0). If not set, uses model default.
 - `LLM_TOP_P`: The top-p parameter for the LLM (0.0-1.0). If not set, uses model default.
 - `LLM_REASONING_EFFORT`: Reasoning effort for supported reasoning models (`low`, `medium`, `high`). Defaults to `high`.
@@ -190,7 +188,7 @@ package.
 
 **Usage:**
 ```bash
-usage: aur-sleuth [-h] package_name [--clone-url CLONE_URL] [--output OUTPUT] [--model MODEL] [--base-url BASE_URL] [--reasoning-effort {low,medium,high}] [--max-llm-jobs MAX_LLM_JOBS] [--num-files-to-review NUM_FILES_TO_REVIEW]
+usage: aur-sleuth [-h] package_name [--clone-url CLONE_URL] [--output OUTPUT] [--model MODEL] [--base-url BASE_URL] [--reasoning-effort {low,medium,high}] [--max-llm-jobs MAX_LLM_JOBS]
 
 Run a security audit on an AUR package.
 
@@ -208,9 +206,12 @@ options:
                         Reasoning effort to request from the LLM (default: high)
   --max-llm-jobs MAX_LLM_JOBS, -j MAX_LLM_JOBS
                         Maximum number of concurrent LLM audit jobs (default: 3)
-  --num-files-to-review NUM_FILES_TO_REVIEW, -n NUM_FILES_TO_REVIEW
-                        Target number of files to audit jobs (default: 10)
 ```
+
+What gets read: every file in the package's AUR repository -- the `PKGBUILD`, any
+`.install` hook, patches, local sources, and anything else the maintainer committed. The
+sources makepkg downloads are upstream's and are not read; the report records which of
+them the build functions invoke. See `CLAUDE.md` for the threat model behind that line.
 
 The audit process is subject to a session token limit (default: 100,000 tokens) to manage API usage.
 

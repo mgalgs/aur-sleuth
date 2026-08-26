@@ -135,14 +135,14 @@ instruction repeated on every call, so choosing files better cannot halve it.
    from a person, not a measurement. Either compress the prose preserving
    every rule, or send it once per package rather than once per file (which
    changes `audit_files()`'s parallelism and failure isolation).
-2. **Lower the review ceiling.** Roughly 7% of the total per slot given up,
-   and it is already a setting. Blocked on evidence, not on arithmetic:
-   every settled verdict on the branch is `safe`, so the benchmark scores a
-   smaller ceiling as "unchanged" by construction.
-   `bench/synthetics/malicious-deep-payload` is the first fixture that can
-   fail when the budget stops reaching far enough — it survives every
-   ceiling from 10 down to 3 on one model. More such fixtures, on more
-   models, are what would make this decidable.
+2. **Lower the review ceiling** — SUPERSEDED 2026-08-25. The ceiling and the
+   stage it bounded are gone: the threat model now stops at the AUR
+   repository (`CLAUDE.md`, "The boundary"), every maintainer file is
+   reviewed and nothing downloaded is read. That removed the `select` and
+   `additional` stages outright, 75% of the measured prompt tokens, and with
+   them the four upstream-file false flags on the benchmark sample.
+   `bench/synthetics/malicious-deep-payload` now guards the boundary rule
+   instead of the ceiling.
 3. **Re-check prompt caching before any cost-driven work.** The provider
    reported none on 2026-08-25. A cached prefix is billed cheaper but still
    counted, so "halve the tokens" and "halve the bill" would then need

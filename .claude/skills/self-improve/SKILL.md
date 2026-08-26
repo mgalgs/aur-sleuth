@@ -1,6 +1,6 @@
 ---
 name: self-improve
-description: Run aur-sleuth on a package, then review the audit report for quality issues and improve the tool. Analyzes false positives/negatives, file selection, and explanation quality inline.
+description: Run aur-sleuth on a package, then review the audit report for quality issues and improve the tool. Analyzes false positives/negatives, coverage, and explanation quality inline.
 argument-hint: [--recent|--popular|--package <name>|--pkgdir <path>] [--dry-run]
 ---
 
@@ -36,7 +36,7 @@ Run aur-sleuth on the selected package:
 ```bash
 AUDIT_FAILURE_FATAL=true AUR_SLEUTH_ASCII_ICONS=1 ./aur-sleuth <package-name> --output plain
 # or for local dirs:
-AUDIT_FAILURE_FATAL=true AUR_SLEUTH_ASCII_ICONS=1 ./aur-sleuth --pkgdir <path> --output plain -n 0
+AUDIT_FAILURE_FATAL=true AUR_SLEUTH_ASCII_ICONS=1 ./aur-sleuth --pkgdir <path> --output plain
 ```
 Use a 300s timeout — audits with many files can take a couple minutes.
 
@@ -110,24 +110,21 @@ fetched artifact. A flaw the attacker cannot control is not their attack.
   verdicts — once at the `makepkg` gate, once at the full review — because a vivid risk
   description makes models escalate even when told the decision stays SAFE. Separate
   "must document" from "must block".
-- **Unauditable binary payload** is counted in `files_unauditable` with a report note.
+- **The downloaded sources are not read**, by decision (CLAUDE.md, "The boundary").
+  The report counts them (`upstream_files`) and names the ones the PKGBUILD reaches for
+  (`upstream_named_files`, from `find_upstream_invocations()`). A finding in a file
+  under `src/` is upstream's, not a miss.
 
 That pattern generalizes: **if a finding is decidable by parsing, propose a code check,
 not a prompt rule.** Prompt rules for decidable facts vary by model, need a live audit to
 test, and leak into verdicts.
 
-### 3c. File Selection
-Were the "additional files to review" choices sensible? Judge by one measure: did the
-slots go to files on the **AUR-controlled attack surface** — things that execute at build
-or install time, or that a maintainer could have injected?
-- Did the LLM pick the files that matter (install scripts, build scripts, patches, configs with URLs)?
-- Did it waste reviews on READMEs, LICENSE files, or other non-executable docs?
-- Did it spread reviews across distinct files or waste slots on near-duplicates?
-- Did it burn slots on **vendored upstream bundle content** (`node_modules/`, driver
-  manifests, app config templates) that no maintainer touched? For a repackaged `-bin`
-  package the AUR surface may be just PKGBUILD + `.install`, both already required
-  reviews. Selecting fewer files and saying so beats filling ten slots with
-  "this config file is fine."
+### 3c. Coverage
+Every file in the AUR repository is reviewed — `maintainer_files()` decides the set, and
+`maintainer_files` in the frontmatter counts it. Check that it matches what the package's
+repository holds, that binary files among them were skipped and said so, and that the
+report states what it did not read: the downloaded file count and the upstream files the
+PKGBUILD names.
 
 ### 3d. Explanation Quality
 - Are the explanations clear and actionable?
@@ -157,8 +154,8 @@ The aur-sleuth source is a single Python script at `./aur-sleuth`. Key areas (us
 - `SYSTEM_PROMPTS` dict: the system prompts sent to the auditing LLM — highest leverage
 - `audit_file()` function: where individual files are audited
 - The XML response format prompt inside `audit_file()`: what we ask the LLM to produce
-- `gen_user_prompt_for_agentic_audit()`: the file selection prompt
-- `file_security_priority()`: heuristic ranking for file review ordering
+- `maintainer_files()`: the review set, and the boundary of the threat model
+- `find_upstream_invocations()`: the upstream files the PKGBUILD names, recorded as a fact
 - `check_pkgbuild()`: the initial PKGBUILD safety gate
 
 Focus changes on the system prompts and audit instructions — that's where the biggest leverage is for fixing false positives/negatives.
@@ -171,9 +168,9 @@ After making changes, verify in two ways:
 ```bash
 bash bench/run-synthetic-tests.sh -q
 ```
-Expected: all 3 pass (benign → exit 0, both malicious → exit 1).
+Expected: every fixture passes (benign → exit 0, malicious → exit 1).
 
-**2. Re-run on the package where the issue was found** — this is mandatory, not optional. The synthetic tests verify nothing regressed, but only a re-run against the original package confirms the fix actually works for the case that motivated it. Compare the relevant output (file selection, verdicts, error messages) against the original run.
+**2. Re-run on the package where the issue was found** — this is mandatory, not optional. The synthetic tests verify nothing regressed, but only a re-run against the original package confirms the fix actually works for the case that motivated it. Compare the relevant output (coverage, verdicts, error messages) against the original run.
 
 ## Step 7: Archive the report
 

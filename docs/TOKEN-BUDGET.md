@@ -4,6 +4,18 @@ Model selection has had the attention: the scout, the benchmark, the seats.
 Nobody had measured what the loop itself sends. This is that measurement, the
 tools that produce it, and what is left on the table.
 
+**The loop measured here has since lost its largest stage.** The additional
+pass -- the model-chosen sample of the downloaded upstream tree, `select` and
+`additional` below -- was removed when the threat model drew its boundary at
+the AUR repository (`CLAUDE.md`, "The boundary"): every file the maintainer
+committed is reviewed, and nothing makepkg downloads is read. The stage
+table below is the measurement that sized that decision (71.0% + 4.0% of
+prompt tokens), so it stays as recorded; the ceiling sweep and the
+`NUM_FILES_TO_REVIEW` discussion describe a knob that no longer exists. What
+survives the change is the residual -- the gate and the per-file review, about
+half of it instruction repeated per call -- and that is the lever the rest of
+this document is about.
+
 ## How to measure it
 
 Two instruments, both in the tool rather than beside it.

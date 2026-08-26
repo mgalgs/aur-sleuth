@@ -60,10 +60,10 @@ print(eval(sys.argv[2]))
     [[ -n "$got" ]] || return 1
 }
 
-# Every stage the fixture can reach. It has a PKGBUILD, one more required file,
-# and a leftover for the additional pass; with so few candidates the selection
-# call is skipped by design, so "select" is not required here.
-for stage in gate required additional; do
+# Every stage the loop has: the makepkg gate, then every maintainer file. The
+# fixture has a PKGBUILD and two local sources, so the review stage makes
+# several calls.
+for stage in gate required; do
     if [[ "$(check_json "any(c['stage'] == '$stage' for c in calls)")" == "True" ]]; then
         ok "the ledger has a '$stage' call"
     else
