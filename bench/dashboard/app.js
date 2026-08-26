@@ -50,15 +50,69 @@ async function init() {
     }
     renderHeadline();
     renderActivity();
+    renderRecent();
     renderModelCosts();
     renderCoverage();
     renderTable();
     setupEventListeners();
-    // A shareable link to one package: #pkg=<name>.
-    const m = /^#pkg=(.+)$/.exec(location.hash);
-    if (m) {
-        try { openPackage(decodeURIComponent(m[1])); } catch (e) { /* bad hash: ignore */ }
+    route();
+    window.addEventListener('hashchange', route);
+}
+
+// --- Two views, one document --------------------------------------------
+// The hash is the state, so every view is a link and the back button works:
+// "" is the overview, #packages[=<filter>] the table, #pkg=<name> one package
+// open in it. The publish gate allows no second HTML file, so the table is
+// not a page of its own; it is this page with the overview hidden.
+
+let currentView = null;
+
+function showView(name) {
+    const changed = currentView !== null && currentView !== name;
+    currentView = name;
+    document.body.dataset.view = name;
+    document.querySelectorAll('.nav a[data-view]').forEach(a =>
+        a.classList.toggle('active', a.dataset.view === name));
+    // The table view can be scrolled a long way down; the overview should
+    // not open at that depth.
+    if (changed) window.scrollTo(0, 0);
+}
+
+// The view for a hash, before the data arrives: no flash of the wrong one.
+function viewForHash(h) {
+    return /^#(pkg=|packages)/.test(h) ? 'packages' : 'overview';
+}
+
+function route() {
+    const h = location.hash;
+    let m;
+    if ((m = /^#pkg=(.+)$/.exec(h))) {
+        showView('packages');
+        let name = m[1];
+        try { name = decodeURIComponent(name); } catch (e) { /* bad hash: use as is */ }
+        openPackage(name);
+        return;
     }
+    if ((m = /^#packages(?:=([a-z]+))?$/.exec(h))) {
+        showView('packages');
+        // A named filter is a request to see those rows, so the table
+        // scrolls into view; plain #packages is the view itself, from the top.
+        if (m[1]) applyFilter(m[1]);
+        else if (currentFilter !== 'all') setFilter('all');
+        return;
+    }
+    showView('overview');
+}
+
+// Go somewhere by hash. Setting the same hash again fires no event, so the
+// route runs by hand in that case: a second tap on a count still filters.
+function go(hash) {
+    if (location.hash === hash) route();
+    else location.hash = hash;
+}
+
+function filterHash(name) {
+    return name === 'all' ? '#packages' : '#packages=' + name;
 }
 
 function shortModel(m) {
@@ -106,11 +160,16 @@ function cssEscape(s) {
 }
 
 // Apply a filter from anywhere on the page, and take the reader to it.
-function applyFilter(name) {
+function setFilter(name) {
     currentFilter = name;
     document.querySelectorAll('.filter-btn').forEach(b =>
         b.classList.toggle('active', b.dataset.filter === name));
     renderTable();
+    history.replaceState(null, '', filterHash(name));
+}
+
+function applyFilter(name) {
+    setFilter(name);
     document.querySelector('.toolbar').scrollIntoView({behavior: 'smooth', block: 'start'});
 }
 
@@ -197,22 +256,43 @@ function renderActivity() {
             + n(wk.audits_total) + ' audits</span>';
     }
 
-    // Only the packages worth a reader's attention get a chip: a list of
-    // every clean package this week is the table, repeated.
-    const WHAT = {confirmed: 'two audits and a judge agree: unsafe',
-                  look: 'flagged by a model; not confirmed',
-                  disputed: 'flagged by a model; the escalations did not settle it'};
-    const flagged = rec.filter(r => WHAT[r.state]).slice(0, 24);
-    if (flagged.length) {
-        html += '<span class="chips"><span class="lead">Flagged:</span>' + flagged.map(r => {
-            const d = String(r.date || '').split('T')[0].slice(5);
-            return '<button type="button" class="chip" data-pkg="' + escapeAttr(r.package || '') + '" '
-                + 'title="' + escapeAttr(WHAT[r.state] + ' · ' + (r.date || '') + ' · open this package') + '">'
-                + '<span class="sq ' + (r.state === 'confirmed' ? 'sq-unsafe' : 'sq-flagged') + '" style="width:9px;height:9px"></span>'
-                + escapeHtml(r.package || '') + '<span class="chip-date">' + escapeHtml(d) + '</span></button>';
-        }).join('') + '</span>';
-    }
     activity.innerHTML = html;
+}
+
+// A preview of the table: the packages a reader would look at first. What
+// is flagged, in the generator's order (confirmed first, then newest); then
+// the flags a judge most recently overturned, because those are the false
+// positives being caught; then whatever was read last. Eight rows, and one
+// button to the rest.
+function renderRecent() {
+    const box = document.getElementById('recent-list');
+    if (!box) return;
+    const pkgs = DATA.packages || {};
+    const names = [];
+    const take = name => { if (pkgs[name] && !names.includes(name)) names.push(name); };
+    const rec = (DATA.summary && DATA.summary.recent) || [];
+    rec.slice(0, 4).forEach(r => take(r.package));
+    const byDate = Object.entries(pkgs)
+        .sort((a, b) => String(b[1].latest_date || '').localeCompare(String(a[1].latest_date || '')));
+    byDate.filter(([, p]) => matchesPreset(p, 'overridden')).slice(0, 2).forEach(([n]) => take(n));
+    for (const [n] of byDate) { if (names.length >= 8) break; take(n); }
+
+    document.getElementById('recent-all').textContent =
+        'All ' + fmtNum(Object.keys(pkgs).length) + ' packages \u2192';
+    box.innerHTML = names.map(name => {
+        const pkg = pkgs[name];
+        const state = packageState(pkg);
+        const date = pkg.latest_date ? pkg.latest_date.split('T')[0] : '';
+        return '<li><button type="button" class="recent-row" data-pkg="' + escapeAttr(name) + '" title="Open this package">'
+            + '<span class="rr-main"><span class="rr-line">'
+            + '<span class="rr-name">' + escapeHtml(name) + '</span>'
+            + '<span class="rr-state st-' + escapeAttr(state) + '">' + escapeHtml(STATE_LABEL[state]) + '</span>'
+            + '<span class="rr-date">' + escapeHtml(date) + '</span></span>'
+            + '<span class="rr-why">' + escapeHtml(explainState(pkg)) + '</span></span>'
+            + '<span class="rr-sq">' + renderSquares(pkg.audits, 'audit', pkg)
+            + '<span class="vsep"></span>' + renderSquares(pkg.judges, 'judge', pkg) + '</span>'
+            + '</button></li>';
+    }).join('');
 }
 
 // Every number here is computed in code at publish time (see
@@ -680,20 +760,19 @@ function setupEventListeners() {
     document.getElementById('filter-buttons').addEventListener('click', e => {
         const btn = e.target.closest('.filter-btn');
         if (!btn) return;
-        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        currentFilter = btn.dataset.filter;
-        renderTable();
+        setFilter(btn.dataset.filter);
     });
 
-    // A headline count anywhere on the page filters the table, a package
-    // chip opens that package, and a "Full report" unfolds one. Delegated,
-    // because every panel is re-rendered.
+    // A headline count anywhere on the page opens the table filtered to it,
+    // a row of the recent list opens that package, and a "Full report"
+    // unfolds one. Delegated, because every panel is re-rendered. The first
+    // two go through the hash, so they work from either view and the back
+    // button undoes them.
     document.addEventListener('click', e => {
         const link = e.target.closest('.count-link, .stat');
-        if (link && link.dataset.filter) { applyFilter(link.dataset.filter); return; }
-        const chip = e.target.closest('.chip');
-        if (chip && chip.dataset.pkg) { openPackage(chip.dataset.pkg); return; }
+        if (link && link.dataset.filter) { go(filterHash(link.dataset.filter)); return; }
+        const row = e.target.closest('.recent-row');
+        if (row && row.dataset.pkg) { go('#pkg=' + encodeURIComponent(row.dataset.pkg)); return; }
         const toggle = e.target.closest('[data-toggle]');
         if (toggle) {
             const box = document.getElementById(toggle.dataset.toggle);
@@ -730,4 +809,5 @@ function setupEventListeners() {
     });
 }
 
+document.body.dataset.view = viewForHash(location.hash);
 init();

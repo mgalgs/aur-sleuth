@@ -104,6 +104,7 @@ code { font-family: var(--mono); }
     display: flex;
     align-items: baseline;
     justify-content: space-between;
+    flex-wrap: wrap;
     gap: 12px;
 }
 .brand { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
@@ -182,28 +183,8 @@ code { font-family: var(--mono); }
 .count-link { background: none; border: 0; padding: 0; font: inherit; cursor: pointer; }
 .count-link:hover, .count-link:focus-visible { text-decoration: underline; }
 
-.chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
-.chips .lead { font-size: 12px; color: var(--muted); }
-.chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    height: 26px;
-    padding: 0 8px;
-    border: 1px solid var(--line-2);
-    border-radius: 4px;
-    background: none;
-    font-family: var(--mono);
-    font-size: 12px;
-    color: var(--text);
-    cursor: pointer;
-}
-.chip:hover { border-color: var(--muted); }
-.chip .chip-date { color: var(--dim); }
 @media (min-width: 640px) {
     .week { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
-    .chips { margin-top: 0; margin-left: 6px; }
-    .chip { height: 24px; }
 }
 
 /* ---- the small squares: one per report ---- */
@@ -508,3 +489,70 @@ code { font-family: var(--mono); }
 .bars .value { font-family: var(--mono); font-size: 11px; font-variant-numeric: tabular-nums; color: var(--muted); }
 .bars .empty { grid-column: 1 / -1; text-align: center; }
 @media (min-width: 640px) { .bars .label, .bars .value { font-size: 12px; } .bars .label { max-width: none; } }
+
+/* ---- two views of one document ---- */
+
+/* The hash is the state: "" is the overview, #packages is the table. The
+   page is one file (the publish gate allows no second one), so a view is a
+   class on <body> and a section belongs to one view or to both. */
+body[data-view="overview"] .only-packages { display: none !important; }
+body[data-view="packages"] .only-overview { display: none !important; }
+
+.nav { display: flex; gap: 2px; order: 3; width: 100%; border-bottom: 1px solid var(--line); }
+.nav a {
+    padding: 6px 10px 7px;
+    margin-bottom: -1px;
+    font-size: 13px;
+    color: var(--muted);
+    border-bottom: 2px solid transparent;
+}
+.nav a:hover { color: var(--text); text-decoration: none; }
+.nav a.active { color: var(--text); font-weight: 600; border-bottom-color: var(--text); }
+@media (min-width: 640px) {
+    .masthead { flex-wrap: nowrap; }
+    .nav { order: 0; width: auto; border-bottom: 0; margin-left: 4px; margin-right: auto; }
+    .nav a { padding: 3px 9px; margin: 0; border: 0; border-radius: 4px; }
+    .nav a.active { background: var(--panel); }
+}
+
+.lede { max-width: 46rem; font-size: 14px; line-height: 1.5; color: var(--text-2); margin-bottom: 6px; }
+@media (min-width: 640px) { .lede { font-size: 15px; } }
+
+/* A section heading, in the footer's voice: the page has one kind of label. */
+.sec-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; }
+.sec-head h2 { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.sec-head .meta { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.sec-head .btn { margin-left: auto; }
+
+/* ---- recent audits ---- */
+
+.recent { display: flex; flex-direction: column; gap: 6px; padding-top: 14px; border-top: 1px solid var(--line); }
+.recent-list { display: flex; flex-direction: column; }
+.recent-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+    width: 100%;
+    padding: 8px 6px;
+    background: none;
+    border: 0;
+    border-bottom: 1px solid var(--line-soft);
+    text-align: left;
+    cursor: pointer;
+}
+.recent-row:hover { background: var(--panel); }
+.rr-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.rr-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; }
+.rr-name { font-family: var(--mono); font-size: 13px; color: var(--text); overflow-wrap: anywhere; }
+.rr-state { font-size: 12px; font-weight: 600; }
+.rr-date { font-family: var(--mono); font-size: 11px; color: var(--dim); }
+.rr-why { font-size: 12px; color: var(--muted); line-height: 1.4; }
+.rr-sq { display: flex; align-items: center; gap: 8px; flex-shrink: 0; padding-top: 3px; }
+.rr-sq .vsep { width: 1px; height: 12px; background: var(--line-2); }
+@media (min-width: 640px) {
+    .recent-row { align-items: center; padding: 7px 10px; }
+    .rr-main { flex-direction: row; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; }
+    .rr-name { min-width: 14rem; }
+    .rr-why { font-size: 12.5px; }
+}

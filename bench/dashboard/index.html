@@ -7,28 +7,48 @@
     <title>AUR Sleuth</title>
     <link rel="stylesheet" href="app.css">
 </head>
-<body>
+<body data-view="overview">
     <div class="page">
         <header class="masthead">
             <div class="brand">
                 <h1>AUR Sleuth</h1>
                 <span class="tagline">Supply-chain audits of AUR packages</span>
             </div>
+            <!-- Two views of one document: the overview, and the table. The
+                 hash is the state, so either is a link. -->
+            <nav class="nav" aria-label="Views">
+                <a href="#" data-view="overview">Overview</a>
+                <a href="#packages" data-view="packages">Packages</a>
+            </nav>
             <div class="masthead-meta">
                 <span id="generated-at"></span>
                 <a href="https://github.com/mgalgs/aur-sleuth">GitHub</a>
             </div>
         </header>
 
-        <!-- The answer first. Each number filters the table; the bar is the
-             same four counts as one line. Then what this week added. -->
+        <!-- The answer first. Each number opens the table filtered to exactly
+             the packages it counts; the bar is the same counts as one line.
+             Then what this week added. Shared by both views. -->
         <section class="answer">
+            <p class="lede only-overview">Two cheap models read every file an AUR maintainer committed &mdash; the <code>PKGBUILD</code>, the <code>.install</code> hooks, the patches &mdash; looking for one thing: code injected into the packaging. A stronger model rules on anything they flag. The application itself is never judged.</p>
             <div id="headline" class="headline"></div>
             <div id="state-bar" class="state-bar" role="img"></div>
             <div id="activity" class="week"></div>
         </section>
 
-        <section class="toolbar">
+
+        <!-- A preview of the table: what was flagged, what a judge overturned,
+             and what was read most recently. One click reaches the rest. -->
+        <section class="recent only-overview">
+            <div class="sec-head">
+                <h2>Recent audits</h2>
+                <a id="recent-all" class="btn" href="#packages">All packages &rarr;</a>
+            </div>
+            <ul id="recent-list" class="recent-list"></ul>
+        </section>
+
+
+        <section class="toolbar only-packages">
             <input id="search" type="search" class="search" placeholder="Search packages" autocomplete="off" spellcheck="false">
             <div id="filter-buttons" class="filters">
                 <button class="btn filter-btn active" data-filter="all">All</button>
@@ -48,13 +68,14 @@
                 <span><span class="sq sq-none"></span>no verdict</span>
                 <span><span class="sq sq-flagged sq-overridden"></span>overridden</span>
                 <span><span class="sq sq-clean sq-reaudit"></span>second audit</span>
+                <span><span class="sq sq-advisory"></span>advisory</span>
                 <span id="result-count" class="result-count"></span>
             </div>
         </section>
 
-        <!-- The table is the page. On a phone it keeps three columns; the
-             version and date ride under the name. -->
-        <div class="table-wrap">
+        <!-- The table. On a phone it keeps three columns; the version and
+             date ride under the name. -->
+        <div class="table-wrap only-packages">
             <table class="packages">
                 <thead>
                     <tr>
@@ -75,11 +96,12 @@
         <footer class="footer">
             <div>
                 <div class="head"><h2>How to read this page</h2></div>
-                <p class="prose">These audits look for one thing: code injected into the AUR packaging of a package &mdash; the <code>PKGBUILD</code>, an <code>.install</code> hook, or a patch. They do not rate the application itself. Each square is one report: two cheap models audit every package, and a judge &mdash; a stronger model &mdash; reads the reports when they disagree or flag something.</p>
+                <p class="prose">Each square is one report. Two cheap models audit every package, and a judge &mdash; a stronger model &mdash; reads the reports when they disagree or flag something. A package&rsquo;s state is the most settled reading of its reports:</p>
                 <dl class="key">
                     <dt class="st-clean">Clean</dt><dd>nothing found, or a flag a judge or a later review overturned.</dd>
                     <dt class="st-unknown">No verdict</dt><dd>no model reached an answer either way. Missing information, not a suspicion.</dd>
                     <dt class="st-look">Worth a closer look</dt><dd>something flagged it and nothing has settled it. Usually a false positive about behaviour the application is supposed to have; not a claim that it is malicious.</dd>
+                    <dt class="st-disputed">Models disagree</dt><dd>still flagged after two escalations. The models will not settle it, and no further audit is coming.</dd>
                     <dt class="st-confirmed">Confirmed malicious</dt><dd>two independent audits said unsafe and a judge agreed.</dd>
                 </dl>
             </div>
