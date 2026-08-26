@@ -50,6 +50,7 @@ async function init() {
     }
     renderHeadline();
     renderActivity();
+    renderEvidenceLine();
     renderRecent();
     renderModelCosts();
     renderCoverage();
@@ -257,6 +258,22 @@ function renderActivity() {
     }
 
     activity.innerHTML = html;
+}
+
+// The numbers behind the diagram: how often the later stages have run. All
+// three are counts the generator computed; nothing a model wrote.
+function renderEvidenceLine() {
+    const box = document.getElementById('evidence-line');
+    if (!box) return;
+    const s = DATA.summary || {};
+    const overridden = Object.values(DATA.packages || {}).filter(p => matchesPreset(p, 'overridden')).length;
+    const parts = [];
+    if (s.total_judges) parts.push(fmtNum(s.total_judges) + ' rulings');
+    if (s.re_audit_count) parts.push(fmtNum(s.re_audit_count) + ' second audits');
+    if (overridden) {
+        parts.push(countLink('overridden', fmtNum(overridden) + ' flag' + (overridden === 1 ? '' : 's') + ' overturned by a judge'));
+    }
+    box.innerHTML = parts.length ? 'so far: ' + parts.join(' · ') : '';
 }
 
 // A preview of the table: the packages a reader would look at first. What
