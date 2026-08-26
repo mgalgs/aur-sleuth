@@ -179,3 +179,7 @@ instruction repeated on every call, so choosing files better cannot halve it.
   and a single red full run proves nothing on its own — re-run before
   chasing. The 08-25 failure was a tree-hash mismatch on the second
   rewrite (got 4291c8fa, want 711e9b30), which is where to start looking.
+  Seen a third time on 2026-08-26, same shape again: a second-rewrite tree
+  mismatch (got 0783cc2c, want 30d8d74d), green alone and green in an
+  immediate second full run on the identical tree. Three sightings, three
+  different hash pairs, always the second rewrite.
