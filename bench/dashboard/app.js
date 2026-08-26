@@ -682,6 +682,45 @@ function explainState(pkg) {
     return 'No model reached a verdict: the files were skipped, or the audits were inconclusive.';
 }
 
+function ordinal(n) {
+    const j = n % 10, k = n % 100;
+    if (k >= 11 && k <= 13) return n + 'th';
+    if (j === 1) return n + 'st';
+    if (j === 2) return n + 'nd';
+    if (j === 3) return n + 'rd';
+    return n + 'th';
+}
+
+// What happens to this package next, in plain words. Every input is a
+// number the generator computed at publish time; nothing here re-derives
+// the state rule, and nothing guesses a clock time -- the schedule is not
+// in the data, and a wrong "in about four hours" is worse than no estimate.
+function nextStep(pkg) {
+    const state = packageState(pkg);
+    if (state === 'disputed') {
+        return 'Next: no further automatic audit is coming. Two escalations did not settle it; only a person can order another.';
+    }
+    if (state !== 'look') return '';
+    if (pkg.escalation_exhausted) {
+        return 'Next: no automatic audit is coming. Every escalation model has already read it; only a person can order another.';
+    }
+    const esc = (DATA.summary && DATA.summary.escalation) || null;
+    const cap = esc && typeof esc.cap === 'number' ? esc.cap : null;
+    const round = (pkg.escalations || 0) + 1;
+    let sentence = 'Next: escalation round ' + round + (cap ? ' of ' + cap : '')
+        + ' — a fresh audit by a stronger model that has not read it, then a fresh ruling.';
+    if (pkg.queue_position) {
+        const ql = esc && typeof esc.queue_length === 'number' ? esc.queue_length : null;
+        let clause = 'It is ' + ordinal(pkg.queue_position) + (ql ? ' of ' + ql : '') + ' packages waiting';
+        const bits = [];
+        if (esc && typeof esc.per_run === 'number') bits.push('a run starts up to ' + esc.per_run);
+        if (esc && typeof esc.runs_per_day === 'number') bits.push('there are ' + esc.runs_per_day + ' runs a day');
+        if (bits.length) clause += '; ' + bits.join(', and ');
+        sentence += ' ' + clause + '.';
+    }
+    return sentence;
+}
+
 function renderDetail(name, data) {
     const pkg = (DATA.packages || {})[name] || {};
     const state = packageState(pkg);
@@ -690,11 +729,13 @@ function renderDetail(name, data) {
     const judges = data.judges || [];
     const judgeSafe = pkg.judge_majority === 'safe';
     const confirmedCls = state === 'confirmed' ? ' confirmed' : '';
+    const next = nextStep(pkg);
 
     let html = '<div class="detail-state">'
         + '<span class="state st-' + state + '">' + escapeHtml(STATE_TITLE[state]) + '</span>'
         + '<span class="why">' + escapeHtml(explainState(pkg)) + '</span>'
         + '<a class="detail-link" href="#pkg=' + escapeAttr(encodeURIComponent(name)) + '">#pkg=' + escapeHtml(name) + '</a>'
+        + (next ? '<span class="next">' + escapeHtml(next) + '</span>' : '')
         + '</div>';
 
     // What was flagged, first. Every file a report called unsafe, with the
