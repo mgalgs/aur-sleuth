@@ -37,6 +37,13 @@ drives everything described here without a terminal.
 6. **Scout.** `bench/scout.py` compares the cached OpenRouter catalog
    against each seat's price and writes a shortlist of models that could
    undercut a seat, with the seats' shares of recent spend. Code only.
+   The shortlist is four groups: each seat's cheapest slice plus whatever
+   the screen has cleared (`candidates`), the newest candidates
+   (`new_arrivals`), what the screen turned down (`rejected`), and the
+   zero-price tiers (`free`). The groups exist because price rank alone
+   reaches too few models — the ten cheapest candidates undercut all three
+   seats at once, so no eleventh model places in any seat's slice however
+   good it is, and recency is the second way in.
 
 ## Money
 
