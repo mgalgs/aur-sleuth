@@ -25,8 +25,10 @@ drives everything described here without a terminal.
    not yet read it (`REAUDIT_MODEL` first, then `TIEBREAK_MODEL`), followed
    at once by a fresh judge ruling over the enlarged report set. A package
    the ruling settles leaves the list; one still flagged gets a second
-   round with the other model; after two escalations it is "disputed" and
-   the pipeline stops spending on it. The worklist and the model choice are
+   round with the other model. If both ordinary rounds leave it flagged, one
+   final audit (`FINAL_AUDIT_MODEL`) and ruling (`FINAL_JUDGE_MODEL`) run. If
+   that cannot settle it, it is "disputed" and the pipeline stops spending.
+   The worklist and the model choice are
    `bench/pending-escalations.py`, on the same state rule the public page
    uses. An escalation run (`--escalate a,b` or `--escalate-pending true`)
    does the same directly: the sweep runs the rounds, named packages get
@@ -75,8 +77,9 @@ page only reads them:
   opinion.
 - **look** ("worth a closer look") — something said unsafe and nothing has
   settled it. The escalation rounds exist to drain this set.
-- **disputed** ("models disagree") — still "look" after two escalations.
-  Terminal: no further audit is coming; a settled verdict is the way out.
+- **disputed** ("models disagree") — still "look" after ordinary escalation,
+  tiebreak, and the bounded final-resolution cycle. Terminal: no further audit
+  is coming; this is a model outcome, not an operator task.
 - **clean** — nothing found, or a judge or a settled verdict overturned the
   flag.
 - **unknown** — no model reached a verdict; missing information, not
@@ -98,9 +101,11 @@ a code fix, never an edit to the answer.
 - **Audit**: cheap models, two of them so they can disagree; every package,
   every model.
 - **Judge**: reads reports when they disagree or agree on a warning.
-- **Escalation** (`REAUDIT_MODEL`, then `TIEBREAK_MODEL`): the expensive
-  second opinion, at most two per flagged package, each from a model that
-  has not read it yet.
+- **Escalation** (`REAUDIT_MODEL`, then `TIEBREAK_MODEL`): two expensive fresh
+  opinions, each from a model that has not read the package yet.
+- **Final resolution** (`FINAL_AUDIT_MODEL` + `FINAL_JUDGE_MODEL`): one last
+  bounded audit-and-ruling cycle. It either settles the package or leaves the
+  honest terminal state `disputed`; it never creates an operator task.
 - **Free voices** (`FREE_MODELS`, optional): extra audit opinions at $0,
   best effort, under their own short timeout. Failure is soft everywhere: a
   rate-limited or crashed audit — any report with no verdict and no spend —
@@ -120,6 +125,17 @@ judge reads — context from a model that has not earned a vote, useful for
 leads. This is how an untrusted (usually free) model contributes without
 being able to escalate anything. An advisory run cannot combine with
 escalation, which exists to force a ruling.
+
+## Model aliases
+
+`--model-aliases` accepts an explicit mapping such as
+`cheap=deepseek/deepseek-v4-flash;final=openai/gpt-5.4`. Any model seat may
+then use `@cheap` or `@final`. Aliases resolve once at the run boundary.
+Audit frontmatter records the concrete `model` and, when an alias was
+actually requested, `model_alias`; judge usage records the same pair.
+Concrete IDs remain valid, so old deployments and reports are unchanged.
+The operations UI should show `alias → concrete id`; promotion should still
+come from the task-specific audit or judge benchmark rather than reputation.
 
 The scout never probes: the advisory work all goes through
 `openrouter/free`, a router that picks among the free models that are

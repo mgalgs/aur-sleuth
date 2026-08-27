@@ -83,6 +83,14 @@ REAUDIT_MODEL="anthropic/claude-sonnet-4.6"
 # when REAUDIT_MODEL already has. A different vendor from every other seat,
 # priced like the escalation seat.
 TIEBREAK_MODEL="openai/gpt-5.4"
+# One last, bounded audit after the ordinary escalation and tiebreak did not
+# settle the package. Its ruling uses a separate strongest-judge seat. After
+# this cycle the package is terminal `disputed`; there is no retry loop.
+FINAL_AUDIT_MODEL="@final"
+FINAL_JUDGE_MODEL="openai/gpt-5.4"
+# Optional semantic references, e.g. `cheap=deepseek/deepseek-v4-flash;final=openai/gpt-5.4`.
+# Seats may then use `@cheap`/`@final`. Reports retain the alias and concrete id.
+MODEL_ALIASES="final=gpt-5.6-sol"
 # Opportunistic free voices: extra audit models run beside the paid seats,
 # best effort. Their failures are soft everywhere -- no judge trigger, no
 # audited-index mark, no cost -- so a rate-limited free tier contributes
@@ -107,7 +115,8 @@ SEED_COUNT=0
 # audits them even at an already-audited version: naming a package is asking.
 PACKAGES=""
 # Escalation: a fresh audit by a model that has not read the package
-# (REAUDIT_MODEL, else TIEBREAK_MODEL) and then a forced judge ruling over
+# (REAUDIT_MODEL, then TIEBREAK_MODEL, then one final-resolution model) and a
+# forced judge ruling over
 # the enlarged report set. The scheduled run does this itself, in rounds,
 # for everything worth a closer look (see run_escalation_rounds); these
 # flags are the operator's own run of it. --escalate names packages;
@@ -155,6 +164,9 @@ while [[ $# -gt 0 ]]; do
         --judge-model) JUDGE_MODEL="$2"; shift 2 ;;
         --reaudit-model) REAUDIT_MODEL="$2"; shift 2 ;;
         --tiebreak-model) TIEBREAK_MODEL="$2"; shift 2 ;;
+        --final-audit-model) FINAL_AUDIT_MODEL="$2"; shift 2 ;;
+        --final-judge-model) FINAL_JUDGE_MODEL="$2"; shift 2 ;;
+        --model-aliases) MODEL_ALIASES="$2"; shift 2 ;;
         --packages-file) PACKAGES_FILE="$2"; shift 2 ;;
         --updated-count) UPDATED_COUNT="$2"; shift 2 ;;
         --seed-count) SEED_COUNT="$2"; shift 2 ;;
@@ -203,17 +215,84 @@ PKG_LIST_RE='^[A-Za-z0-9@._+][A-Za-z0-9@._+-]*(,[A-Za-z0-9@._+][A-Za-z0-9@._+-]*
 [[ -z "$ESCALATE" || "$ESCALATE" =~ $PKG_LIST_RE ]] \
     || { echo "--escalate is not a comma-separated package list: '$ESCALATE'" >&2; exit 1; }
 
-IFS=',' read -ra MODEL_LIST <<< "$AUDIT_MODELS"
-FREE_MODEL_LIST=()
-[[ -n "$FREE_MODELS" ]] && IFS=',' read -ra FREE_MODEL_LIST <<< "$FREE_MODELS"
-[[ -z "$FREE_MODELS" || "$FREE_MODELS" =~ ^[A-Za-z0-9._/:-]+(,[A-Za-z0-9._/:-]+)*$ ]] \
+MODEL_REF_RE='^(@[A-Za-z][A-Za-z0-9_-]{0,39}|[A-Za-z0-9._/:-]+)$'
+MODEL_LIST_RE='^(@[A-Za-z][A-Za-z0-9_-]{0,39}|[A-Za-z0-9._/:-]+)(,(@[A-Za-z][A-Za-z0-9_-]{0,39}|[A-Za-z0-9._/:-]+))*$'
+[[ "$AUDIT_MODELS" =~ $MODEL_LIST_RE ]] \
+    || { echo "--audit-models is not a comma-separated model/reference list: '$AUDIT_MODELS'" >&2; exit 1; }
+for value in "$JUDGE_MODEL" "$REAUDIT_MODEL" "$TIEBREAK_MODEL" "$FINAL_AUDIT_MODEL" "$FINAL_JUDGE_MODEL"; do
+    [[ "$value" =~ $MODEL_REF_RE ]] \
+        || { echo "invalid model/reference: '$value'" >&2; exit 1; }
+done
+[[ -z "$FREE_MODELS" || "$FREE_MODELS" =~ $MODEL_LIST_RE ]] \
     || { echo "--free-models is not a comma-separated model list: '$FREE_MODELS'" >&2; exit 1; }
 [[ "$FREE_TIMEOUT" =~ ^0*[1-9][0-9]*$ ]] \
     || { echo "--free-timeout must be a whole number of at least 1, got '$FREE_TIMEOUT'" >&2; exit 1; }
 [[ "$ADVISORY_SWEEP" =~ ^[0-9]+$ ]] \
     || { echo "--advisory-sweep must be a whole number, got '$ADVISORY_SWEEP'" >&2; exit 1; }
-[[ "$ADVISORY_MODELS" =~ ^[A-Za-z0-9._/:-]+(,[A-Za-z0-9._/:-]+)*$ ]] \
+[[ "$ADVISORY_MODELS" =~ $MODEL_LIST_RE ]] \
     || { echo "--advisory-models is not a comma-separated model list: '$ADVISORY_MODELS'" >&2; exit 1; }
+
+declare -A MODEL_ALIAS_TARGETS=() ACTIVE_MODEL_ALIAS_BY_ID=()
+if [[ -n "$MODEL_ALIASES" ]]; then
+    IFS=';' read -ra alias_entries <<< "$MODEL_ALIASES"
+    for entry in "${alias_entries[@]}"; do
+        [[ "$entry" =~ ^([A-Za-z][A-Za-z0-9_-]{0,39})=([A-Za-z0-9._/:-]+)$ ]] \
+            || { echo "--model-aliases must be name=model entries separated by semicolons" >&2; exit 1; }
+        alias_name="${BASH_REMATCH[1]}"; alias_model="${BASH_REMATCH[2]}"
+        [[ -z "${MODEL_ALIAS_TARGETS[$alias_name]+x}" ]] \
+            || { echo "duplicate model alias: $alias_name" >&2; exit 1; }
+        MODEL_ALIAS_TARGETS[$alias_name]="$alias_model"
+    done
+fi
+resolve_model_ref() {
+    local ref="$1" name
+    if [[ "$ref" == @* ]]; then
+        name="${ref#@}"
+        [[ -n "${MODEL_ALIAS_TARGETS[$name]+x}" ]] \
+            || { echo "unknown model alias: $ref" >&2; return 1; }
+        printf '%s\n' "${MODEL_ALIAS_TARGETS[$name]}"
+    else
+        printf '%s\n' "$ref"
+    fi
+}
+
+AUDIT_MODELS_REQUESTED="$AUDIT_MODELS"
+JUDGE_MODEL_REQUESTED="$JUDGE_MODEL"
+REAUDIT_MODEL_REQUESTED="$REAUDIT_MODEL"
+TIEBREAK_MODEL_REQUESTED="$TIEBREAK_MODEL"
+FINAL_AUDIT_MODEL_REQUESTED="$FINAL_AUDIT_MODEL"
+FINAL_JUDGE_MODEL_REQUESTED="$FINAL_JUDGE_MODEL"
+IFS=',' read -ra requested_models <<< "$AUDIT_MODELS"
+MODEL_LIST=()
+for ref in "${requested_models[@]}"; do
+    resolved="$(resolve_model_ref "$ref")"
+    MODEL_LIST+=("$resolved")
+    [[ "$ref" == @* ]] && ACTIVE_MODEL_ALIAS_BY_ID[$resolved]="${ref#@}"
+done
+AUDIT_MODELS="$(IFS=,; echo "${MODEL_LIST[*]}")"
+JUDGE_MODEL="$(resolve_model_ref "$JUDGE_MODEL")"
+REAUDIT_MODEL="$(resolve_model_ref "$REAUDIT_MODEL")"
+TIEBREAK_MODEL="$(resolve_model_ref "$TIEBREAK_MODEL")"
+FINAL_AUDIT_MODEL="$(resolve_model_ref "$FINAL_AUDIT_MODEL")"
+FINAL_JUDGE_MODEL="$(resolve_model_ref "$FINAL_JUDGE_MODEL")"
+for pair in \
+    "$JUDGE_MODEL_REQUESTED"$'\t'"$JUDGE_MODEL" \
+    "$REAUDIT_MODEL_REQUESTED"$'\t'"$REAUDIT_MODEL" \
+    "$TIEBREAK_MODEL_REQUESTED"$'\t'"$TIEBREAK_MODEL" \
+    "$FINAL_AUDIT_MODEL_REQUESTED"$'\t'"$FINAL_AUDIT_MODEL" \
+    "$FINAL_JUDGE_MODEL_REQUESTED"$'\t'"$FINAL_JUDGE_MODEL"; do
+    ref="${pair%%$'\t'*}"; resolved="${pair#*$'\t'}"
+    [[ "$ref" == @* ]] && ACTIVE_MODEL_ALIAS_BY_ID[$resolved]="${ref#@}"
+done
+FREE_MODEL_LIST=()
+if [[ -n "$FREE_MODELS" ]]; then
+    IFS=',' read -ra requested_free_models <<< "$FREE_MODELS"
+    for ref in "${requested_free_models[@]}"; do
+        resolved="$(resolve_model_ref "$ref")"
+        FREE_MODEL_LIST+=("$resolved")
+        [[ "$ref" == @* ]] && ACTIVE_MODEL_ALIAS_BY_ID[$resolved]="${ref#@}"
+    done
+fi
 
 # Accept 0.1 through 1.0 inclusive, with any number of trailing zeros. The first
 # decimal digit of the 0.x form must be 1-9, so 0.00-0.09 (below the minimum, and
@@ -251,7 +330,11 @@ if [[ "$ADVISORY" != "true" && -z "$PACKAGES" && -z "$PACKAGES_FILE" \
       && -z "$ESCALATE" && "$ESCALATE_PENDING" != "true" && -z "$RUN_BUDGET" \
       && "$UPDATED_COUNT" -eq 0 && "$SEED_COUNT" -eq 0 ]]; then
 PIPE_AUDIT_MODELS="$AUDIT_MODELS" PIPE_JUDGE_MODEL="$JUDGE_MODEL" PIPE_REAUDIT_MODEL="$REAUDIT_MODEL" \
-PIPE_TIEBREAK_MODEL="$TIEBREAK_MODEL" \
+PIPE_TIEBREAK_MODEL="$TIEBREAK_MODEL" PIPE_FINAL_AUDIT_MODEL="$FINAL_AUDIT_MODEL" \
+PIPE_FINAL_JUDGE_MODEL="$FINAL_JUDGE_MODEL" PIPE_MODEL_ALIASES="$MODEL_ALIASES" \
+PIPE_AUDIT_MODELS_REF="$AUDIT_MODELS_REQUESTED" PIPE_JUDGE_MODEL_REF="$JUDGE_MODEL_REQUESTED" \
+PIPE_REAUDIT_MODEL_REF="$REAUDIT_MODEL_REQUESTED" PIPE_TIEBREAK_MODEL_REF="$TIEBREAK_MODEL_REQUESTED" \
+PIPE_FINAL_AUDIT_MODEL_REF="$FINAL_AUDIT_MODEL_REQUESTED" PIPE_FINAL_JUDGE_MODEL_REF="$FINAL_JUDGE_MODEL_REQUESTED" \
 PIPE_DAILY_BUDGET="$DAILY_BUDGET" PIPE_JOBS="$JOBS" PIPE_OUT="$PIPELINE_DIR/effective.json" \
 PIPE_RUNS_PER_DAY="$RUNS_PER_DAY" PIPE_ESCALATIONS_PER_RUN="$ESCALATIONS_PER_RUN" \
 python3 - <<'PY'
@@ -262,6 +345,15 @@ out = {
     "AUR_SLEUTH_JUDGE_MODEL": e["PIPE_JUDGE_MODEL"],
     "AUR_SLEUTH_REAUDIT_MODEL": e["PIPE_REAUDIT_MODEL"],
     "AUR_SLEUTH_TIEBREAK_MODEL": e["PIPE_TIEBREAK_MODEL"],
+    "AUR_SLEUTH_FINAL_AUDIT_MODEL": e["PIPE_FINAL_AUDIT_MODEL"],
+    "AUR_SLEUTH_FINAL_JUDGE_MODEL": e["PIPE_FINAL_JUDGE_MODEL"],
+    "AUR_SLEUTH_MODEL_ALIASES": e["PIPE_MODEL_ALIASES"],
+    "AUR_SLEUTH_AUDIT_MODELS_REF": e["PIPE_AUDIT_MODELS_REF"],
+    "AUR_SLEUTH_JUDGE_MODEL_REF": e["PIPE_JUDGE_MODEL_REF"],
+    "AUR_SLEUTH_REAUDIT_MODEL_REF": e["PIPE_REAUDIT_MODEL_REF"],
+    "AUR_SLEUTH_TIEBREAK_MODEL_REF": e["PIPE_TIEBREAK_MODEL_REF"],
+    "AUR_SLEUTH_FINAL_AUDIT_MODEL_REF": e["PIPE_FINAL_AUDIT_MODEL_REF"],
+    "AUR_SLEUTH_FINAL_JUDGE_MODEL_REF": e["PIPE_FINAL_JUDGE_MODEL_REF"],
     "AUR_SLEUTH_DAILY_BUDGET": e["PIPE_DAILY_BUDGET"],
     "AUR_SLEUTH_RUNS_PER_DAY": e["PIPE_RUNS_PER_DAY"],
     "AUR_SLEUTH_ESCALATIONS_PER_RUN": e["PIPE_ESCALATIONS_PER_RUN"],
@@ -646,6 +738,8 @@ run_audit() {
     # wedged makepkg child cannot keep the process alive past the deadline.
     AUDIT_FAILURE_FATAL=true AUR_SLEUTH_ASCII_ICONS=1 \
         OPENAI_MODEL="$model" \
+        AUR_SLEUTH_MODEL_ALIASES="$MODEL_ALIASES" \
+        AUR_SLEUTH_MODEL_ALIAS="${ACTIVE_MODEL_ALIAS_BY_ID[$model]:-}" \
         AUR_SLEUTH_REPORT_DIR="$report_dir" \
         timeout --kill-after=30s "$deadline" \
         ./aur-sleuth --output plain "$pkg" 2>&1 || rc=$?
@@ -759,7 +853,7 @@ run_scout() {
     python3 bench/scout.py --catalog "$DATA_DIR/models-catalog.json" \
         --out "$DATA_DIR/bench/scout.json" --bench-dir "$DATA_DIR/bench" \
         --data-dir "$DATA_DIR" \
-        --seats "audit=$AUDIT_MODELS;judge=$JUDGE_MODEL;reaudit=$REAUDIT_MODEL,$TIEBREAK_MODEL" 2>&1 \
+        --seats "audit=$AUDIT_MODELS;judge=$JUDGE_MODEL,$FINAL_JUDGE_MODEL;reaudit=$REAUDIT_MODEL,$TIEBREAK_MODEL,$FINAL_AUDIT_MODEL" 2>&1 \
         || log "WARNING: the scout failed; the page keeps the old shortlist"
 }
 
@@ -820,13 +914,25 @@ run_advisory_sweep() {
 # and withdraws it when no model answered, and judge.sh removes a timed-out
 # one -- so its cost is never a stale one.
 escalate_one() {
-    local pkg="$1" model="$2"
+    local pkg="$1" model="$2" judge_model="${3:-$JUDGE_MODEL}"
+    AUR_SLEUTH_MODEL_ALIASES="$MODEL_ALIASES" \
+    AUR_SLEUTH_AUDIT_MODEL_ALIAS="${ACTIVE_MODEL_ALIAS_BY_ID[$model]:-}" \
+    AUR_SLEUTH_JUDGE_MODEL_ALIAS="${ACTIVE_MODEL_ALIAS_BY_ID[$judge_model]:-}" \
     bash bench/judge.sh --package "$pkg" --escalate \
-        --audit-model "$model" --judge-model "$JUDGE_MODEL" \
+        --audit-model "$model" --judge-model "$judge_model" \
         --audit-timeout "$AUDIT_TIMEOUT" 2>&1
     local report="$DATA_DIR/bulk-reports/${model//\//-}/aur-sleuth-report-${pkg}.txt"
     if [[ -f "$report" ]]; then
         record_cost "$(report_cost "$report")"
+    fi
+}
+
+ruling_model_for_audit() {
+    local model="$1"
+    if [[ "$model" == "$FINAL_AUDIT_MODEL" ]]; then
+        printf '%s\n' "$FINAL_JUDGE_MODEL"
+    else
+        printf '%s\n' "$JUDGE_MODEL"
     fi
 }
 
@@ -835,7 +941,7 @@ escalate_one() {
 # the page's own state rule, and which escalation model each has not yet
 # heard from; then each gets escalate_one. A package the fresh ruling
 # settles leaves the list; one that is still "look" gets the next round with
-# the other model; after ESCALATION_CAP escalations (the state rule's own
+# the next model; after ESCALATION_CAP escalations (the state rule's own
 # constant) it is "disputed", terminal, and never listed again -- so the
 # rounds are bounded by the cap, not by this loop. Named packages get one
 # round only: a person asked for one more look, not a campaign.
@@ -845,9 +951,9 @@ escalate_one() {
 # drains over the day's runs; a person's own escalation run passes nothing.
 run_escalation_rounds() {
     local named="${1:-}" cap="${2:-}"
-    local rounds=2 started=0
+    local rounds=3 started=0
     [[ -n "$named" ]] && rounds=1
-    local pick_flags=(--models "$REAUDIT_MODEL,$TIEBREAK_MODEL")
+    local pick_flags=(--models "$REAUDIT_MODEL,$TIEBREAK_MODEL,$FINAL_AUDIT_MODEL")
     [[ -n "$named" ]] && pick_flags+=(--packages "$named")
     local round line pkg model
     local notes="$PIPELINE_DIR/.escalation-notes"
@@ -870,8 +976,10 @@ run_escalation_rounds() {
             fi
             pkg="${line%%$'\t'*}"
             model="${line#*$'\t'}"
-            log "--- Escalating $pkg with $model ---"
-            escalate_one "$pkg" "$model"
+            local ruling_model
+            ruling_model="$(ruling_model_for_audit "$model")"
+            log "--- Escalating $pkg with $model; ruling with $ruling_model ---"
+            escalate_one "$pkg" "$model" "$ruling_model"
             started=$(( started + 1 ))
         done
     done
@@ -904,7 +1012,7 @@ main() {
     if [[ "$SEED_TOP" -gt 0 ]]; then
         log "Candidates: updated + top $SEED_TOP by popularity, interleaved at updated-share=$UPDATED_SHARE"
     fi
-    log "Models: ${MODEL_LIST[*]} | Judge: $JUDGE_MODEL | Escalation: $REAUDIT_MODEL, then $TIEBREAK_MODEL"
+    log "Models: ${MODEL_LIST[*]} | Judge: $JUDGE_MODEL | Escalation: $REAUDIT_MODEL, then $TIEBREAK_MODEL | Final: $FINAL_AUDIT_MODEL + $FINAL_JUDGE_MODEL judge"
     if [[ ${#FREE_MODEL_LIST[@]} -gt 0 ]]; then
         log "Free voices: ${FREE_MODEL_LIST[*]} (best effort, ${FREE_TIMEOUT}s deadline, failures are soft)"
     fi
@@ -1092,6 +1200,7 @@ main() {
         local judge_marker="$PIPELINE_DIR/.judge-start-marker"
         touch "$judge_marker"
 
+        AUR_SLEUTH_JUDGE_MODEL_ALIAS="${ACTIVE_MODEL_ALIAS_BY_ID[$JUDGE_MODEL]:-}" \
         bash bench/judge.sh --judge-model "$JUDGE_MODEL" 2>&1
 
         local judge_cost

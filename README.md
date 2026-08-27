@@ -212,6 +212,13 @@ What gets read: every file in the package's AUR repository -- the `PKGBUILD`, an
 `.install` hook, patches, local sources, and anything else the maintainer committed. The
 sources makepkg downloads are upstream's and are not read; the report records which of
 them the build functions invoke. See `CLAUDE.md` for the threat model behind that line.
+If source acquisition fails, the audit continues over the repository snapshot and records
+`source_fetch: failed`; a broken upstream download is not allowed to hide maintainer files.
+
+Model references may use aliases from `AUR_SLEUTH_MODEL_ALIASES`, whose format is
+`name=model;name=model`. For example, set `final=openai/gpt-5.4` and pass
+`--model @final`. Reports retain both the resolved concrete model ID and
+`model_alias: final`.
 
 The audit process is subject to a session token limit (default: 100,000 tokens) to manage API usage.
 

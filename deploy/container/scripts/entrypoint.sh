@@ -284,6 +284,9 @@ collect_audit_env_flags() {
         "AUR_SLEUTH_JUDGE_MODEL:--judge-model:model"
         "AUR_SLEUTH_REAUDIT_MODEL:--reaudit-model:model"
         "AUR_SLEUTH_TIEBREAK_MODEL:--tiebreak-model:model"
+        "AUR_SLEUTH_FINAL_AUDIT_MODEL:--final-audit-model:model"
+        "AUR_SLEUTH_FINAL_JUDGE_MODEL:--final-judge-model:model"
+        "AUR_SLEUTH_MODEL_ALIASES:--model-aliases:aliases"
         "AUR_SLEUTH_UPDATED_COUNT:--updated-count:int"
         "AUR_SLEUTH_SEED_COUNT:--seed-count:int"
         "AUR_SLEUTH_PACKAGES:--packages:packages"
@@ -324,11 +327,14 @@ collect_audit_env_flags() {
                 [[ "$value" =~ ^(0(\.[0-9]+)?|1(\.0+)?)$ ]] \
                     || die "$var must be between 0 and 1, got '$value'" ;;
             model)
-                [[ "$value" =~ ^[A-Za-z0-9._/:-]+$ ]] \
+                [[ "$value" =~ ^(@[A-Za-z][A-Za-z0-9_-]{0,39}|[A-Za-z0-9._/:-]+)$ ]] \
                     || die "$var is not a model name, got '$value'" ;;
             models)
-                [[ "$value" =~ ^[A-Za-z0-9._/:-]+(,[A-Za-z0-9._/:-]+)*$ ]] \
+                [[ "$value" =~ ^(@[A-Za-z][A-Za-z0-9_-]{0,39}|[A-Za-z0-9._/:-]+)(,(@[A-Za-z][A-Za-z0-9_-]{0,39}|[A-Za-z0-9._/:-]+))*$ ]] \
                     || die "$var is not a comma-separated model list, got '$value'" ;;
+            aliases)
+                [[ "$value" =~ ^[A-Za-z][A-Za-z0-9_-]{0,39}=[A-Za-z0-9._/:-]+(\;[A-Za-z][A-Za-z0-9_-]{0,39}=[A-Za-z0-9._/:-]+)*$ ]] \
+                    || die "$var is not a model alias mapping, got '$value'" ;;
             packages)
                 # The AUR's package-name charset; a name may not start with a
                 # hyphen, or it reads as a flag downstream.

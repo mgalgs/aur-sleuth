@@ -288,6 +288,7 @@ pkg = os.environ["JUDGE_PKG"]
 trigger = os.environ["JUDGE_TRIGGER"]
 report_files = os.environ["JUDGE_REPORT_FILES"].strip().split("\n")
 judge_model = os.environ["JUDGE_MODEL"]
+judge_model_alias = os.environ.get("AUR_SLEUTH_JUDGE_MODEL_ALIAS", "")
 judge_dir = os.environ["JUDGE_DIR"]
 
 base_url = os.environ.get("OPENAI_BASE_URL", "https://openrouter.ai/api/v1")
@@ -441,6 +442,8 @@ try:
         "completion_tokens": ct,
         "cost": cost,
     }
+    if judge_model_alias:
+        result["_judge_usage"]["model_alias"] = judge_model_alias
 
     # Record which audits were judged (reconstruct branch filenames from frontmatter)
     audits_judged = []
@@ -555,6 +558,8 @@ do_reaudit() {
     local rc=0
     AUDIT_FAILURE_FATAL=true AUR_SLEUTH_ASCII_ICONS=1 \
         OPENAI_MODEL="$AUDIT_MODEL" \
+        AUR_SLEUTH_MODEL_ALIASES="${AUR_SLEUTH_MODEL_ALIASES:-}" \
+        AUR_SLEUTH_MODEL_ALIAS="${AUR_SLEUTH_AUDIT_MODEL_ALIAS:-}" \
         AUR_SLEUTH_REPORT_DIR="$report_dir" \
         AUR_SLEUTH_TRIGGERED_BY="$triggered_by" \
         timeout --kill-after=30s "$AUDIT_TIMEOUT" \

@@ -171,9 +171,10 @@ def compute_majority(results):
 
 # How many escalation audits a package gets before the pipeline stops paying
 # for opinions. Each escalation is a fresh audit by a model that has not yet
-# read the package, followed by a fresh judge ruling; when that many have not
-# settled it, the models disagree and no further call will change that.
-ESCALATION_CAP = 2
+# read the package, followed by a fresh judge ruling. The third is the bounded
+# final-resolution cycle; when all three have not settled it, the models
+# disagree and no further call will change that.
+ESCALATION_CAP = 3
 
 
 def package_state(ps):
@@ -341,7 +342,8 @@ def read_escalation_settings(path):
         return empty
 
     models = []
-    for key in ("AUR_SLEUTH_REAUDIT_MODEL", "AUR_SLEUTH_TIEBREAK_MODEL"):
+    for key in ("AUR_SLEUTH_REAUDIT_MODEL", "AUR_SLEUTH_TIEBREAK_MODEL",
+                "AUR_SLEUTH_FINAL_AUDIT_MODEL"):
         v = data.get(key)
         if isinstance(v, str) and v and len(v) <= 200:
             models.append(v)
@@ -446,6 +448,7 @@ def build_index_data(audits, judges, now=None, coverage_inputs=None, escalation_
             "filename": a["filename"],
             "result": fm.get("result", "unknown"),
             "model": fm.get("model", "unknown"),
+            "model_alias": fm.get("model_alias", ""),
             "cost": safe_float(fm.get("cost")),
             "date": fm.get("date", ""),
             "execution_time": safe_float(fm.get("execution_time")),
@@ -486,6 +489,7 @@ def build_index_data(audits, judges, now=None, coverage_inputs=None, escalation_
             "false_positives": data.get("false_positives", []),
             "false_negatives": data.get("false_negatives", []),
             "model": usage.get("model", "unknown"),
+            "model_alias": usage.get("model_alias", ""),
             "cost": usage.get("cost") or 0,
             # For folding, below; dropped before the summary is built.
             "_ruling": (tuple(data.get("audits_judged") or []), data.get("reasoning", "")),
@@ -548,11 +552,15 @@ def build_index_data(audits, judges, now=None, coverage_inputs=None, escalation_
             "audit_count": len(pkg_audits),
             "files_reviewed": latest.get("files_reviewed", 0),
             "audits": [
-                {"result": a["result"], "model": a["model"], "reaudit": bool(a.get("triggered_by")),
+                {"result": a["result"], "model": a["model"],
+                 **({"model_alias": a["model_alias"]} if a.get("model_alias") else {}),
+                 "reaudit": bool(a.get("triggered_by")),
                  **({"advisory": True} if a.get("advisory") else {})}
                 for a in pkg_audits
             ],
-            "judges": [{"verdict": j["correct_verdict"], "model": j.get("model", "unknown")} for j in pkg_data["judges"]],
+            "judges": [{"verdict": j["correct_verdict"], "model": j.get("model", "unknown"),
+                        **({"model_alias": j["model_alias"]} if j.get("model_alias") else {})}
+                       for j in pkg_data["judges"]],
             "audit_majority": compute_majority(audit_results),
             "judge_majority": compute_majority(judge_verdicts),
             # The ruling that read the most evidence. Judge files sort by

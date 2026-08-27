@@ -95,11 +95,12 @@ audits = [
     # r: two distinct models unsafe, the judge agrees.
     audit("r", "q/cheap", "unsafe", "2026-08-23T10:00:00Z"),
     audit("r", "d/cheap", "unsafe", "2026-08-23T10:01:00Z"),
-    # s: flagged, escalated twice, still flagged.
+    # s: flagged through ordinary escalation, tiebreak, and final resolution.
     audit("s", "q/cheap", "unsafe", "2026-08-23T10:00:00Z"),
     audit("s", "d/cheap", "safe", "2026-08-23T10:01:00Z"),
     audit("s", "a/strong", "safe", "2026-08-24T09:00:00Z", triggered_by="s/x-judge.json"),
     audit("s", "o/strong", "safe", "2026-08-24T11:00:00Z", triggered_by="s/y-judge.json"),
+    audit("s", "f/final", "safe", "2026-08-24T13:00:00Z", triggered_by="s/z-judge.json"),
 ]
 p_judged = ["20260823-110000-q-cheap.md", "20260823-110100-d-cheap.md"]
 judges = [
@@ -110,6 +111,7 @@ judges = [
     judge("s", "20260823-120000", "unsafe", ["x", "y"], "bad"),
     judge("s", "20260824-090100", "unsafe", ["x", "y", "z"], "still bad"),
     judge("s", "20260824-110100", "unsafe", ["x", "y", "z", "w"], "still bad, really"),
+    judge("s", "20260824-130100", "unsafe", ["x", "y", "z", "w", "v"], "final models still disagree"),
 ]
 index = gd.build_index_data(audits, judges, now)
 P, R, S = index["packages"]["p"], index["packages"]["r"], index["packages"]["s"]
@@ -122,8 +124,8 @@ check("escalations counts triggered_by audits", P["escalations"] == 1, P["escala
 check("an advisory unsafe counts nowhere", P["unsafe_models"] == 1 and P["audit_majority"] == "safe")
 check("p is clean: the latest ruling cleared it", P["state"] == "clean", P["state"])
 check("r is confirmed: two models, judge agrees", R["state"] == "confirmed", R["state"])
-check("s is disputed: two escalations, still flagged", S["state"] == "disputed", S["state"])
-check("s kept every distinct ruling", len(S["judges"]) == 3, S["judges"])
+check("s is disputed: final resolution stayed flagged", S["state"] == "disputed", S["state"])
+check("s kept every distinct ruling", len(S["judges"]) == 4, S["judges"])
 check("the week's package counts carry disputed",
       index["summary"]["week"]["packages"].get("disputed") == 1, index["summary"]["week"]["packages"])
 check("package_states carries every state",
@@ -171,7 +173,7 @@ check("a name with no reports is skipped, not crashed",
 # is left out" above), so it is not actually waiting in line. It must not
 # get a queue_position, and the packages after it must be numbered without
 # a gap for the one that was skipped.
-esc_models = ["a/strong", "o/strong"]
+esc_models = ["a/strong", "o/strong", "f/final"]
 q_audits = [
     audit("zzz-look", "q/cheap", "unsafe", "2026-08-23T10:00:00Z"),
     audit("aaa-look", "q/cheap", "unsafe", "2026-08-23T10:00:00Z"),
@@ -181,6 +183,7 @@ q_audits = [
     audit("mmm-look", "q/cheap", "unsafe", "2026-08-23T10:00:00Z"),
     audit("mmm-look", "a/strong", "unsafe", "2026-08-23T10:01:00Z"),
     audit("mmm-look", "o/strong", "unsafe", "2026-08-23T10:02:00Z"),
+    audit("mmm-look", "f/final", "unsafe", "2026-08-23T10:03:00Z"),
     # nnn-look has heard from only one of the two -- still queued.
     audit("nnn-look", "q/cheap", "unsafe", "2026-08-23T10:00:00Z"),
     audit("nnn-look", "a/strong", "unsafe", "2026-08-24T09:00:00Z", triggered_by="j1"),
@@ -188,6 +191,7 @@ q_audits = [
     audit("disputed-pkg", "q/cheap", "unsafe", "2026-08-23T10:00:00Z"),
     audit("disputed-pkg", "a/strong", "safe", "2026-08-24T09:00:00Z", triggered_by="j2"),
     audit("disputed-pkg", "o/strong", "safe", "2026-08-24T10:00:00Z", triggered_by="j3"),
+    audit("disputed-pkg", "f/final", "safe", "2026-08-24T11:00:00Z", triggered_by="j4"),
 ]
 q_judges = [
     # Without a judge ruling unsafe, the two "safe" escalations would
@@ -273,6 +277,7 @@ check("junk values (wrong types, an oversized model string) are dropped",
           "AUR_SLEUTH_RUNS_PER_DAY": "3.5",
           "AUR_SLEUTH_REAUDIT_MODEL": "x" * 201,
           "AUR_SLEUTH_TIEBREAK_MODEL": ["not", "a", "string"],
+          "AUR_SLEUTH_FINAL_AUDIT_MODEL": None,
       }))) == empty)
 check("a good file parses cleanly",
       gd.read_escalation_settings(esc_file("good.json", json.dumps({
@@ -280,7 +285,9 @@ check("a good file parses cleanly",
           "AUR_SLEUTH_RUNS_PER_DAY": "6",
           "AUR_SLEUTH_REAUDIT_MODEL": "a/strong",
           "AUR_SLEUTH_TIEBREAK_MODEL": "o/strong",
-      }))) == {"per_run": 3, "runs_per_day": 6, "models": ["a/strong", "o/strong"]})
+          "AUR_SLEUTH_FINAL_AUDIT_MODEL": "f/final",
+      }))) == {"per_run": 3, "runs_per_day": 6,
+                "models": ["a/strong", "o/strong", "f/final"]})
 
 shutil.rmtree(esc_dir)
 

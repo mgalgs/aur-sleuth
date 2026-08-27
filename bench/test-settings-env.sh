@@ -74,6 +74,11 @@ expect_flags "--jobs 4" AUR_SLEUTH_JOBS=4
 expect_flags "--reaudit-model anthropic/claude-sonnet-4.6" \
     AUR_SLEUTH_REAUDIT_MODEL=anthropic/claude-sonnet-4.6
 expect_flags "--tiebreak-model openai/gpt-5.4" AUR_SLEUTH_TIEBREAK_MODEL=openai/gpt-5.4
+expect_flags "--final-audit-model @final" AUR_SLEUTH_FINAL_AUDIT_MODEL=@final
+expect_flags "--final-judge-model anthropic/claude-opus-4.8" \
+    AUR_SLEUTH_FINAL_JUDGE_MODEL=anthropic/claude-opus-4.8
+expect_flags "--model-aliases cheap=deepseek/deepseek-v4-flash;final=openai/gpt-5.4" \
+    'AUR_SLEUTH_MODEL_ALIASES=cheap=deepseek/deepseek-v4-flash;final=openai/gpt-5.4'
 expect_flags "--audit-models qwen/qwen3-235b-a22b-2507,deepseek/deepseek-v4-flash" \
     AUR_SLEUTH_AUDIT_MODELS=qwen/qwen3-235b-a22b-2507,deepseek/deepseek-v4-flash
 expect_flags "--daily-budget 1.00 --jobs 2" \
@@ -110,6 +115,8 @@ expect_refused 'AUR_SLEUTH_JUDGE_MODEL=a b'
 # shellcheck disable=SC2016  # the literal text is the point
 expect_refused 'AUR_SLEUTH_JUDGE_MODEL=$(id)'
 expect_refused 'AUR_SLEUTH_TIEBREAK_MODEL=a b'
+expect_refused 'AUR_SLEUTH_MODEL_ALIASES=bad'
+expect_refused 'AUR_SLEUTH_MODEL_ALIASES=x=$(id)'
 expect_refused "AUR_SLEUTH_AUDIT_MODELS=a,,b"
 expect_refused "AUR_SLEUTH_AUDIT_MODELS=a,"
 expect_refused "AUR_SLEUTH_UPDATED_SHARE=abc"
