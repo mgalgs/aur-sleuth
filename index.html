@@ -20,6 +20,9 @@
     color-scheme: dark;
     --bg: #0f1218;
     --panel: #151a22;
+    /* One step above --panel, for a row that highlights inside a card:
+       --panel on --panel is no highlight at all. */
+    --panel-2: #1c222c;
     --ink: #0b0e13;
     --line: #242b36;
     --line-2: #2f3846;
@@ -80,6 +83,48 @@ code { font-family: var(--mono); }
 
 .hidden { display: none !important; }
 
+/* ---- cards ---- */
+
+/* Each idea in its own panel. The page carries a lot of numbers on purpose,
+   and the density is not the problem -- the problem was that all of it sat
+   on one flat surface, so nothing told the eye where one idea ended. A card
+   edge does that without taking a single number away. The hairline rules
+   that used to separate the sections are gone; the edge is the separator. */
+.card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px 12px;
+}
+@media (min-width: 640px) { .card { padding: 16px 20px; border-radius: 12px; } }
+
+/* A card whose body is folded away. The reference material -- how a verdict
+   is reached, what is open source -- is worth having and is not worth 1,400
+   pixels of a first visit, so it opens on one line that says what is inside.
+   The marker matches the table's sort arrows: the page has one arrow. */
+.fold > summary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 10px;
+    cursor: pointer;
+    list-style: none;
+}
+.fold > summary::-webkit-details-marker { display: none; }
+.fold > summary::before { content: '▸'; color: var(--muted); font-size: 11px; }
+.fold[open] > summary::before { content: '▾'; }
+.fold > summary h2 {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+.fold > summary .teaser { font-size: 12px; color: var(--text-2); }
+.fold > summary:hover h2, .fold > summary:hover .teaser { color: var(--text); }
+.fold[open] > summary { margin-bottom: 12px; }
+@media (min-width: 640px) { .fold > summary .teaser { font-size: 13px; } }
+
 /* ---- text roles ---- */
 
 .mono { font-family: var(--mono); }
@@ -112,6 +157,7 @@ code { font-family: var(--mono); }
     display: flex;
     align-items: baseline;
     justify-content: space-between;
+    flex-wrap: wrap;
     gap: 12px;
 }
 .brand { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
@@ -138,7 +184,22 @@ code { font-family: var(--mono); }
 /* ---- the answer ---- */
 
 .answer { display: flex; flex-direction: column; gap: 8px; }
+
+/* One question, and what the data says back, before any number. */
+.verdict { display: flex; flex-direction: column; gap: 1px; }
+.verdict .q { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.verdict .a { font-size: 23px; font-weight: 650; letter-spacing: -0.02em; line-height: 1.2; }
+.verdict .sub { font-size: 13px; color: var(--text-2); }
+@media (min-width: 640px) {
+    .verdict .a { font-size: 30px; }
+    .verdict .sub { font-size: 14px; }
+}
+
 .headline { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; }
+/* The state counts as one wrapping line rather than a tile each: the same
+   numbers, the same links, a fraction of the furniture. */
+.states-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; font-size: 13px; color: var(--muted); }
+.states-line .n { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--text-2); }
 .stat {
     display: inline-flex;
     align-items: baseline;
@@ -190,29 +251,10 @@ code { font-family: var(--mono); }
 .count-link { background: none; border: 0; padding: 0; font: inherit; cursor: pointer; }
 .count-link:hover, .count-link:focus-visible { text-decoration: underline; }
 
-.chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
-.chips .lead { font-size: 12px; color: var(--muted); }
-.chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    height: 26px;
-    padding: 0 8px;
-    border: 1px solid var(--line-2);
-    border-radius: 4px;
-    background: none;
-    font-family: var(--mono);
-    font-size: 12px;
-    color: var(--text);
-    cursor: pointer;
-}
-.chip:hover { border-color: var(--muted); }
-.chip .chip-date { color: var(--dim); }
-@media (min-width: 640px) {
-    .week { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
-    .chips { margin-top: 0; margin-left: 6px; }
-    .chip { height: 24px; }
-}
+/* The week line is a sentence now, so it flows as one. It used to be a flex
+   row of dot-separated fragments; the gap that separated those put a space
+   in front of every comma once the fragments became clauses. */
+@media (min-width: 640px) { .week { font-size: 14px; } }
 
 /* ---- the small squares: one per report ---- */
 
@@ -248,6 +290,65 @@ code { font-family: var(--mono); }
 }
 .sqs { display: inline-flex; flex-wrap: wrap; gap: 3px; max-width: 96px; padding-top: 3px; }
 @media (min-width: 640px) { .sqs { max-width: none; padding-top: 0; } }
+
+/* ---- audits a day ---- */
+
+/* One bar per day over a fixed window, including the days nothing ran. The
+   quiet days are the point: summary.by_date holds only the days something
+   happened, so a bar per entry would draw six idle weeks as continuous
+   work. Grayscale, because volume is not a state and only state is
+   coloured on this page. */
+/* Capped, because it is a sparkline beside a sentence and not a chart in
+   its own right: across a full desktop width 30 bars are wider than they
+   are tall, which reads as a table of blocks rather than a trend. */
+.days { display: flex; flex-direction: column; gap: 4px; max-width: 34rem; }
+.day-strip { display: flex; align-items: flex-end; gap: 1px; height: 34px; }
+/* No track behind the bar: at 30 columns a full-height track for every
+   quiet day merged into one solid block that read as a bar itself. A quiet
+   day is a dim tick on the baseline instead. */
+.day { flex: 1 1 0; min-width: 0; height: 100%; display: flex; align-items: flex-end; }
+.day-fill { display: block; width: 100%; background: var(--text-2); border-radius: 1px; }
+.day-fill.none { background: var(--line-2); }
+.day-axis { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 10px; font-family: var(--mono); font-size: 11px; color: var(--dim); }
+@media (min-width: 640px) { .day-strip { height: 44px; gap: 2px; } }
+
+/* ---- every package as one square ---- */
+
+/* One cell per package, coloured by state and by nothing else, newest audit
+   first. It is the state bar with a second dimension: the same proportions,
+   plus when each verdict landed and which package each cell is. At ~1,300
+   packages almost every cell is one of the two grays, and that is the point
+   -- "this much has been read, and this is the part nothing has settled" in
+   one glance, with the exceptions impossible to miss.
+
+   The columns are auto-filled by CSS, so the grid reflows to any width with
+   no JavaScript and no measuring; aspect-ratio keeps the cells square as
+   they stretch to a flush right edge. GRID_CAP in app.js bounds how many
+   are drawn -- see the comment there for what happens as the corpus grows. */
+.squares { display: flex; flex-direction: column; gap: 8px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(7px, 1fr)); gap: 2px; }
+.grid-cell { aspect-ratio: 1 / 1; border-radius: 1.5px; cursor: pointer; }
+.grid-cell:hover { outline: 1.5px solid var(--white); outline-offset: 1px; }
+
+/* The same five names, the same five colours, as everywhere else. */
+.gc-clean { background: var(--clean); }
+.gc-unknown { background: var(--none); }
+.gc-look { background: var(--look); }
+.gc-disputed { background: var(--disputed); }
+.gc-confirmed { background: var(--bad); }
+
+.grid-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; font-size: 11px; color: var(--muted); }
+.grid-legend > span { display: inline-flex; align-items: center; gap: 5px; }
+.grid-hint { color: var(--dim); }
+@media (min-width: 640px) {
+    .grid { grid-template-columns: repeat(auto-fill, minmax(10px, 1fr)); gap: 3px; }
+    .grid-cell { border-radius: 2px; }
+    .grid-legend { font-size: 12px; gap: 4px 14px; }
+    .grid-hint { margin-left: auto; }
+}
+@media (min-width: 1024px) {
+    .grid { grid-template-columns: repeat(auto-fill, minmax(11px, 1fr)); }
+}
 
 /* ---- coverage ---- */
 
@@ -398,8 +499,10 @@ code { font-family: var(--mono); }
 .detail-state { display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
 .detail-state .state { font-weight: 600; }
 .detail-state .why { color: var(--text-2); }
+.detail-state .next { color: var(--muted); }
 @media (min-width: 640px) {
     .detail-state { flex-direction: row; flex-wrap: wrap; align-items: baseline; gap: 12px; }
+    .detail-state .next { flex-basis: 100%; }
 }
 .detail-link { font-family: var(--mono); font-size: 11px; color: var(--dim); }
 .detail-link:hover { color: var(--muted); }
@@ -516,30 +619,393 @@ code { font-family: var(--mono); }
 .bars .value { font-family: var(--mono); font-size: 11px; font-variant-numeric: tabular-nums; color: var(--muted); }
 .bars .empty { grid-column: 1 / -1; text-align: center; }
 @media (min-width: 640px) { .bars .label, .bars .value { font-size: 12px; } .bars .label { max-width: none; } }
+
+/* ---- two views of one document ---- */
+
+/* The hash is the state: "" is the overview, #packages is the table. The
+   page is one file (the publish gate allows no second one), so a view is a
+   class on <body> and a section belongs to one view or to both. */
+body[data-view="overview"] .only-packages { display: none !important; }
+body[data-view="packages"] .only-overview { display: none !important; }
+
+.nav { display: flex; gap: 2px; order: 3; width: 100%; border-bottom: 1px solid var(--line); }
+.nav a {
+    padding: 6px 10px 7px;
+    margin-bottom: -1px;
+    font-size: 13px;
+    color: var(--muted);
+    border-bottom: 2px solid transparent;
+}
+.nav a:hover { color: var(--text); text-decoration: none; }
+.nav a.active { color: var(--text); font-weight: 600; border-bottom-color: var(--text); }
+@media (min-width: 640px) {
+    .masthead { flex-wrap: nowrap; }
+    .nav { order: 0; width: auto; border-bottom: 0; margin-left: 4px; margin-right: auto; }
+    .nav a { padding: 3px 9px; margin: 0; border: 0; border-radius: 4px; }
+    .nav a.active { background: var(--panel); }
+}
+
+.lede { max-width: 46rem; font-size: 14px; line-height: 1.5; color: var(--text-2); margin-bottom: 6px; }
+@media (min-width: 640px) { .lede { font-size: 15px; } }
+
+/* A section heading, in the footer's voice: the page has one kind of label. */
+.sec-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; }
+.sec-head h2 { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.sec-head .meta { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.sec-head .btn { margin-left: auto; }
+
+/* ---- how a verdict is reached ---- */
+
+/* The diagram beside its prose. On a phone the diagram comes first, at the
+   width it was drawn for; on a wide screen the two sit side by side. */
+.explain {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+}
+.explain .sec-head, .explain .meta { grid-column: 1 / -1; }
+.explain .dg { max-width: 440px; justify-self: center; }
+.steps {
+    margin: 0;
+    padding-left: 1.3em;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-width: 40rem;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--text-2);
+}
+.steps li::marker { color: var(--muted); font-family: var(--mono); }
+.steps strong { color: var(--text); font-weight: 600; }
+.prose-col { display: flex; flex-direction: column; gap: 8px; max-width: 40rem; font-size: 13px; line-height: 1.5; color: var(--text-2); }
+.prose-col a { text-decoration: underline; text-decoration-color: var(--dim); text-underline-offset: 2px; }
+@media (min-width: 768px) {
+    .explain { grid-template-columns: minmax(0, 420px) minmax(0, 1fr); gap: 14px 32px; align-items: start; }
+    .explain .dg { justify-self: start; }
+    .steps, .prose-col { font-size: 14px; }
+}
+
+/* The diagrams are inline SVG drawn at 360 wide, so a phone shows them at
+   the size they were drawn. Every colour is a page variable: the diagram
+   is in the page's palette, and follows it. */
+.dg { display: block; width: 100%; height: auto; font-family: var(--sans); }
+.dg text { fill: var(--text-2); font-size: 11px; }
+.dg .h { fill: var(--text); font-size: 13px; font-weight: 650; }
+.dg .h.dim { fill: var(--muted); }
+.dg .h2 { fill: var(--text); font-size: 11px; font-weight: 600; }
+.dg .m { fill: var(--muted); font-size: 9.5px; }
+.dg .s { fill: var(--text-2); font-size: 9.5px; }
+.dg .p { font-size: 10px; font-weight: 650; }
+.dg .tag { fill: var(--muted); font-family: var(--mono); font-size: 9px; letter-spacing: 0.05em; }
+.dg .mono { fill: var(--text); font-family: var(--mono); font-size: 10.5px; }
+.dg .mid { text-anchor: middle; }
+.dg .end { text-anchor: end; }
+.dg .box { fill: var(--panel); stroke: var(--line-2); }
+.dg .box-in { fill: var(--bg); stroke: var(--line-2); }
+.dg .box-dash { fill: none; stroke: var(--dim); stroke-dasharray: 3 3; }
+.dg .box-priv { fill: var(--ink); stroke: var(--line-2); stroke-dasharray: 5 3; }
+.dg .pill { fill: var(--bg); stroke: var(--line-2); }
+.dg .pill-look { stroke: var(--look); }
+.dg .pill-bad { stroke: var(--bad); }
+.dg .pill-disputed { stroke: var(--disputed); }
+.dg .t-clean { fill: var(--clean); }
+.dg .t-none { fill: var(--muted); }
+.dg .t-look { fill: var(--look); }
+.dg .t-bad { fill: var(--bad); }
+.dg .t-disputed { fill: var(--disputed); }
+.dg .arrow { fill: none; stroke: var(--muted); stroke-width: 1.2; marker-end: url(#ah1); }
+.dg-open .arrow { marker-end: url(#ah2); }
+.dg marker path { fill: var(--muted); }
+.dg .loop { stroke-dasharray: 3 3; }
+.dg .edge { fill: none; stroke: var(--muted); stroke-width: 1.2; }
+.dg .edge-adv { stroke-dasharray: 3 3; }
+
+/* ---- recent audits ---- */
+
+.recent { display: flex; flex-direction: column; gap: 6px; }
+.recent-list { display: flex; flex-direction: column; }
+.recent-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+    width: 100%;
+    padding: 8px 6px;
+    background: none;
+    border: 0;
+    border-bottom: 1px solid var(--line-soft);
+    text-align: left;
+    cursor: pointer;
+}
+.recent-row:hover { background: var(--panel-2); }
+.recent-list > li:last-child .recent-row { border-bottom: 0; }
+.rr-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.rr-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; }
+.rr-name { font-family: var(--mono); font-size: 13px; color: var(--text); overflow-wrap: anywhere; }
+.rr-state { font-size: 12px; font-weight: 600; }
+.rr-date { font-family: var(--mono); font-size: 11px; color: var(--dim); }
+.rr-why { font-size: 12px; color: var(--muted); line-height: 1.4; }
+.rr-sq { display: flex; align-items: center; gap: 8px; flex-shrink: 0; padding-top: 3px; }
+.rr-sq .vsep { width: 1px; height: 12px; background: var(--line-2); }
+@media (min-width: 640px) {
+    .recent-row { align-items: center; padding: 7px 10px; }
+    .rr-main { flex-direction: row; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; }
+    .rr-name { min-width: 14rem; }
+    .rr-why { font-size: 12.5px; }
+}
 </style>
 </head>
-<body>
+<body data-view="overview">
     <div class="page">
         <header class="masthead">
             <div class="brand">
                 <h1>AUR Sleuth</h1>
                 <span class="tagline">Supply-chain audits of AUR packages</span>
             </div>
+            <!-- Two views of one document: the overview, and the table. The
+                 hash is the state, so either is a link. -->
+            <nav class="nav" aria-label="Views">
+                <a href="#" data-view="overview">Overview</a>
+                <a href="#packages" data-view="packages">Packages</a>
+            </nav>
             <div class="masthead-meta">
                 <span id="generated-at"></span>
                 <a href="https://github.com/mgalgs/aur-sleuth">GitHub</a>
             </div>
         </header>
 
-        <!-- The answer first. Each number filters the table; the bar is the
-             same four counts as one line. Then what this week added. -->
-        <section class="answer">
+        <!-- The answer first. Each number opens the table filtered to exactly
+             the packages it counts; the bar is the same counts as one line.
+             Then what this week added. Shared by both views. -->
+        <section class="answer card">
+            <!-- The answer before the numbers: one question, and what the
+                 data says back. The claim is scoped to what has actually
+                 been read -- this has seen a fraction of the AUR -- so the
+                 second line always names the total it is talking about. -->
+            <div class="verdict">
+                <span class="q">Anything malicious?</span>
+                <p id="verdict-answer" class="a"></p>
+                <p id="verdict-sub" class="sub"></p>
+            </div>
+            <p class="lede only-overview">Independent models read every file an AUR maintainer committed &mdash; the <code>PKGBUILD</code>, the <code>.install</code> hooks, the patches &mdash; looking for one thing: code injected into the packaging. They vote, and a stronger model rules on anything they flag. The application itself is never judged.</p>
             <div id="headline" class="headline"></div>
-            <div id="state-bar" class="state-bar" role="img"></div>
+            <!-- The bar is the table view's summary. On the overview the grid
+                 below says the same thing with more in it, so only one of the
+                 two is ever on screen. -->
+            <div id="state-bar" class="state-bar only-packages" role="img"></div>
             <div id="activity" class="week"></div>
+            <!-- The week's audit count, as a shape. -->
+            <div id="days" class="days only-overview"></div>
         </section>
 
-        <section class="toolbar">
+        <!-- Every audited package as one square, newest audit first. The
+             state bar with a second dimension: the same proportions, plus
+             when each verdict landed and which package each cell is. -->
+        <section class="squares card only-overview">
+            <div class="sec-head">
+                <h2>Every package audited</h2>
+                <span id="grid-note" class="meta"></span>
+            </div>
+            <div id="package-grid" class="grid" role="img"></div>
+            <div id="grid-legend" class="grid-legend"></div>
+        </section>
+
+        <!-- How a verdict is reached: one diagram, and the same stages as
+             prose beside it. The diagram is static markup; nothing from
+             data.json goes into it. -->
+        <section class="card only-overview">
+          <details class="fold">
+            <summary>
+                <h2>How a verdict is reached</h2>
+                <span class="teaser">Cheap models read every committed file and vote; a stronger one rules on anything they flag.</span>
+            </summary>
+            <div class="explain">
+            <span id="evidence-line" class="meta"></span>
+            <!-- Drawn on a 360-wide grid: the main column is x 16..204, the
+                 verdict pills x 224..346, and a stage is a box in the main
+                 column with its exits as pills to the right. Adding a stage
+                 means inserting a box and moving everything below it down
+                 by its height; the audit row is the one part drawn by code. -->
+            <svg class="dg dg-pipeline" viewBox="0 0 360 516" role="img" aria-labelledby="dg1-title">
+                <title id="dg1-title">The pipeline: the AUR repository is read and upstream sources are not; each model on the audit seat reads every file and votes, and advisory models are read but never counted; a judge rules on flags; escalation adds a fresh audit and ruling up to twice; every verdict is published.</title>
+                <defs>
+                    <marker id="ah1" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                        <path d="M0,0 L8,4 L0,8 z"/>
+                    </marker>
+                </defs>
+
+                <!-- 1. the boundary -->
+                <rect class="box" x="16" y="6" width="188" height="74" rx="4"/>
+                <text class="h" x="26" y="24">The AUR repository</text>
+                <text x="26" y="41">PKGBUILD, .install hooks,</text>
+                <text x="26" y="54">patches, helper scripts:</text>
+                <text x="26" y="67">every committed file is read</text>
+
+                <rect class="box-dash" x="226" y="6" width="118" height="74" rx="4"/>
+                <text class="h dim" x="236" y="24">Upstream</text>
+                <text class="m" x="236" y="41">what makepkg</text>
+                <text class="m" x="236" y="54">downloads is theirs,</text>
+                <text class="m" x="236" y="67">and is never read</text>
+
+                <!-- 2. the audit. One box per model, drawn from the data
+                     by renderPipelineModels(): the same box whether the
+                     model votes or only advises; the edges differ. The bus
+                     from the repository, the boxes at y 100..144, and the
+                     edges into the reports box are all in this group. -->
+                <g id="dg-models"></g>
+
+                <rect class="box" x="16" y="176" width="188" height="78" rx="4"/>
+                <text class="h" x="26" y="194">The reports</text>
+                <text x="26" y="209">one verdict per voting model,</text>
+                <text x="26" y="222">with the lines that earned it</text>
+                <text class="s" x="26" y="237">&#x21bb; second look: any accusing verdict</text>
+                <text class="s" x="26" y="248">is asked again, kept only if it softens</text>
+
+                <path class="arrow" d="M204,198 H222"/>
+                <rect class="pill" x="224" y="182" width="122" height="32" rx="8"/>
+                <text class="p t-clean" x="234" y="196">clean</text>
+                <text class="m" x="234" y="208">every vote said safe</text>
+
+                <path class="arrow" d="M204,236 H222"/>
+                <rect class="pill" x="224" y="220" width="122" height="32" rx="8"/>
+                <text class="p t-none" x="234" y="234">no verdict</text>
+                <text class="m" x="234" y="246">no answer either way</text>
+
+                <path class="arrow" d="M110,254 V284"/>
+                <text class="m" x="118" y="268">they disagree, or</text>
+                <text class="m" x="118" y="280">agree on a warning</text>
+
+                <!-- 3. the judge -->
+                <rect class="box" x="16" y="286" width="188" height="56" rx="4"/>
+                <text class="h" x="26" y="304">Judge</text>
+                <text x="26" y="319">a stronger model reads every</text>
+                <text x="26" y="332">report there is, and rules</text>
+
+                <path class="arrow" d="M204,314 H222"/>
+                <rect class="pill" x="224" y="298" width="122" height="32" rx="8"/>
+                <text class="p t-clean" x="234" y="312">clean</text>
+                <text class="m" x="234" y="324">the judge cleared it</text>
+
+                <path class="arrow" d="M110,342 V372"/>
+                <text class="m end" x="102" y="362">still flagged</text>
+                <path class="arrow" d="M110,358 H222"/>
+                <rect class="pill pill-look" x="224" y="342" width="122" height="32" rx="8"/>
+                <text class="p t-look" x="234" y="356">worth a closer look</text>
+                <text class="m" x="234" y="368">not settled yet</text>
+
+                <!-- 4. escalation, which loops back into the judge -->
+                <rect class="box" x="16" y="374" width="188" height="88" rx="4"/>
+                <text class="h" x="26" y="392">Escalation</text>
+                <text x="26" y="407">a fresh audit by a stronger</text>
+                <text x="26" y="420">model that has not read it,</text>
+                <text x="26" y="433">then a fresh ruling</text>
+                <text class="s" x="26" y="452">&#x21bb; two rounds at most, then it stops</text>
+                <path class="arrow loop" d="M16,440 H8 V314 H14"/>
+
+                <path class="arrow" d="M204,396 H222"/>
+                <rect class="pill pill-bad" x="224" y="380" width="122" height="32" rx="8"/>
+                <text class="p t-bad" x="234" y="394">confirmed malicious</text>
+                <text class="m" x="234" y="406">2 models + judge agree</text>
+
+                <path class="arrow" d="M204,436 H222"/>
+                <rect class="pill pill-disputed" x="224" y="420" width="122" height="32" rx="8"/>
+                <text class="p t-disputed" x="234" y="434">models disagree</text>
+                <text class="m" x="234" y="446">split after two rounds</text>
+
+                <!-- 5. published -->
+                <path class="arrow" d="M110,462 V476"/>
+                <path class="arrow" d="M285,452 V476"/>
+                <rect class="box" x="16" y="478" width="328" height="30" rx="4"/>
+                <text class="mid" x="180" y="497">every report, ruling and quoted line is published here</text>
+            </svg>
+            <ol class="steps">
+                <li><strong>The boundary.</strong> Only the files in the package&rsquo;s AUR repository are read &mdash; every one of them, wherever it sits, whatever it is called. What <code>makepkg</code> downloads from upstream is upstream&rsquo;s and is never read: a malicious upstream is not an AUR attack, and an AUR maintainer cannot inject into it.</li>
+                <li><strong>The audits.</strong> Cheap models &mdash; two or more, so they can disagree &mdash; each read every file on their own and return a verdict with the lines that earned it. Free models add advisory reads: the same audit, but the judge only reads it and it counts toward nothing. Any verdict that accuses is asked once more against the rules and kept only if it softens &mdash; a pass that can undo a false alarm and never create one.</li>
+                <li><strong>The judge.</strong> When the audits disagree, or agree on a warning, a stronger model reads every report and rules. Most flags end here, cleared.</li>
+                <li><strong>Escalation.</strong> A package still flagged gets a fresh audit from a stronger model that has not read it, then a fresh ruling &mdash; twice at most. Two distinct models saying unsafe with the judge agreeing is <span class="st-confirmed">confirmed</span>; still split after two rounds is <span class="st-disputed">models disagree</span>.</li>
+                <li><strong>Published.</strong> Every report, every ruling and every quoted line lands on this page. Nothing is edited by hand: a package the pipeline gets wrong is audited again, or the code is fixed.</li>
+            </ol>
+            </div>
+          </details>
+        </section>
+
+        <!-- A preview of the table: what was flagged, what a judge overturned,
+             and what was read most recently. One click reaches the rest. -->
+        <section class="recent card only-overview">
+            <div class="sec-head">
+                <h2>Recent audits</h2>
+                <a id="recent-all" class="btn" href="#packages">All packages &rarr;</a>
+            </div>
+            <ul id="recent-list" class="recent-list"></ul>
+        </section>
+
+        <!-- What is open and what is not. -->
+        <section class="card only-overview">
+          <details class="fold">
+            <summary>
+                <h2>Open source, one private instance</h2>
+                <span class="teaser">Everything that decides a verdict is public; one private instance runs it.</span>
+            </summary>
+            <div class="explain explain-open">
+            <svg class="dg dg-open" viewBox="0 0 360 300" role="img" aria-labelledby="dg2-title">
+                <title id="dg2-title">The auditor, the pipeline and the container are open source; one private instance holds the schedule, budget, credentials and operations page, and publishes its results back to the same public repository.</title>
+                <defs>
+                    <marker id="ah2" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                        <path d="M0,0 L8,4 L0,8 z"/>
+                    </marker>
+                </defs>
+
+                <rect class="box" x="16" y="6" width="328" height="96" rx="4"/>
+                <text class="tag" x="26" y="22">OPEN SOURCE &middot; github.com/mgalgs/aur-sleuth</text>
+                <rect class="box-in" x="26" y="34" width="100" height="58" rx="3"/>
+                <text class="h2 mid" x="76" y="52">the auditor</text>
+                <text class="m mid" x="76" y="66">aur-sleuth, and</text>
+                <text class="m mid" x="76" y="78">its prompts</text>
+                <rect class="box-in" x="132" y="34" width="100" height="58" rx="3"/>
+                <text class="h2 mid" x="182" y="52">the pipeline</text>
+                <text class="m mid" x="182" y="66">audit, judge,</text>
+                <text class="m mid" x="182" y="78">escalate, publish</text>
+                <rect class="box-in" x="238" y="34" width="100" height="58" rx="3"/>
+                <text class="h2 mid" x="288" y="52">the container</text>
+                <text class="m mid" x="288" y="66">one image, built</text>
+                <text class="m mid" x="288" y="78">from this repository</text>
+
+                <path class="arrow" d="M180,102 V128"/>
+                <text class="m" x="188" y="119">the code, as an image</text>
+
+                <rect class="box-priv" x="16" y="130" width="328" height="96" rx="4"/>
+                <text class="tag" x="26" y="146">PRIVATE &middot; the one instance that runs it</text>
+                <rect class="box-in" x="26" y="158" width="100" height="58" rx="3"/>
+                <text class="h2 mid" x="76" y="176">schedule</text>
+                <text class="m mid" x="76" y="190">when it runs, and</text>
+                <text class="m mid" x="76" y="202">the daily budget</text>
+                <rect class="box-in" x="132" y="158" width="100" height="58" rx="3"/>
+                <text class="h2 mid" x="182" y="176">credentials</text>
+                <text class="m mid" x="182" y="190">API keys and the</text>
+                <text class="m mid" x="182" y="202">deploy key</text>
+                <rect class="box-in" x="238" y="158" width="100" height="58" rx="3"/>
+                <text class="h2 mid" x="288" y="176">operations page</text>
+                <text class="m mid" x="288" y="190">start runs, review,</text>
+                <text class="m mid" x="288" y="202">publish</text>
+
+                <path class="arrow" d="M180,226 V252"/>
+                <text class="m" x="188" y="243">the results, after a review</text>
+
+                <rect class="box" x="16" y="254" width="328" height="40" rx="4"/>
+                <text class="tag" x="26" y="270">OPEN SOURCE &middot; the same repository</text>
+                <text x="26" y="286">every report, and this page: mgalgs.io/aur-sleuth</text>
+                <path class="arrow loop" d="M16,274 H8 V54 H14"/>
+            </svg>
+            <div class="prose-col">
+                <p class="prose">Everything that decides a verdict is open source: the auditor, its prompts, the pipeline and the container image are all in <a href="https://github.com/mgalgs/aur-sleuth">github.com/mgalgs/aur-sleuth</a>, and so are the reports, on its <a href="https://github.com/mgalgs/aur-sleuth/tree/audit-reports"><code>audit-reports</code></a> branch.</p>
+                <p class="prose">What is private is the one instance that runs them: its schedule and daily budget, its API keys and deploy key, and the operations page that starts runs, reviews what a run produced, and publishes. A publish pushes the reviewed reports and the page rebuilt from them back to the same public repository. The results are inspectable even though the machine that produced them is not.</p>
+            </div>
+            </div>
+          </details>
+        </section>
+
+        <section class="toolbar only-packages">
             <input id="search" type="search" class="search" placeholder="Search packages" autocomplete="off" spellcheck="false">
             <div id="filter-buttons" class="filters">
                 <button class="btn filter-btn active" data-filter="all">All</button>
@@ -559,13 +1025,14 @@ code { font-family: var(--mono); }
                 <span><span class="sq sq-none"></span>no verdict</span>
                 <span><span class="sq sq-flagged sq-overridden"></span>overridden</span>
                 <span><span class="sq sq-clean sq-reaudit"></span>second audit</span>
+                <span><span class="sq sq-advisory"></span>advisory</span>
                 <span id="result-count" class="result-count"></span>
             </div>
         </section>
 
-        <!-- The table is the page. On a phone it keeps three columns; the
-             version and date ride under the name. -->
-        <div class="table-wrap">
+        <!-- The table. On a phone it keeps three columns; the version and
+             date ride under the name. -->
+        <div class="table-wrap only-packages">
             <table class="packages">
                 <thead>
                     <tr>
@@ -586,11 +1053,12 @@ code { font-family: var(--mono); }
         <footer class="footer">
             <div>
                 <div class="head"><h2>How to read this page</h2></div>
-                <p class="prose">These audits look for one thing: code injected into the AUR packaging of a package &mdash; the <code>PKGBUILD</code>, an <code>.install</code> hook, or a patch. They do not rate the application itself. Each square is one report: two cheap models audit every package, and a judge &mdash; a stronger model &mdash; reads the reports when they disagree or flag something.</p>
+                <p class="prose">Each square is one report. Cheap models audit every package &mdash; two or more, so they can disagree &mdash; and a judge, a stronger model, reads the reports when they disagree or flag something. A package&rsquo;s state is the most settled reading of its reports:</p>
                 <dl class="key">
                     <dt class="st-clean">Clean</dt><dd>nothing found, or a flag a judge or a later review overturned.</dd>
                     <dt class="st-unknown">No verdict</dt><dd>no model reached an answer either way. Missing information, not a suspicion.</dd>
                     <dt class="st-look">Worth a closer look</dt><dd>something flagged it and nothing has settled it. Usually a false positive about behaviour the application is supposed to have; not a claim that it is malicious.</dd>
+                    <dt class="st-disputed">Models disagree</dt><dd>still flagged after two escalations. The models will not settle it, and no further audit is coming.</dd>
                     <dt class="st-confirmed">Confirmed malicious</dt><dd>two independent audits said unsafe and a judge agreed.</dd>
                 </dl>
             </div>
@@ -660,17 +1128,76 @@ async function init() {
             '<tr><td colspan="7" class="empty">Failed to load data. Are you serving from the audit-reports branch root?</td></tr>';
         return;
     }
+    renderVerdict();
     renderHeadline();
+    renderGrid();
     renderActivity();
+    renderDays();
+    renderEvidenceLine();
+    renderPipelineModels();
+    renderRecent();
     renderModelCosts();
     renderCoverage();
     renderTable();
     setupEventListeners();
-    // A shareable link to one package: #pkg=<name>.
-    const m = /^#pkg=(.+)$/.exec(location.hash);
-    if (m) {
-        try { openPackage(decodeURIComponent(m[1])); } catch (e) { /* bad hash: ignore */ }
+    route();
+    window.addEventListener('hashchange', route);
+}
+
+// --- Two views, one document --------------------------------------------
+// The hash is the state, so every view is a link and the back button works:
+// "" is the overview, #packages[=<filter>] the table, #pkg=<name> one package
+// open in it. The publish gate allows no second HTML file, so the table is
+// not a page of its own; it is this page with the overview hidden.
+
+let currentView = null;
+
+function showView(name) {
+    const changed = currentView !== null && currentView !== name;
+    currentView = name;
+    document.body.dataset.view = name;
+    document.querySelectorAll('.nav a[data-view]').forEach(a =>
+        a.classList.toggle('active', a.dataset.view === name));
+    // The table view can be scrolled a long way down; the overview should
+    // not open at that depth.
+    if (changed) window.scrollTo(0, 0);
+}
+
+// The view for a hash, before the data arrives: no flash of the wrong one.
+function viewForHash(h) {
+    return /^#(pkg=|packages)/.test(h) ? 'packages' : 'overview';
+}
+
+function route() {
+    const h = location.hash;
+    let m;
+    if ((m = /^#pkg=(.+)$/.exec(h))) {
+        showView('packages');
+        let name = m[1];
+        try { name = decodeURIComponent(name); } catch (e) { /* bad hash: use as is */ }
+        openPackage(name);
+        return;
     }
+    if ((m = /^#packages(?:=([a-z]+))?$/.exec(h))) {
+        showView('packages');
+        // A named filter is a request to see those rows, so the table
+        // scrolls into view; plain #packages is the view itself, from the top.
+        if (m[1]) applyFilter(m[1]);
+        else if (currentFilter !== 'all') setFilter('all');
+        return;
+    }
+    showView('overview');
+}
+
+// Go somewhere by hash. Setting the same hash again fires no event, so the
+// route runs by hand in that case: a second tap on a count still filters.
+function go(hash) {
+    if (location.hash === hash) route();
+    else location.hash = hash;
+}
+
+function filterHash(name) {
+    return name === 'all' ? '#packages' : '#packages=' + name;
 }
 
 function shortModel(m) {
@@ -718,11 +1245,16 @@ function cssEscape(s) {
 }
 
 // Apply a filter from anywhere on the page, and take the reader to it.
-function applyFilter(name) {
+function setFilter(name) {
     currentFilter = name;
     document.querySelectorAll('.filter-btn').forEach(b =>
         b.classList.toggle('active', b.dataset.filter === name));
     renderTable();
+    history.replaceState(null, '', filterHash(name));
+}
+
+function applyFilter(name) {
+    setFilter(name);
     document.querySelector('.toolbar').scrollIntoView({behavior: 'smooth', block: 'start'});
 }
 
@@ -742,6 +1274,31 @@ function countStates() {
     return counts;
 }
 
+// The page's one-sentence answer. Only the confirmed count can make it say
+// yes: a flag no judge has settled is usually a false positive about
+// behaviour the application is supposed to have, and saying "yes, malicious"
+// on one would be a claim the evidence does not carry. Everything here is a
+// count of states the generator decided; nothing a model wrote reaches it.
+function renderVerdict() {
+    const counts = countStates();
+    const total = Object.keys(DATA.packages || {}).length;
+    const unsettled = counts.look + counts.disputed;
+
+    document.getElementById('verdict-answer').innerHTML = counts.confirmed
+        ? '<span class="st-confirmed">Yes &mdash; ' + fmtNum(counts.confirmed) + ' package'
+          + (counts.confirmed === 1 ? '' : 's') + ' confirmed malicious.</span>'
+        : 'Nothing confirmed.';
+
+    // The scope, always: this has read a fraction of the AUR, so the total
+    // it is talking about is stated rather than implied.
+    const cls = counts.look ? 'st-look' : 'st-disputed';
+    const tail = unsettled
+        ? ', <span class="' + cls + '">' + fmtNum(unsettled) + ' still unsettled</span>.'
+        : ', nothing flagged.';
+    document.getElementById('verdict-sub').innerHTML =
+        'Out of <span class="n">' + fmtNum(total) + '</span> packages read so far' + tail;
+}
+
 function renderHeadline() {
     const s = DATA.summary || {};
     const counts = countStates();
@@ -756,13 +1313,19 @@ function renderHeadline() {
     const stat = (filter, n, label, cls) =>
         '<button type="button" class="stat ' + escapeAttr(cls) + '" data-filter="' + escapeAttr(filter) + '" title="Show these in the table below">'
         + '<span class="n">' + fmtNum(n) + '</span><span class="stat-label">' + escapeHtml(label) + '</span></button>';
+
+    // One big number, then the states as a wrapping line of links. Six tiles
+    // of equal weight made the reader do the ranking; the total is the fact
+    // worth a tile, and the rest are the same numbers and the same filters
+    // in a fraction of the space. A state nothing is in is left out: the
+    // verdict line above has already said none are confirmed or flagged.
+    const order = ['confirmed', 'look', 'disputed', 'clean', 'unknown'];
+    const line = order.filter(k => counts[k] > 0).map(k =>
+        countLink(k, '<span class="n">' + fmtNum(counts[k]) + '</span> ' + escapeHtml(STATE_LABEL[k]),
+                  k === 'clean' || k === 'unknown' ? '' : 'st-' + k)).join('');
     document.getElementById('headline').innerHTML =
         stat('all', total, 'packages audited', 'total')
-        + stat('confirmed', counts.confirmed, STATE_LABEL.confirmed, counts.confirmed ? 'st-confirmed' : '')
-        + stat('look', counts.look, STATE_LABEL.look, counts.look ? 'st-look' : '')
-        + (counts.disputed ? stat('disputed', counts.disputed, STATE_LABEL.disputed, 'st-disputed') : '')
-        + stat('clean', counts.clean, STATE_LABEL.clean, 'st-clean')
-        + stat('unknown', counts.unknown, STATE_LABEL.unknown, 'st-unknown');
+        + '<span class="states-line">' + line + '</span>';
 
     // The bar: the same counts as shares of one line, in the order the
     // filters list them. A state with nothing in it gets no segment.
@@ -772,6 +1335,51 @@ function renderHeadline() {
     bar.title = words.join(' · ');
     bar.innerHTML = STATES.filter(k => counts[k] > 0).map(k =>
         '<span class="seg-' + k + '" style="flex-grow:' + Number(counts[k]) + '"></span>').join('');
+}
+
+// --- Every package as one square ----------------------------------------
+
+// How many cells the grid draws. One per package is the picture; past a few
+// thousand it stops being readable long before it stops fitting, so the
+// newest this many are drawn and the note above says what was left out.
+// At ~1,400 packages the cap does not bite. If the corpus outgrows it for
+// good the answer is to aggregate -- a cell per day, or per maintainer --
+// and not to shrink the cells: 7px is already the floor for something a
+// thumb can hit on a phone.
+const GRID_CAP = 2000;
+
+function renderGrid() {
+    const box = document.getElementById('package-grid');
+    if (!box) return;
+    // Newest audit first, so the grid reads as a timeline: the top-left cell
+    // is what the pipeline read last. Grouping by state instead would only
+    // restate the counts beside it, and it would lose the runs -- a day when
+    // only the advisory model ran is a band of "no verdict" here, which is a
+    // fact about the pipeline nothing else on the page shows.
+    const entries = Object.entries(DATA.packages || {}).sort((a, b) =>
+        String(b[1].latest_date || '').localeCompare(String(a[1].latest_date || '')));
+    const shown = entries.slice(0, GRID_CAP);
+    const counts = countStates();
+    const present = STATES.filter(k => counts[k] > 0);
+
+    // One label for the whole grid. The cells carry a title each for a
+    // pointer, but 1,400 tab stops would be a worse way through this than
+    // the table, which is the route that is meant to be walked.
+    box.setAttribute('aria-label', fmtNum(entries.length) + ' packages audited: '
+        + present.map(k => fmtNum(counts[k]) + ' ' + STATE_LABEL[k]).join(', '));
+    box.innerHTML = shown.map(([name, pkg]) => {
+        const state = packageState(pkg);
+        const date = pkg.latest_date ? pkg.latest_date.split('T')[0] : '';
+        return '<span class="grid-cell gc-' + state + '" data-pkg="' + escapeAttr(name)
+            + '" title="' + escapeAttr(name + ' — ' + STATE_LABEL[state] + (date ? ' · ' + date : '')) + '"></span>';
+    }).join('');
+
+    document.getElementById('grid-note').textContent = shown.length < entries.length
+        ? 'the ' + fmtNum(shown.length) + ' most recent of ' + fmtNum(entries.length)
+        : fmtNum(entries.length) + ' packages, newest first';
+    document.getElementById('grid-legend').innerHTML =
+        present.map(k => '<span><span class="sq gc-' + k + '"></span>' + escapeHtml(STATE_LABEL[k]) + '</span>').join('')
+        + '<span class="grid-hint">Click a square to open that package</span>';
 }
 
 function renderActivity() {
@@ -787,44 +1395,263 @@ function renderActivity() {
     // nothing: show the totals and leave the breakdown out.
     const counted = Object.prototype.hasOwnProperty.call(p, 'confirmed');
     const confirmed = Number(p.confirmed || 0);
-    const dot = '<span class="sep"> · </span>';
     const n = v => '<span class="n tab">' + fmtNum(v) + '</span>';
+
+    // One sentence, not a chain of dot-separated readouts. Every number the
+    // chain carried is still here and every state is still a link; the
+    // punctuation is doing the ranking now instead of leaving six equal
+    // fragments for the reader to sort out.
     let html = '<span class="lead">This week</span> '
-        + '<span>' + n(p.updated) + ' packages audited, ' + fmtNum(p.new) + ' new</span>';
-    if (counted) {
-        html += dot + countLink('clean', n(p.green) + ' clean')
-            + dot + countLink('unknown', n(p.unknown) + ' no verdict')
-            + dot + countLink('look', n(p.look) + ' worth a closer look', 'st-look')
-            + (Number(p.disputed || 0)
-                ? dot + countLink('disputed', n(p.disputed) + ' models disagree', 'st-disputed')
-                : '')
-            + dot + (confirmed
-                ? countLink('confirmed', n(confirmed) + ' confirmed malicious', 'st-confirmed')
-                : '<span>none confirmed</span>');
-    }
+        + n(p.updated) + ' packages read, ' + fmtNum(p.new) + ' of them new';
     if (wk.audits_total) {
         const by = Object.entries(wk.by_model || {}).slice(0, 6)
             .map(([m, c]) => shortModel(m) + ' (' + fmtNum(c) + ')');
-        html += dot + '<span class="muted" title="' + escapeAttr(by.length ? 'by ' + joinNicely(by) : '') + '">'
+        html += ', over <span class="muted" title="' + escapeAttr(by.length ? 'by ' + joinNicely(by) : '') + '">'
             + n(wk.audits_total) + ' audits</span>';
     }
-
-    // Only the packages worth a reader's attention get a chip: a list of
-    // every clean package this week is the table, repeated.
-    const WHAT = {confirmed: 'two audits and a judge agree: unsafe',
-                  look: 'flagged by a model; not confirmed',
-                  disputed: 'flagged by a model; the escalations did not settle it'};
-    const flagged = rec.filter(r => WHAT[r.state]).slice(0, 24);
-    if (flagged.length) {
-        html += '<span class="chips"><span class="lead">Flagged:</span>' + flagged.map(r => {
-            const d = String(r.date || '').split('T')[0].slice(5);
-            return '<button type="button" class="chip" data-pkg="' + escapeAttr(r.package || '') + '" '
-                + 'title="' + escapeAttr(WHAT[r.state] + ' · ' + (r.date || '') + ' · open this package') + '">'
-                + '<span class="sq ' + (r.state === 'confirmed' ? 'sq-unsafe' : 'sq-flagged') + '" style="width:9px;height:9px"></span>'
-                + escapeHtml(r.package || '') + '<span class="chip-date">' + escapeHtml(d) + '</span></button>';
-        }).join('') + '</span>';
+    html += '.';
+    if (counted) {
+        const parts = [countLink('clean', n(p.green) + ' clean'),
+                       countLink('unknown', n(p.unknown) + ' no verdict')];
+        if (Number(p.look || 0)) parts.push(countLink('look', n(p.look) + ' worth a closer look', 'st-look'));
+        if (Number(p.disputed || 0)) parts.push(countLink('disputed', n(p.disputed) + ' models disagree', 'st-disputed'));
+        html += ' ' + joinNicely(parts) + ' &mdash; <span class="lead">' + (confirmed
+            ? countLink('confirmed', n(confirmed) + ' confirmed malicious', 'st-confirmed')
+            : 'none confirmed') + '</span>.';
     }
+
     activity.innerHTML = html;
+}
+
+// --- Audits a day -------------------------------------------------------
+
+// A fixed window, so the strip is the same shape however long the project
+// runs, and long enough to hold the current week plus the run before it.
+const DAY_WINDOW = 30;
+
+// summary.by_date carries only the days something happened. The window is
+// filled in day by day from it, so a day nothing ran is an empty track and
+// not a missing column -- the pipeline has already had one six-week gap,
+// and a bar per entry would have drawn it as continuous work.
+function renderDays() {
+    const box = document.getElementById('days');
+    if (!box) return;
+    const by = (DATA.summary || {}).by_date || null;
+    if (!by || !Object.keys(by).length) { box.classList.add('hidden'); return; }
+    box.classList.remove('hidden');
+
+    // Anchored to the data's own stamp, not the clock: the same data.json
+    // draws the same strip whenever it is read.
+    const end = String(DATA.generated_at || '').split('T')[0]
+        || Object.keys(by).sort().pop();
+    const endMs = Date.parse(end + 'T00:00:00Z');
+    const days = [];
+    for (let i = DAY_WINDOW - 1; i >= 0; i--) {
+        const key = new Date(endMs - i * 86400000).toISOString().split('T')[0];
+        days.push([key, by[key] || {}]);
+    }
+
+    const audits = d => Number(d.audits) || 0;
+    const max = Math.max(1, ...days.map(([, d]) => audits(d)));
+    const total = days.reduce((sum, [, d]) => sum + audits(d), 0);
+    const ran = days.filter(([, d]) => audits(d)).length;
+
+    const bars = days.map(([key, d]) => {
+        const a = audits(d);
+        const j = Number(d.judges) || 0;
+        // A floor, so a one-audit day is a mark and not a rounding error;
+        // a day nothing ran is a dim tick on the baseline, which is why
+        // there is no track behind the bars.
+        const pct = a ? Math.max(6, 100 * a / max) : 0;
+        const title = a
+            ? key + ' — ' + fmtNum(a) + ' audits' + (j ? ', ' + fmtNum(j) + ' rulings' : '')
+            : key + ' — nothing ran';
+        return '<span class="day" title="' + escapeAttr(title) + '">'
+            + (pct ? '<span class="day-fill" style="height:' + pct.toFixed(1) + '%"></span>'
+                   : '<span class="day-fill none" style="height:2px"></span>')
+            + '</span>';
+    }).join('');
+
+    box.innerHTML = '<div class="day-strip" role="img" aria-label="'
+        + escapeAttr('Audits a day over the last ' + DAY_WINDOW + ' days: ' + fmtNum(total)
+            + ' audits across ' + ran + ' days it ran, at most ' + fmtNum(max) + ' in a day') + '">'
+        + bars + '</div>'
+        + '<div class="day-axis"><span>' + escapeHtml(days[0][0]) + '</span>'
+        + '<span>' + fmtNum(total) + ' audits, ' + ran + ' days it ran</span>'
+        + '<span>' + escapeHtml(days[days.length - 1][0]) + '</span></div>';
+}
+
+// The numbers behind the diagram: how often the later stages have run. All
+// three are counts the generator computed; nothing a model wrote.
+function renderEvidenceLine() {
+    const box = document.getElementById('evidence-line');
+    if (!box) return;
+    const s = DATA.summary || {};
+    const overridden = Object.values(DATA.packages || {}).filter(p => matchesPreset(p, 'overridden')).length;
+    const parts = [];
+    if (s.total_judges) parts.push(fmtNum(s.total_judges) + ' rulings');
+    if (s.re_audit_count) parts.push(fmtNum(s.re_audit_count) + ' second audits');
+    if (overridden) {
+        parts.push(countLink('overridden', fmtNum(overridden) + ' flag' + (overridden === 1 ? '' : 's') + ' overturned by a judge'));
+    }
+    box.innerHTML = parts.length ? 'so far: ' + parts.join(' · ') : '';
+}
+
+// --- The audit row of the pipeline diagram ------------------------------
+// The rest of the diagram is static markup; this row is drawn from the
+// data, so the picture follows the seat. Every model that cast votes this
+// week gets a box; every model that only advised gets the same box, joined
+// by a dashed edge that says so. Escalation models are the Escalation
+// stage, so they are left out here.
+
+// Which models audited this week, and in what capacity. The week's counts
+// say who ran; the reports on the branch say how each one's audits were
+// tagged, and the majority tag is the model's role. Models under 5% of the
+// top seat are noise (a trial, a rate-limited free voice) and are dropped.
+function auditRow() {
+    const s = DATA.summary || {};
+    const week = (s.week && s.week.by_model) || {};
+    const counts = Object.keys(week).length ? week
+        : Object.fromEntries(Object.entries(s.by_model || {}).map(([m, v]) => [m, Number(v.count || 0)]));
+    const kinds = {};
+    for (const pkg of Object.values(DATA.packages || {})) {
+        for (const a of pkg.audits || []) {
+            const k = kinds[a.model] || (kinds[a.model] = {vote: 0, advisory: 0, reaudit: 0});
+            k[a.advisory ? 'advisory' : a.reaudit ? 'reaudit' : 'vote']++;
+        }
+    }
+    const top = Math.max(0, ...Object.values(counts).map(Number));
+    const seat = [], advisory = [];
+    for (const [m, n0] of Object.entries(counts)) {
+        const n = Number(n0), k = kinds[m];
+        if (!k || !(n > 0) || n < top * 0.05) continue;
+        if (k.advisory >= k.vote && k.advisory >= k.reaudit) advisory.push({model: m, n});
+        else if (k.vote >= k.reaudit) seat.push({model: m, n});
+    }
+    const byN = (a, b) => b.n - a.n;
+    return {seat: seat.sort(byN).slice(0, 6), advisory: advisory.sort(byN).slice(0, 2)};
+}
+
+// A model name inside a box of a given width, in the diagram's monospace:
+// one line if it fits, else two lines split at a separator near the
+// middle, else cut. Widths are estimated from the character count, not
+// measured, because the diagram may be display:none when this runs.
+function fitLabel(name, maxW) {
+    const width = (t, fs) => t.length * fs * 0.6;
+    for (const fs of [9.5, 9, 8.5, 8]) if (width(name, fs) <= maxW) return {lines: [name], size: fs};
+    // A dot is a version's own separator ("5.2"), so it is the last resort;
+    // among equal splits the later wins, so a ":free" tag stays whole.
+    let best = null;
+    for (const re of [/[-\/:_]/g, /[.]/g]) {
+        for (const m of name.matchAll(re)) {
+            const a = name.slice(0, m.index + 1), b = name.slice(m.index + 1);
+            const w = Math.max(a.length, b.length);
+            if (b && (!best || w <= best.w)) best = {a, b, w};
+        }
+        if (best) break;
+    }
+    if (best) {
+        for (const fs of [9, 8.5, 8, 7.5]) {
+            if (width(best.a, fs) <= maxW && width(best.b, fs) <= maxW) return {lines: [best.a, best.b], size: fs};
+        }
+    }
+    const fs = 8, n = Math.max(3, Math.floor(maxW / (fs * 0.6)) - 1);
+    return {lines: [name.slice(0, n) + '\u2026'], size: fs};
+}
+
+function renderPipelineModels() {
+    const g = document.getElementById('dg-models');
+    if (!g) return;
+    let {seat, advisory} = auditRow();
+    // Old data, or a quiet week: the shape of the seat, with no names.
+    if (!seat.length) { seat = [{label: 'model A'}, {label: 'model B'}]; advisory = [{label: 'free model'}]; }
+    const label = m => {
+        const short = shortModel(m);
+        return short.length >= 5 ? short : m;
+    };
+    const boxes = seat.map(b => ({...b, kind: 'seat'})).concat(advisory.map(b => ({...b, kind: 'advisory'})));
+
+    // The grid the static part is drawn on: the repository box ends at
+    // y 80, the reports box starts at y 176 with its centre at x 110.
+    const X0 = 16, X1 = 344, GAP = 6, GROUP = 12, TOP = 100, H = 44, TRUNK = 110, BUS = 92, JOIN = 160, NEXT = 176;
+    const k = boxes.length;
+    const w = (X1 - X0 - GAP * (k - 1) - (seat.length && advisory.length ? GROUP : 0)) / k;
+    let x = X0, html = '';
+    const seatCx = [], advCx = [];
+    let advRight = 0;
+    boxes.forEach((b, i) => {
+        if (i === seat.length && seat.length) x += GROUP;
+        const cx = x + w / 2;
+        const fit = fitLabel(b.label || label(b.model), w - 8);
+        const two = fit.lines.length === 2;
+        html += '<rect class="box" x="' + x.toFixed(1) + '" y="' + TOP + '" width="' + w.toFixed(1) + '" height="' + H + '" rx="3"/>';
+        fit.lines.forEach((line, j) => {
+            html += '<text class="mono mid" style="font-size:' + fit.size + 'px" x="' + cx.toFixed(1) + '" y="'
+                + (two ? 114 + 10 * j : 117) + '">' + escapeHtml(line) + '</text>';
+        });
+        if (b.n) {
+            html += '<text class="m mid" x="' + cx.toFixed(1) + '" y="' + (two ? 136 : 133) + '">' + fmtNum(b.n) + ' audits</text>';
+        }
+        html += '<title>' + escapeHtml((b.model || b.label) + (b.n ? ': ' + fmtNum(b.n) + ' audits this week' : '')
+            + (b.kind === 'advisory' ? ' (advisory: read by the judge, never a vote)' : ' (votes)')) + '</title>';
+        (b.kind === 'seat' ? seatCx : advCx).push(cx);
+        if (b.kind === 'advisory') advRight = x + w;
+        x += w + GAP;
+    });
+
+    // The bus from the repository: one trunk, one rail, one arrow per box.
+    const all = seatCx.concat(advCx);
+    const f = v => v.toFixed(1);
+    html += '<path class="edge" d="M' + TRUNK + ',80 V' + BUS + '"/>'
+        + '<path class="edge" d="M' + f(Math.min(TRUNK, ...all)) + ',' + BUS + ' H' + f(Math.max(TRUNK, ...all)) + '"/>'
+        + all.map(cx => '<path class="arrow" d="M' + f(cx) + ',' + BUS + ' V' + (TOP - 1) + '"/>').join('');
+    // The votes converge on the reports box; an advisory edge is dashed
+    // and joins the same rail, because the judge reads the same pile.
+    html += seatCx.map(cx => '<path class="edge" d="M' + f(cx) + ',' + (TOP + H) + ' V' + JOIN + '"/>').join('')
+        + '<path class="edge" d="M' + f(Math.min(TRUNK, ...seatCx)) + ',' + JOIN + ' H' + f(Math.max(TRUNK, ...seatCx)) + '"/>'
+        + '<path class="arrow" d="M' + TRUNK + ',' + JOIN + ' V' + (NEXT - 1) + '"/>';
+    if (advCx.length) {
+        html += advCx.map(cx => '<path class="edge edge-adv" d="M' + f(cx) + ',' + (TOP + H) + ' V' + JOIN + '"/>').join('')
+            + '<path class="edge edge-adv" d="M' + f(Math.max(TRUNK, ...seatCx)) + ',' + JOIN + ' H' + f(Math.max(...advCx)) + '"/>'
+            + '<text class="m end" x="' + f(advRight) + '" y="' + (JOIN + 12) + '">advisory: read, never a vote</text>';
+    }
+    g.innerHTML = html;
+}
+
+// A preview of the table: the packages a reader would look at first. What
+// is flagged, in the generator's order (confirmed first, then newest); then
+// the flags a judge most recently overturned, because those are the false
+// positives being caught; then whatever was read last. Eight rows, and one
+// button to the rest.
+function renderRecent() {
+    const box = document.getElementById('recent-list');
+    if (!box) return;
+    const pkgs = DATA.packages || {};
+    const names = [];
+    const take = name => { if (pkgs[name] && !names.includes(name)) names.push(name); };
+    const rec = (DATA.summary && DATA.summary.recent) || [];
+    rec.slice(0, 4).forEach(r => take(r.package));
+    const byDate = Object.entries(pkgs)
+        .sort((a, b) => String(b[1].latest_date || '').localeCompare(String(a[1].latest_date || '')));
+    byDate.filter(([, p]) => matchesPreset(p, 'overridden')).slice(0, 2).forEach(([n]) => take(n));
+    for (const [n] of byDate) { if (names.length >= 8) break; take(n); }
+
+    document.getElementById('recent-all').textContent =
+        'All ' + fmtNum(Object.keys(pkgs).length) + ' packages \u2192';
+    box.innerHTML = names.map(name => {
+        const pkg = pkgs[name];
+        const state = packageState(pkg);
+        const date = pkg.latest_date ? pkg.latest_date.split('T')[0] : '';
+        return '<li><button type="button" class="recent-row" data-pkg="' + escapeAttr(name) + '" title="Open this package">'
+            + '<span class="rr-main"><span class="rr-line">'
+            + '<span class="rr-name">' + escapeHtml(name) + '</span>'
+            + '<span class="rr-state st-' + escapeAttr(state) + '">' + escapeHtml(STATE_LABEL[state]) + '</span>'
+            + '<span class="rr-date">' + escapeHtml(date) + '</span></span>'
+            + '<span class="rr-why">' + escapeHtml(explainState(pkg)) + '</span></span>'
+            + '<span class="rr-sq">' + renderSquares(pkg.audits, 'audit', pkg)
+            + '<span class="vsep"></span>' + renderSquares(pkg.judges, 'judge', pkg) + '</span>'
+            + '</button></li>';
+    }).join('');
 }
 
 // Every number here is computed in code at publish time (see
@@ -1075,6 +1902,50 @@ function explainState(pkg) {
     return 'No model reached a verdict: the files were skipped, or the audits were inconclusive.';
 }
 
+function ordinal(n) {
+    const j = n % 10, k = n % 100;
+    if (k >= 11 && k <= 13) return n + 'th';
+    if (j === 1) return n + 'st';
+    if (j === 2) return n + 'nd';
+    if (j === 3) return n + 'rd';
+    return n + 'th';
+}
+
+// What happens to this package next, in plain words. Every input is a
+// number the generator computed at publish time; nothing here re-derives
+// the state rule, and nothing guesses a clock time -- the schedule is not
+// in the data, and a wrong "in about four hours" is worse than no estimate.
+function nextStep(pkg) {
+    const state = packageState(pkg);
+    if (state === 'disputed') {
+        return 'Next: no further automatic audit is coming. Two escalations did not settle it; only a person can order another.';
+    }
+    if (state !== 'look') return '';
+    if (pkg.escalation_exhausted) {
+        return 'Next: no automatic audit is coming. Every escalation model has already read it; only a person can order another.';
+    }
+    const esc = (DATA.summary && DATA.summary.escalation) || null;
+    const cap = esc && typeof esc.cap === 'number' ? esc.cap : null;
+    const round = (pkg.escalations || 0) + 1;
+    let sentence = 'Next: escalation round ' + round + (cap ? ' of ' + cap : '')
+        + ' — a fresh audit by a stronger model that has not read it, then a fresh ruling.';
+    if (pkg.queue_position) {
+        const ql = esc && typeof esc.queue_length === 'number' ? esc.queue_length : null;
+        // "1st of 1 packages waiting" is where the queue ends up as it
+        // drains, so the noun agrees; with no length known, the position
+        // alone has to make a sentence on its own.
+        let clause = ql
+            ? 'It is ' + ordinal(pkg.queue_position) + ' of ' + ql + ' package' + (ql === 1 ? '' : 's') + ' waiting'
+            : 'It is ' + ordinal(pkg.queue_position) + ' in the queue';
+        const bits = [];
+        if (esc && typeof esc.per_run === 'number') bits.push('a run starts up to ' + esc.per_run);
+        if (esc && typeof esc.runs_per_day === 'number') bits.push('there are ' + esc.runs_per_day + ' runs a day');
+        if (bits.length) clause += '; ' + bits.join(', and ');
+        sentence += ' ' + clause + '.';
+    }
+    return sentence;
+}
+
 function renderDetail(name, data) {
     const pkg = (DATA.packages || {})[name] || {};
     const state = packageState(pkg);
@@ -1083,11 +1954,13 @@ function renderDetail(name, data) {
     const judges = data.judges || [];
     const judgeSafe = pkg.judge_majority === 'safe';
     const confirmedCls = state === 'confirmed' ? ' confirmed' : '';
+    const next = nextStep(pkg);
 
     let html = '<div class="detail-state">'
         + '<span class="state st-' + state + '">' + escapeHtml(STATE_TITLE[state]) + '</span>'
         + '<span class="why">' + escapeHtml(explainState(pkg)) + '</span>'
         + '<a class="detail-link" href="#pkg=' + escapeAttr(encodeURIComponent(name)) + '">#pkg=' + escapeHtml(name) + '</a>'
+        + (next ? '<span class="next">' + escapeHtml(next) + '</span>' : '')
         + '</div>';
 
     // What was flagged, first. Every file a report called unsafe, with the
@@ -1292,20 +2165,19 @@ function setupEventListeners() {
     document.getElementById('filter-buttons').addEventListener('click', e => {
         const btn = e.target.closest('.filter-btn');
         if (!btn) return;
-        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        currentFilter = btn.dataset.filter;
-        renderTable();
+        setFilter(btn.dataset.filter);
     });
 
-    // A headline count anywhere on the page filters the table, a package
-    // chip opens that package, and a "Full report" unfolds one. Delegated,
-    // because every panel is re-rendered.
+    // A headline count anywhere on the page opens the table filtered to it,
+    // a row of the recent list opens that package, and a "Full report"
+    // unfolds one. Delegated, because every panel is re-rendered. The first
+    // two go through the hash, so they work from either view and the back
+    // button undoes them.
     document.addEventListener('click', e => {
         const link = e.target.closest('.count-link, .stat');
-        if (link && link.dataset.filter) { applyFilter(link.dataset.filter); return; }
-        const chip = e.target.closest('.chip');
-        if (chip && chip.dataset.pkg) { openPackage(chip.dataset.pkg); return; }
+        if (link && link.dataset.filter) { go(filterHash(link.dataset.filter)); return; }
+        const row = e.target.closest('.recent-row, .grid-cell');
+        if (row && row.dataset.pkg) { go('#pkg=' + encodeURIComponent(row.dataset.pkg)); return; }
         const toggle = e.target.closest('[data-toggle]');
         if (toggle) {
             const box = document.getElementById(toggle.dataset.toggle);
@@ -1342,6 +2214,7 @@ function setupEventListeners() {
     });
 }
 
+document.body.dataset.view = viewForHash(location.hash);
 init();
 </script>
 </body>
