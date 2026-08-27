@@ -200,6 +200,15 @@ code { font-family: var(--mono); }
    numbers, the same links, a fraction of the furniture. */
 .states-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; font-size: 13px; color: var(--muted); }
 .states-line .n { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--text-2); }
+/* ...but a state-coloured count takes the state's colour throughout. Without
+   this the number keeps --text-2 while the label beside it is yellow or red,
+   so "1 models disagree" reads as a grey 1 next to a yellow phrase -- and the
+   same count in the weekly list, which has no such override, is yellow all
+   through. The uncoloured states (clean, no verdict) keep the lighter number,
+   which is what the rule above is for. */
+.states-line .count-link.st-look .n,
+.states-line .count-link.st-disputed .n,
+.states-line .count-link.st-confirmed .n { color: inherit; }
 .stat {
     display: inline-flex;
     align-items: baseline;
@@ -815,7 +824,7 @@ body[data-view="packages"] .only-overview { display: none !important; }
              prose beside it. The diagram is static markup; nothing from
              data.json goes into it. -->
         <section class="card only-overview">
-          <details class="fold">
+          <details class="fold" open>
             <summary>
                 <h2>How a verdict is reached</h2>
                 <span class="teaser">Cheap models read every committed file and vote; a stronger one rules on anything they flag.</span>
@@ -828,7 +837,7 @@ body[data-view="packages"] .only-overview { display: none !important; }
                  means inserting a box and moving everything below it down
                  by its height; the audit row is the one part drawn by code. -->
             <svg class="dg dg-pipeline" viewBox="0 0 360 516" role="img" aria-labelledby="dg1-title">
-                <title id="dg1-title">The pipeline: the AUR repository is read and upstream sources are not; each model on the audit seat reads every file and votes, and advisory models are read but never counted; a judge rules on flags; escalation adds a fresh audit and ruling up to twice; every verdict is published.</title>
+                <title id="dg1-title">The pipeline: the AUR repository is read and upstream sources are not; each model on the audit seat reads every file and votes, and advisory models are read but never counted; a judge rules on flags; escalation adds two fresh audits and rulings, then one final audit and judge; every verdict is published.</title>
                 <defs>
                     <marker id="ah1" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
                         <path d="M0,0 L8,4 L0,8 z"/>
@@ -897,10 +906,11 @@ body[data-view="packages"] .only-overview { display: none !important; }
                 <!-- 4. escalation, which loops back into the judge -->
                 <rect class="box" x="16" y="374" width="188" height="88" rx="4"/>
                 <text class="h" x="26" y="392">Escalation</text>
-                <text x="26" y="407">a fresh audit by a stronger</text>
-                <text x="26" y="420">model that has not read it,</text>
-                <text x="26" y="433">then a fresh ruling</text>
-                <text class="s" x="26" y="452">&#x21bb; two rounds at most, then it stops</text>
+                <text x="26" y="407">a fresh audit by the next</text>
+                <text x="26" y="420">stronger model, then ruling</text>
+                <text x="26" y="433">&#x21bb; two independent rounds</text>
+                <text x="26" y="446">then one final auditor + judge</text>
+                <text class="s" x="26" y="458">three bounded rounds, then stop</text>
                 <path class="arrow loop" d="M16,440 H8 V314 H14"/>
 
                 <path class="arrow" d="M204,396 H222"/>
@@ -911,7 +921,7 @@ body[data-view="packages"] .only-overview { display: none !important; }
                 <path class="arrow" d="M204,436 H222"/>
                 <rect class="pill pill-disputed" x="224" y="420" width="122" height="32" rx="8"/>
                 <text class="p t-disputed" x="234" y="434">models disagree</text>
-                <text class="m" x="234" y="446">split after two rounds</text>
+                <text class="m" x="234" y="446">split after final resolution</text>
 
                 <!-- 5. published -->
                 <path class="arrow" d="M110,462 V476"/>
@@ -923,7 +933,7 @@ body[data-view="packages"] .only-overview { display: none !important; }
                 <li><strong>The boundary.</strong> Only the files in the package&rsquo;s AUR repository are read &mdash; every one of them, wherever it sits, whatever it is called. What <code>makepkg</code> downloads from upstream is upstream&rsquo;s and is never read: a malicious upstream is not an AUR attack, and an AUR maintainer cannot inject into it.</li>
                 <li><strong>The audits.</strong> Cheap models &mdash; two or more, so they can disagree &mdash; each read every file on their own and return a verdict with the lines that earned it. Free models add advisory reads: the same audit, but the judge only reads it and it counts toward nothing. Any verdict that accuses is asked once more against the rules and kept only if it softens &mdash; a pass that can undo a false alarm and never create one.</li>
                 <li><strong>The judge.</strong> When the audits disagree, or agree on a warning, a stronger model reads every report and rules. Most flags end here, cleared.</li>
-                <li><strong>Escalation.</strong> A package still flagged gets a fresh audit from a stronger model that has not read it, then a fresh ruling &mdash; twice at most. Two distinct models saying unsafe with the judge agreeing is <span class="st-confirmed">confirmed</span>; still split after two rounds is <span class="st-disputed">models disagree</span>.</li>
+                <li><strong>Escalation.</strong> A package still flagged gets two fresh audits from models that have not read it, each followed by a fresh ruling. If it is still unsettled, one final auditor and final judge get one bounded pass. Two distinct models saying unsafe with the judge agreeing is <span class="st-confirmed">confirmed</span>; still split after final resolution is <span class="st-disputed">models disagree</span>.</li>
                 <li><strong>Published.</strong> Every report, every ruling and every quoted line lands on this page. Nothing is edited by hand: a package the pipeline gets wrong is audited again, or the code is fixed.</li>
             </ol>
             </div>
@@ -1015,6 +1025,7 @@ body[data-view="packages"] .only-overview { display: none !important; }
                 <button class="btn filter-btn" data-filter="disputed">Models disagree</button>
                 <button class="btn filter-btn danger" data-filter="confirmed">Confirmed</button>
                 <span class="divider"></span>
+                <button class="btn filter-btn" data-filter="unsettled">Still unsettled</button>
                 <button class="btn filter-btn" data-filter="overridden">Overridden by a judge</button>
                 <button class="btn filter-btn" data-filter="unjudged">Not yet judged</button>
             </div>
@@ -1291,9 +1302,11 @@ function renderVerdict() {
 
     // The scope, always: this has read a fraction of the AUR, so the total
     // it is talking about is stated rather than implied.
+    // Colour it for whichever bucket it is actually made of; a mix takes
+    // look's, because a package worth a closer look is the stronger claim.
     const cls = counts.look ? 'st-look' : 'st-disputed';
     const tail = unsettled
-        ? ', <span class="' + cls + '">' + fmtNum(unsettled) + ' still unsettled</span>.'
+        ? ', ' + countLink('unsettled', fmtNum(unsettled) + ' still unsettled', cls) + '.'
         : ', nothing flagged.';
     document.getElementById('verdict-sub').innerHTML =
         'Out of <span class="n">' + fmtNum(total) + '</span> packages read so far' + tail;
@@ -1719,6 +1732,14 @@ function matchesPreset(pkg, preset) {
                 && (pkg.audits || []).some(a => !a.advisory && (a.result === 'unsafe' || a.result === 'inconclusive'));
         case 'unjudged':
             return !pkg.judges || pkg.judges.length === 0;
+        case 'unsettled': {
+            // The verdict line's "N still unsettled" -- flagged and not
+            // resolved either way, which is look plus disputed. It is the one
+            // headline count that is a sum of two states, so it needs a preset
+            // of its own rather than reusing a single state's name.
+            const s = packageState(pkg);
+            return s === 'look' || s === 'disputed';
+        }
         default: return true;
     }
 }
