@@ -136,8 +136,21 @@ else
 fi
 
 # --- spend ------------------------------------------------------------------
-# The pipeline's own ledger, so --daily-budget in the next scheduled run counts
-# what this spent. The run's own --budget is tracked separately, from the rows.
+# The pipeline's own ledger, so the day's total on the ops page is the whole
+# truth about what was spent -- but tagged `manual`, which is what exempts a
+# benchmark from the schedule's budget.
+#
+# pipeline.sh keeps two sums over the same file: get_daily_spent() adds every
+# line, and scheduled_spent() adds only the untagged ones, which is the figure
+# --daily-budget gates on. Its rule, in its own words, is that a person
+# pressing Run must not spend the schedule's day. Pressing "Queue benchmark"
+# is the same act -- a person asking for an experiment -- and the tag was
+# simply never applied here, so every benchmark dollar read as the schedule's.
+# A $2 benchmark took $2 of audits out of the next scheduled run, silently.
+#
+# The run's own --budget still bounds the benchmark, tracked separately from
+# the rows. That ceiling is the one a person set on the form; this is only
+# about whose day pays for it.
 TODAY=$(date +%Y-%m-%d)
 SPEND_FILE="$PIPELINE_DIR/spend-${TODAY}.log"
 touch "$SPEND_FILE"
@@ -145,7 +158,7 @@ touch "$SPEND_FILE"
 record_cost() {
     (
         flock -x 201
-        echo "$1" >> "$SPEND_FILE"
+        echo "$1 manual" >> "$SPEND_FILE"
     ) 201>"$SPEND_FILE.lock"
 }
 

@@ -284,6 +284,49 @@ else
     bad "an escalation run's cost should be tagged manual; ledger is: $(tr '\n' '|' < "$data/pipeline/spend-$today.log" 2>/dev/null || echo empty)"
 fi
 
+echo "== a benchmark is the schedule's guest, not its expense =="
+# "Queue benchmark" on the ops page is a person asking for an experiment, and
+# pipeline.sh already has the rule for that: tag the ledger line, count it in
+# the day's total, skip it in the figure --daily-budget gates on. benchmark.sh
+# never applied the tag, so every benchmark dollar read as the schedule's own
+# and a $2 benchmark took $2 of audits out of the next scheduled run.
+#
+# The invariant spans two files -- one writes the line, the other decides what
+# it means -- so both halves are lifted out and run against the same ledger.
+bench_ledger="$tmp/bench-spend.log"
+(
+    set -euo pipefail
+    SPEND_FILE="$bench_ledger"
+    : > "$SPEND_FILE"
+    eval "$(sed -n '/^record_cost()/,/^}/p' bench/benchmark.sh)"
+    record_cost 0.25
+    record_cost 1.75
+)
+if [[ "$(cat "$bench_ledger")" == "0.25 manual"$'\n'"1.75 manual" ]]; then
+    ok "benchmark costs land on the ledger tagged manual"
+else
+    bad "expected tagged lines; ledger is: $(tr '\n' '|' < "$bench_ledger")"
+fi
+
+read_with() {
+    (
+        set -euo pipefail
+        SPEND_FILE="$bench_ledger"
+        eval "$(sed -n "/^$1()/,/^}/p" bench/pipeline.sh)"
+        "$1"
+    )
+}
+if [[ "$(read_with scheduled_spent)" == "0.000000" ]]; then
+    ok "the schedule's own figure ignores it, which is the whole exemption"
+else
+    bad "the schedule was charged \$$(read_with scheduled_spent) for a benchmark"
+fi
+if [[ "$(read_with get_daily_spent)" == "2.000000" ]]; then
+    ok "the day's total still counts it, so the ops page tells the truth"
+else
+    bad "the day's total should be 2.000000, got $(read_with get_daily_spent)"
+fi
+
 echo
 if (( fails > 0 )); then
     echo "FAILED: $fails check(s)"
