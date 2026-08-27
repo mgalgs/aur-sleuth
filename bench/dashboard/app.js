@@ -211,9 +211,11 @@ function renderVerdict() {
 
     // The scope, always: this has read a fraction of the AUR, so the total
     // it is talking about is stated rather than implied.
+    // Colour it for whichever bucket it is actually made of; a mix takes
+    // look's, because a package worth a closer look is the stronger claim.
     const cls = counts.look ? 'st-look' : 'st-disputed';
     const tail = unsettled
-        ? ', <span class="' + cls + '">' + fmtNum(unsettled) + ' still unsettled</span>.'
+        ? ', ' + countLink('unsettled', fmtNum(unsettled) + ' still unsettled', cls) + '.'
         : ', nothing flagged.';
     document.getElementById('verdict-sub').innerHTML =
         'Out of <span class="n">' + fmtNum(total) + '</span> packages read so far' + tail;
@@ -639,6 +641,14 @@ function matchesPreset(pkg, preset) {
                 && (pkg.audits || []).some(a => !a.advisory && (a.result === 'unsafe' || a.result === 'inconclusive'));
         case 'unjudged':
             return !pkg.judges || pkg.judges.length === 0;
+        case 'unsettled': {
+            // The verdict line's "N still unsettled" -- flagged and not
+            // resolved either way, which is look plus disputed. It is the one
+            // headline count that is a sum of two states, so it needs a preset
+            // of its own rather than reusing a single state's name.
+            const s = packageState(pkg);
+            return s === 'look' || s === 'disputed';
+        }
         default: return true;
     }
 }
