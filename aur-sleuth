@@ -2145,6 +2145,13 @@ def download_sources(tui: ConsoleUI, max_retries: int = 3):
             return False
         except subprocess.CalledProcessError as e:
             logger.error(f"makepkg --nobuild attempt {attempt} failed: {e.stderr}")
+            # `manual://` is an explicit AUR contract: the maintainer cannot
+            # redistribute the vendor archive, so makepkg expects the
+            # operator to place it locally. Retrying cannot change that state
+            # and only delays the maintainer-file audit.
+            if "manual://" in (e.stderr or ""):
+                logger.info("source uses manual://; not retrying unavailable vendor archive")
+                return False
             if attempt < max_retries:
                 delay = 2 ** attempt
                 tui.update_status(f"Retrying in {delay}s...")

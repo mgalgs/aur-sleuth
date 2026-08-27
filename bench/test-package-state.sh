@@ -63,6 +63,9 @@ check("the cap does not make a cleared package disputed",
       gd.package_state(ps("unsafe", "safe", 1, escalations=3)) == "clean")
 check("agreed safe: clean", gd.package_state(ps("safe", None, 0)) == "clean")
 check("nothing reached a verdict: unknown", gd.package_state(ps(None, None, 0)) == "unknown")
+check("source-fetch failure is not an unsafe verdict",
+      gd.effective_audit_result({"result": "unsafe", "source_fetch": "failed",
+                                 "files_reviewed": "0"}) == "skipped")
 
 # --- build_index_data: the summary fields the rule reads ---------------------
 def audit(pkg, model, result, date, triggered_by="", advisory=False, cost="0.01"):
@@ -102,6 +105,18 @@ audits = [
     audit("s", "o/strong", "safe", "2026-08-24T11:00:00Z", triggered_by="s/y-judge.json"),
     audit("s", "f/final", "safe", "2026-08-24T13:00:00Z", triggered_by="s/z-judge.json"),
 ]
+
+# A legacy runner recorded the failed makepkg gate as an unsafe package-level
+# result, and an old judge repeated it. With no reviewed files, neither is
+# security evidence and the dashboard must publish no verdict.
+legacy_fetch_failure = audit("jdk7", "q/cheap", "unsafe", "2026-08-25T11:00:00Z")
+legacy_fetch_failure["frontmatter"].update({"source_fetch": "failed", "files_reviewed": "0"})
+legacy_judge = judge("jdk7", "20260825-120000", "unsafe", [legacy_fetch_failure["filename"]], "download failed")
+legacy_summary = gd.build_index_data([legacy_fetch_failure], [legacy_judge], now=now)["packages"]["jdk7"]
+check("legacy source-fetch failure has unknown package state",
+      legacy_summary["state"] == "unknown", legacy_summary)
+check("legacy source-fetch failure hides judge verdict",
+      legacy_summary["judges"] == [], legacy_summary)
 p_judged = ["20260823-110000-q-cheap.md", "20260823-110100-d-cheap.md"]
 judges = [
     judge("p", "20260823-120000", "unsafe", p_judged, "looks bad"),

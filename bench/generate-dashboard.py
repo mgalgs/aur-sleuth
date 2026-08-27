@@ -169,6 +169,22 @@ def compute_majority(results):
     return 'inconclusive'
 
 
+def effective_audit_result(frontmatter):
+    """Return a verdict only when the audit actually reviewed a file.
+
+    Older runners could turn a failed ``makepkg`` source download into an
+    ``unsafe`` package-level result.  A report with no reviewed files carries
+    no security evidence, so keep it out of the verdict math.  Genuine
+    findings from a partial audit (``files_reviewed`` > 0) remain findings.
+    """
+    result = frontmatter.get("result", "unknown")
+    if (result == "unsafe"
+            and frontmatter.get("source_fetch") == "failed"
+            and safe_int(frontmatter.get("files_reviewed")) == 0):
+        return "skipped"
+    return result
+
+
 # How many escalation audits a package gets before the pipeline stops paying
 # for opinions. Each escalation is a fresh audit by a model that has not yet
 # read the package, followed by a fresh judge ruling. The third is the bounded
@@ -441,12 +457,12 @@ def build_index_data(audits, judges, now=None, coverage_inputs=None, escalation_
         fm = a["frontmatter"]
         cost = safe_float(fm.get("cost"))
         files = safe_int(fm.get("files_reviewed"))
-        result = fm.get("result", "unknown")
+        result = effective_audit_result(fm)
         if cost == 0 and files == 0 and result not in ("skipped",):
             continue
         packages[pkg]["audits"].append({
             "filename": a["filename"],
-            "result": fm.get("result", "unknown"),
+            "result": result,
             "model": fm.get("model", "unknown"),
             "model_alias": fm.get("model_alias", ""),
             "cost": safe_float(fm.get("cost")),
@@ -541,7 +557,18 @@ def build_index_data(audits, judges, now=None, coverage_inputs=None, escalation_
             audit_results.append(a["result"])
             if a.get("triggered_by"):
                 audit_results.append(a["result"])
-        judge_verdicts = [j["correct_verdict"] for j in pkg_data["judges"]]
+        # A judge cannot create a verdict from reports that reviewed no files.
+        # This specifically prevents legacy source-fetch failures from being
+        # published as unsafe solely because an old judge guessed at them.
+        has_audited_evidence = any(
+            a.get("files_reviewed", 0) > 0
+            and not a.get("advisory")
+            for a in pkg_audits
+        )
+        judge_verdicts = (
+            [j["correct_verdict"] for j in pkg_data["judges"]]
+            if has_audited_evidence else []
+        )
 
         pkg_summaries[pkg_name] = {
             "pkgver": latest.get("pkgver", ""),
@@ -560,7 +587,7 @@ def build_index_data(audits, judges, now=None, coverage_inputs=None, escalation_
             ],
             "judges": [{"verdict": j["correct_verdict"], "model": j.get("model", "unknown"),
                         **({"model_alias": j["model_alias"]} if j.get("model_alias") else {})}
-                       for j in pkg_data["judges"]],
+                       for j in (pkg_data["judges"] if has_audited_evidence else [])],
             "audit_majority": compute_majority(audit_results),
             "judge_majority": compute_majority(judge_verdicts),
             # The ruling that read the most evidence. Judge files sort by
