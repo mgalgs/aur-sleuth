@@ -1,0 +1,40 @@
+{
+  "package": "jdk7",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The maintainer-controlled files shown contain standard Oracle-manual-download packaging, desktop entries, and a conventional .install hook. The only disputed behaviors were (1) top-level sourcing of a filtered user config line to locate Downloads and (2) a documented policy tweak granting clipboard permission to unsigned applets. Neither is evidence of maintainer-injected supply-chain malware under the stated boundary: they do not fetch and execute unrelated content, exfiltrate data, or perform purposeless malicious actions. The source host relationship is expected (Oracle), and checksums pin the downloaded artifacts.",
+  "disagreement_analysis": "Disagreement came from two classic false-positive patterns. First, one model initially treated `source <(grep ...)` on `~/.config/user-dirs.dirs` as making the package UNSAFE because a hostile local user config could trigger command substitution during PKGBUILD parsing. That is a real shell-footgun, but it is not maintainer-injected malicious package behavior under this audit's threat model. Second, another model initially flagged the PKGBUILD's explicit Java policy modification as unsafe because it weakens the Java sandbox. That is an application/configuration security tradeoff, transparently documented for compatibility, not packaging malware. The stronger reports correctly overruled both.",
+  "coverage_issues": [
+    "Three reports reviewed zero repository files because source download failed and they stopped at package-level skip.",
+    "Important maintainer-controlled files that should be reviewed even when upstream fetch fails: PKGBUILD, jdk7.install, readme.sh, and any patches if present.",
+    "Desktop files are low priority; PKGBUILD functions and install hooks should be prioritized first."
+  ],
+  "false_positives": [
+    "Flagging `source <(grep ...)` of `~/.config/user-dirs.dirs` as unsafe package malware: this is a local-config shell robustness issue, not evidence of malicious maintainer injection.",
+    "Flagging the clipboard permission policy change as malicious: it is a documented compatibility/security tradeoff in the packaged product behavior, not a supply-chain backdoor.",
+    "Treating manual-download `DLAGENTS`/`manual://` use for Oracle as suspicious by itself would be a false positive; this is a common AUR pattern when checksums pin the archive."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "When upstream fetch fails, continue auditing all AUR-repo files instead of returning a package-level skip; the maintainer-controlled repository is the core audit boundary.",
+    "Prioritize PKGBUILD, .install hooks, helper scripts referenced by PKGBUILD (here `readme.sh` via DLAGENTS), and patches before low-risk metadata like .desktop files.",
+    "Tune prompts to enforce the verdict boundary: only maintainer-injected, purposeless malicious behavior should drive UNSAFE; hygiene issues and product hardening regressions belong in notes, not verdicts.",
+    "Teach models to distinguish local-environment hazards from package injection. User-controlled files sourced during parsing can be worth mentioning, but not as AUR-maintainer compromise absent malicious package intent.",
+    "Teach models to distinguish application/runtime behavior from packaging malware. Security-weakening config changes may matter operationally, but they are not automatically supply-chain attacks.",
+    "Manual-download Oracle packages commonly use custom DLAGENTS and helper scripts; these should be inspected for execution of fetched content or unrelated hosts, not flagged solely for being nonstandard."
+  ],
+  "_judge_usage": {
+    "model": "openai/gpt-5.4",
+    "prompt_tokens": 6678,
+    "completion_tokens": 766,
+    "cost": 0.028185
+  },
+  "audits_judged": [
+    "20260827-165814-qwen-qwen3-235b-a22b-2507.md",
+    "20260827-165818-deepseek-deepseek-v4-flash.md",
+    "20260826-112820-openai-gpt-5.4.md",
+    "20260827-235350-gpt-5.6-sol.md"
+  ]
+}
