@@ -958,7 +958,11 @@ check_expected_head() {
 # Fetches over FETCH_URL, which needs no credential.
 fetch_origin_branch() {
     local repo="$1" branch="$2" err
-    err="$(git --git-dir="$repo" fetch --quiet "$FETCH_URL" \
+    # LC_ALL=C keeps git's error text English, or the missing-branch check
+    # below would depend on the operator's locale: a localized git says
+    # "couldn't find remote ref" in its own language and the fetch would be
+    # mistaken for a network failure.
+    err="$(LC_ALL=C git --git-dir="$repo" fetch --quiet "$FETCH_URL" \
         "+refs/heads/$branch:refs/remotes/origin/$branch" 2>&1)" && return 0
     # A missing branch is "couldn't find remote ref"; anything else is the
     # network, and the caller decides what that means.

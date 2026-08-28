@@ -118,6 +118,22 @@ The tool can be configured with environment variables:
 - `LLM_TOP_P`: The top-p parameter for the LLM (0.0-1.0). If not set, uses model default.
 - `LLM_REASONING_EFFORT`: Reasoning effort for supported reasoning models (`low`, `medium`, `high`). Defaults to `high`.
 - `AUDIT_FAILURE_FATAL`: Whether audit failures should be fatal (exit with error). Set to `false` to make audit failures non-fatal. Defaults to `true`.
+- `AUR_SLEUTH_LANG`: Language of the terminal output, taken from the system locale by
+  default: `LC_ALL`, then `LC_MESSAGES`, then `LANG`, each matched with regional priority
+  (e.g. `zh_CN.UTF-8` selects `zh_CN` -- Simplified Chinese -- and bare `zh` plus other
+  `zh_XX` locales fall back to the same content until they get their own, else English) --
+  so no configuration is needed on a Chinese-locale system. `AUR_SLEUTH_LANG` overrides
+  the locale explicitly. Only the console is translated: the report file stays English,
+  because reports are published to the dashboard and parsed by the pipeline scripts.
+- `AUR_SLEUTH_TRANSLATE_VERDICTS`: Whether to translate the model's written findings
+  (`summary`/`details`) into the console language for display. **Off by default**; set to
+  `true` (environment or `~/.config/aur-sleuth.conf`) to enable. This is a separate
+  display-only call that runs after the audit: it reads only the verdict text, never the
+  file content, and cannot change the decision; the report file keeps the model's English
+  text. Only verdicts that are not SAFE are sent, so a clean package costs nothing;
+  failures keep the English text and say so in the console log. The deployment pipeline
+  pins this to `false` on every audit invocation, so the public pipeline can never translate
+  regardless of the surrounding environment.
 
 You can either set these environment variables directly in your shell, or add them to
 a configuration file. The tool will automatically load configuration from
@@ -135,6 +151,8 @@ LLM_TEMPERATURE = 0.7  # Omit to use the model default
 LLM_TOP_P = 0.9        # ditto
 LLM_REASONING_EFFORT = high  # low | medium | high
 AUDIT_FAILURE_FATAL = false  # Set to false to make audit failures non-fatal
+AUR_SLEUTH_LANG = zh_CN  # Console language: zh_CN (Simplified Chinese); defaults to the system locale
+AUR_SLEUTH_TRANSLATE_VERDICTS = true  # Translate findings into the console language; default false
 ```
 
 ### Example using OpenRouter
