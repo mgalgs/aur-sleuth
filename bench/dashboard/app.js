@@ -918,10 +918,17 @@ function renderDetail(name, data) {
         html += '<div class="detail-section">' + Array.from(findings.values()).map(f => {
             const v = f.v;
             const start = Number(v.evidence_line) || 0;
+            // A verdict with no file of its own did not come from a model
+            // reading one: it is aur-sleuth's own code, which is how an
+            // injection attempt is reported (it cannot be, since a model the
+            // text steered could not be relied on to report it). Crediting it
+            // to the audit model would name a model for a finding it never
+            // made, on a public page.
+            const fromCode = !v.file || v.file === '(package-level)';
             return '<div class="finding"><div class="head">'
-                + '<span class="file">' + escapeHtml(v.file || '') + '</span>'
-                + (start ? '<span class="where">line ' + start + '</span>' : '')
-                + '<span class="tag">flagged by ' + escapeHtml(joinNicely(f.models)) + (judgeSafe ? ', overturned by the judge' : '') + '</span>'
+                + (fromCode ? '' : '<span class="file">' + escapeHtml(v.file) + '</span>')
+                + (start && !fromCode ? '<span class="where">line ' + start + '</span>' : '')
+                + '<span class="tag">' + (fromCode ? 'found by aur-sleuth' : 'flagged by ' + escapeHtml(joinNicely(f.models))) + (judgeSafe ? ', overturned by the judge' : '') + '</span>'
                 + f.summaries.map(s => '<span class="summary">' + escapeHtml(s) + '</span>').join('')
                 + '</div>'
                 + (v.evidence ? renderEvidence(v, state) : '')
