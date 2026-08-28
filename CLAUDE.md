@@ -188,7 +188,7 @@ nothing back: it cannot change a decision, the second look, or anything publishe
 translator instruction is per-language content in `_TRANSLATIONS`, so a language without
 one gets no translation rather than one in the wrong language. The deployment is
 isolated from the feature on top of that: `bench/pipeline.sh` and `bench/benchmark.sh`
-pin `AUR_SLEUTH_TRANSLATE_VERDICTS=0` on every audit invocation (`test-i18n.sh` fails if
+pin `AUR_SLEUTH_TRANSLATE_VERDICTS=false` on every audit invocation (`test-i18n.sh` fails if
 the pin is lost), so a container-wide enable cannot leak into the public pipeline.
 
 ## Repo layout

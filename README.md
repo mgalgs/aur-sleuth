@@ -151,6 +151,8 @@ LLM_TEMPERATURE = 0.7  # Omit to use the model default
 LLM_TOP_P = 0.9        # ditto
 LLM_REASONING_EFFORT = high  # low | medium | high
 AUDIT_FAILURE_FATAL = false  # Set to false to make audit failures non-fatal
+AUR_SLEUTH_LANG = zh  # Console language; defaults to the system locale
+AUR_SLEUTH_TRANSLATE_VERDICTS = true  # Translate findings into the console language; default false
 ```
 
 ### Example using OpenRouter

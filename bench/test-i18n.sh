@@ -94,13 +94,13 @@ try:
     # OFF by default: the verdict translation costs a second call per flag.
     setenv2(AUR_SLEUTH_LANG="zh")
     check("translation off by default", not m.verdict_translation_enabled())
-    setenv2(AUR_SLEUTH_LANG="zh", AUR_SLEUTH_TRANSLATE_VERDICTS="1")
+    setenv2(AUR_SLEUTH_LANG="zh", AUR_SLEUTH_TRANSLATE_VERDICTS="true")
     check("explicit on for a zh console", m.verdict_translation_enabled())
-    setenv2(AUR_SLEUTH_LANG="en", AUR_SLEUTH_TRANSLATE_VERDICTS="1")
+    setenv2(AUR_SLEUTH_LANG="en", AUR_SLEUTH_TRANSLATE_VERDICTS="true")
     check("never into English", not m.verdict_translation_enabled())
-    setenv2(AUR_SLEUTH_LANG="zh", AUR_SLEUTH_TRANSLATE_VERDICTS="0")
+    setenv2(AUR_SLEUTH_LANG="zh", AUR_SLEUTH_TRANSLATE_VERDICTS="false")
     check("explicit off wins", not m.verdict_translation_enabled())
-    setenv2(AUR_SLEUTH_LANG="zh", AUR_SLEUTH_TRANSLATE_VERDICTS="1", AUR_SLEUTH_DRY_RUN="1")
+    setenv2(AUR_SLEUTH_LANG="zh", AUR_SLEUTH_TRANSLATE_VERDICTS="true", AUR_SLEUTH_DRY_RUN="1")
     check("dry-run never translates", not m.verdict_translation_enabled())
 
     # Language comes from the SYSTEM locale with regional priority:
@@ -152,7 +152,7 @@ try:
     import types
     old_llm, old_params = m.LLM, m.get_llm_params_from_env
     try:
-        setenv2(AUR_SLEUTH_LANG="zh", AUR_SLEUTH_TRANSLATE_VERDICTS="1")
+        setenv2(AUR_SLEUTH_LANG="zh", AUR_SLEUTH_TRANSLATE_VERDICTS="true")
         m.LLM = FakeLLM
         m.get_llm_params_from_env = lambda: types.SimpleNamespace(model="fake-model")
         pkg = Path("/tmp/fake-pkg")
@@ -186,7 +186,7 @@ try:
         saved_table = dict(m._TRANSLATIONS)
         try:
             m._TRANSLATIONS["zz-fake"] = {"Some display": "某显示"}
-            setenv2(AUR_SLEUTH_LANG="zz-fake", AUR_SLEUTH_TRANSLATE_VERDICTS="1")
+            setenv2(AUR_SLEUTH_LANG="zz-fake", AUR_SLEUTH_TRANSLATE_VERDICTS="true")
             m.VERDICT_TRANSLATIONS.clear()
             tui.statuses.clear()
             m.translate_verdicts_batch(tui, object(), [bad], "fake-pkg")
@@ -222,10 +222,10 @@ check("the table is not empty", bool(m._TRANSLATIONS["zh"]))
 # --- deployment isolation -----------------------------------------------------
 # The public pipeline must never translate verdicts: the reports it publishes
 # are parsed by bench scripts, and translation is an opt-in paid call. Both
-# deployment invocations pin AUR_SLEUTH_TRANSLATE_VERDICTS=0 explicitly, so a
+# deployment invocations pin AUR_SLEUTH_TRANSLATE_VERDICTS=false explicitly, so a
 # container-wide enable cannot leak in; this check fails if the pin is lost.
 deploy_files = ["bench/pipeline.sh", "bench/benchmark.sh"]
-unpinned = [f for f in deploy_files if "AUR_SLEUTH_TRANSLATE_VERDICTS=0" not in open(f, encoding="utf-8").read()]
+unpinned = [f for f in deploy_files if "AUR_SLEUTH_TRANSLATE_VERDICTS=false" not in open(f, encoding="utf-8").read()]
 check("deployment invocations pin verdict translation off", not unpinned, unpinned)
 
 raise SystemExit(1 if fails else 0)

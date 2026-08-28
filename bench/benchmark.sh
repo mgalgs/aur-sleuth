@@ -209,7 +209,7 @@ audit_one() {
     # Same explicit pin as pipeline.sh: a benchmark must never translate
     # verdicts, whatever the surrounding environment enables.
     AUDIT_FAILURE_FATAL=true AUR_SLEUTH_ASCII_ICONS=1 \
-        AUR_SLEUTH_TRANSLATE_VERDICTS=0 \
+        AUR_SLEUTH_TRANSLATE_VERDICTS=false \
         OPENAI_MODEL="$model" \
         AUR_SLEUTH_REPORT_DIR="$report_dir" \
         timeout --kill-after=30s "$AUDIT_TIMEOUT" \

@@ -314,7 +314,7 @@ def verdict_translation_enabled() -> bool:
     """Translate model-written verdict prose for the console (display only).
 
     OFF by default: it costs a second LLM call per flagged verdict, so it is
-    opt-in. AUR_SLEUTH_TRANSLATE_VERDICTS=1 (environment or config file)
+    opt-in. AUR_SLEUTH_TRANSLATE_VERDICTS=true (environment or config file)
     turns it on; any other value leaves it off. Never in dry-run mode, which
     builds prompts without calling a model. The translation is a second,
     narrow call that reads only the verdict text, so it cannot influence the
@@ -4624,20 +4624,20 @@ def selftest_verdict_translation():
     saved = {k: os.environ.get(k) for k in ("AUR_SLEUTH_LANG", "AUR_SLEUTH_DRY_RUN", "AUR_SLEUTH_TRANSLATE_VERDICTS")}
     try:
         # Gating: OFF by default (it costs a second call per flagged verdict);
-        # =1 turns it on for a non-English console; never in dry-run; the
+        # true turns it on for a non-English console; never in dry-run; the
         # language's own absence of a translator also disables it (the batch).
         os.environ.pop("AUR_SLEUTH_DRY_RUN", None)
         os.environ.pop("AUR_SLEUTH_TRANSLATE_VERDICTS", None)
         os.environ["AUR_SLEUTH_LANG"] = "zh"
         assert not verdict_translation_enabled(), "off by default, even for zh"
-        os.environ["AUR_SLEUTH_TRANSLATE_VERDICTS"] = "1"
+        os.environ["AUR_SLEUTH_TRANSLATE_VERDICTS"] = "true"
         assert verdict_translation_enabled(), "explicit on for zh"
         os.environ["AUR_SLEUTH_LANG"] = "en"
         assert not verdict_translation_enabled(), "never into English"
         os.environ["AUR_SLEUTH_LANG"] = "zh"
-        os.environ["AUR_SLEUTH_TRANSLATE_VERDICTS"] = "0"
+        os.environ["AUR_SLEUTH_TRANSLATE_VERDICTS"] = "false"
         assert not verdict_translation_enabled(), "explicit off wins"
-        os.environ["AUR_SLEUTH_TRANSLATE_VERDICTS"] = "1"
+        os.environ["AUR_SLEUTH_TRANSLATE_VERDICTS"] = "true"
         os.environ["AUR_SLEUTH_DRY_RUN"] = "1"
         assert not verdict_translation_enabled(), "dry-run never translates"
     finally:
@@ -4708,7 +4708,7 @@ def selftest_verdict_translation():
     old_llm, old_params = LLM, get_llm_params_from_env
     try:
         os.environ["AUR_SLEUTH_LANG"] = "zh"
-        os.environ["AUR_SLEUTH_TRANSLATE_VERDICTS"] = "1"
+        os.environ["AUR_SLEUTH_TRANSLATE_VERDICTS"] = "true"
         os.environ.pop("AUR_SLEUTH_DRY_RUN", None)
         globals()["LLM"] = FakeLLM
         globals()["get_llm_params_from_env"] = lambda: types.SimpleNamespace(model="fake-model")

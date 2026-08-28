@@ -737,9 +737,9 @@ run_audit() {
     # --kill-after gives aur-sleuth a moment to die on TERM before SIGKILL, so a
     # wedged makepkg child cannot keep the process alive past the deadline.
     # The deployment never translates verdicts: the pin is explicit so a
-    # container-wide AUR_SLEUTH_TRANSLATE_VERDICTS=1 cannot leak into audits.
+    # container-wide AUR_SLEUTH_TRANSLATE_VERDICTS=true cannot leak into audits.
     AUDIT_FAILURE_FATAL=true AUR_SLEUTH_ASCII_ICONS=1 \
-        AUR_SLEUTH_TRANSLATE_VERDICTS=0 \
+        AUR_SLEUTH_TRANSLATE_VERDICTS=false \
         OPENAI_MODEL="$model" \
         AUR_SLEUTH_MODEL_ALIASES="$MODEL_ALIASES" \
         AUR_SLEUTH_MODEL_ALIAS="${ACTIVE_MODEL_ALIAS_BY_ID[$model]:-}" \
