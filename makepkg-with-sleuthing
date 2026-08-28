@@ -10,6 +10,20 @@ for arg in "$@"; do
         --verifysource|--nobuild|--geninteg|--packagelist|--printsrcinfo|--help|-h|--version|-V|-o|-g)
             skip=yes
             ;;
+        --*)
+            # Any other long option is a build-related one; audit it.
+            ;;
+        -?*)
+            # A cluster of short flags (paru's fetch phase calls makepkg with
+            # -ofA -C, a cluster of -o -f -A) that a bare -o match misses, so
+            # the audit ran on the fetch phase too -- twice per package. In
+            # makepkg's flag set o means fetch and g means geninteg, and both
+            # build nothing, so a cluster containing either must skip the
+            # audit just like the bare flags do.
+            case "${arg#-}" in
+                *o*|*g*) skip=yes ;;
+            esac
+            ;;
     esac
 done
 
