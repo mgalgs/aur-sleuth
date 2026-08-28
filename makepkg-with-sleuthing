@@ -20,7 +20,14 @@ for arg in "$@"; do
             # makepkg's flag set o means fetch and g means geninteg, and both
             # build nothing, so a cluster containing either must skip the
             # audit just like the bare flags do.
-            case "${arg#-}" in
+            rest="${arg#-}"
+            # -p takes an argument that consumes the rest of the cluster
+            # (getopt: -pog is -p with the argument "og", a real build with a
+            # custom script), so only flags before the first p can be o or g.
+            case "$rest" in
+                *p*) rest="${rest%%p*}" ;;
+            esac
+            case "$rest" in
                 *o*|*g*) skip=yes ;;
             esac
             ;;
