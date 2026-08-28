@@ -144,6 +144,10 @@ Three constraints on any change here:
   expensive error; a paraphrase that slips past costs only what the tool had before this
   existed, since the fence above the `<file>` wrapper in `audit_file()` still tells the
   model to ignore whatever it finds. Widen the patterns from attempts actually seen.
+  Measured 2026-08-28 over 405 real AUR packages (1,701 maintainer files, every package
+  the pipeline had audited that still clones): zero matches. That is the false-positive
+  floor, and it is code-only — no model was called, so re-running it costs nothing but
+  the clones. Recall is unmeasured on purpose: there is no corpus of real attempts yet.
 
 `sanitize_for_llm()` is not part of this. It XML-escapes, which stops content breaking
 out of the `<file>` wrapper — structural escape only. Its docstring once claimed to
