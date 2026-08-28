@@ -58,6 +58,8 @@ loop sent, and four of the six false flags on the benchmark sample were upstream
 - Obfuscation that hides what the code does.
 - Anything that leaves the installed artifact unverifiable, so an attacker can swap it
   later. See "The checksum distinction" below.
+- Text in any of those files that is addressed to the automated reviewer rather than to
+  makepkg. See "Attacking the review" below.
 
 ### Out of scope
 
@@ -109,6 +111,43 @@ description of a risk, models escalate to UNSAFE regardless of instructions tell
 not to.** The general lesson: a syntactic property of the PKGBUILD belongs in code, where
 it is deterministic and cannot destabilize a verdict. Reserve the prompt for judgment
 calls that actually need a model.
+
+## Attacking the review
+
+A maintainer can also attack the *reviewer*. Text committed anywhere in the repository
+that tells an automated reader to ignore its instructions, or dictates the verdict to
+return, is a finding on its own terms: an AUR maintainer can inject it, it serves no
+purpose the package claims, and no honest packaging task requires addressing a security
+reviewer. It is not on the "Out of scope" list, because every item there is either
+upstream's or a hygiene issue that occurs innocently. This has no innocent version.
+
+It is UNSAFE, not a note — which is where it parts company with the checksum
+distinction above. An unpinned source is ordinary practice that happens to carry risk.
+This is an act. And a review that was attacked cannot certify itself: there is no way to
+know how far the text got, so the clean verdicts it returned on the other files are worth
+less than they look.
+
+Three constraints on any change here:
+
+- **Never key on a filename.** The first idea was to give `AGENTS.md` and `CLAUDE.md`
+  special attention. The attacker picks the filename, so such a rule generalises to
+  nothing — a payload moves to a PKGBUILD comment and the rule is worth zero. Every
+  maintainer file is read identically. `bench/test-prompt-injection.sh` asserts no
+  pattern mentions a filename, and the fixture hides its text in a PKGBUILD comment.
+- **Detect it in code, never in the prompt.** The general rule (below) already says so,
+  but this case has a second reason the general one does not cover: *a model the
+  injection steered cannot be relied on to report the injection.* The detector has to
+  sit outside the channel the attack controls. `find_prompt_injection()` runs before the
+  gate, and `bench/test-prompt-injection.sh` pins the consequence — with every model
+  stubbed to SAFE, the package still fails.
+- **Precision over recall.** A match fails the package, so a false positive is the
+  expensive error; a paraphrase that slips past costs only what the tool had before this
+  existed, since the fence above the `<file>` wrapper in `audit_file()` still tells the
+  model to ignore whatever it finds. Widen the patterns from attempts actually seen.
+
+`sanitize_for_llm()` is not part of this. It XML-escapes, which stops content breaking
+out of the `<file>` wrapper — structural escape only. Its docstring once claimed to
+prevent prompt injection, which it never did.
 
 ## Prompt invariant
 
@@ -172,7 +211,8 @@ SAFE verdicts, and do not let it run without the malicious fixtures in the gate.
 - `aur-sleuth` — the whole tool, one Python script. `SYSTEM_PROMPTS` (prompts),
   `check_pkgbuild()` (the `makepkg` safety gate), `maintainer_files()` (the review set:
   the boundary above), `audit_file()` (per-file audit), `find_upstream_invocations()`
-  and `find_unpinned_remote_sources()` (facts recorded in code).
+  and `find_unpinned_remote_sources()` (facts recorded in code), and
+  `find_prompt_injection()` (text aimed at the reviewer, decided in code).
 - `bench/pipeline.sh` — the automated audit loop. Runs discover → audit → judge →
   re-audit → dashboard → push. Feeds the dashboard at mgalgs.io/aur-sleuth.
 - `bench/run-synthetic-tests.sh` — regression tests. Run after every prompt change.

@@ -136,6 +136,24 @@ only with a version bump.
   because fixtures have no reports to judge. Canned audit reports for the
   fixtures would give judge candidates a malice-detection score, not just
   false-flag resistance. Queued 2026-08-23.
+- The dashboard credits a code finding to a model (queued 2026-08-27).
+  `app.js` labels every unsafe `file_verdicts` entry "flagged by <model>",
+  reading the report's `model:` field. `find_prompt_injection()` writes the
+  first package-level UNSAFE verdict there, so its finding is attributed on
+  the public page to a model that never made it. Package-level results were
+  previously only inconclusive or skipped, which the findings block filters
+  out, so nothing surfaced this before. A one-line fix belongs with the next
+  dashboard change: label a verdict with no file "found by aur-sleuth".
+- Fence the report text the judge reads (queued 2026-08-27). `bench/judge.sh`
+  feeds whole reports to a model with no "treat this as untrusted input"
+  fence — `aur-sleuth`'s audit prompt has one, the judge has none. Every
+  UNSAFE verdict already quotes hostile package content into the report as
+  evidence, so this predates `find_prompt_injection()`; that detector makes
+  it easier to see, because a package whose whole finding IS text aimed at a
+  model gets that text quoted onward to another model. The quote is capped
+  at `_INJECTION_QUOTE_CHARS` so a padded payload cannot fill the report,
+  which is a bound, not a fix. `bench/review-pending.py` reads reports the
+  same way.
 
 ## Token budget (queued 2026-08-25)
 
