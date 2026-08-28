@@ -167,6 +167,27 @@ and `bench/synthetics/malicious-source-time` is the floor that would catch it ta
 the gate out of a real one. `docs/TOKEN-BUDGET.md` has both rounds. Do not widen it to
 SAFE verdicts, and do not let it run without the malicious fixtures in the gate.
 
+### The console language, and the two things it never touches
+
+The terminal may speak the operator's language (`_TRANSLATIONS` in `aur-sleuth`, keyed
+by language; `AUR_SLEUTH_LANG` overrides, otherwise the system locale decides). Two
+surfaces never do, and the split is the point:
+
+- **The report file is always English.** It is archived to the public branch and
+  parsed by bench scripts, so its frontmatter keys and values are a machine contract.
+  The TUI methods take the localized string for the terminal and a separate English
+  `report_msg` for the report; keep that split. A report that starts carrying the
+  operator's language is a regression, not a translation.
+- **The LLM prompts are always English.** They are the review surface this file is
+  about; an edit lands on the `makepkg` gate too. Do not localize them.
+
+Model-written verdict prose (the `<summary>`/`<details>` the user reads) is translated
+only in a separate display-layer call, off by default (`AUR_SLEUTH_TRANSLATE_VERDICTS`),
+after the audit, and only for non-SAFE verdicts. It reads the verdict text and writes
+nothing back: it cannot change a decision, the second look, or anything published. Its
+translator instruction is per-language content in `_TRANSLATIONS`, so a language without
+one gets no translation rather than one in the wrong language.
+
 ## Repo layout
 
 - `aur-sleuth` — the whole tool, one Python script. `SYSTEM_PROMPTS` (prompts),

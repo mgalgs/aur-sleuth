@@ -37,8 +37,8 @@ class Report:
 
 class TUI:
     has_color = False
-    def update_status(self, _text): pass
-    def finalize_step(self, _text, status=None): pass
+    def update_status(self, _text, report_msg=None): pass
+    def finalize_step(self, _text, status=None, report_msg=None): pass
 
 with tempfile.TemporaryDirectory() as d:
     pkg = pathlib.Path(d)

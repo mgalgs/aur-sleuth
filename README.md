@@ -118,6 +118,8 @@ The tool can be configured with environment variables:
 - `LLM_TOP_P`: The top-p parameter for the LLM (0.0-1.0). If not set, uses model default.
 - `LLM_REASONING_EFFORT`: Reasoning effort for supported reasoning models (`low`, `medium`, `high`). Defaults to `high`.
 - `AUDIT_FAILURE_FATAL`: Whether audit failures should be fatal (exit with error). Set to `false` to make audit failures non-fatal. Defaults to `true`.
+- `AUR_SLEUTH_LANG`: Language of the terminal output, taken from the system locale by default: `LC_ALL`, then `LC_MESSAGES`, then `LANG`, each matched with regional priority (e.g. `zh_CN.UTF-8` prefers a `zh_CN` table entry, then `zh`, then any other `zh_XX`, else English) -- so no configuration is needed on a Chinese-locale system. `AUR_SLEUTH_LANG` overrides the locale explicitly. Only the console is translated: the report file stays English, because reports are published to the dashboard and parsed by the pipeline scripts.
+- `AUR_SLEUTH_TRANSLATE_VERDICTS`: Whether to translate the model's written findings (`summary`/`details`) into the console language for display. **Off by default**; set to `1` (environment or `~/.config/aur-sleuth.conf`) to enable. This is a separate display-only call that runs after the audit: it reads only the verdict text, never the file content, and cannot change the decision; the report file keeps the model's English text. Only verdicts that are not SAFE are sent, so a clean package costs nothing; failures keep the English text and say so in the console log.
 
 You can either set these environment variables directly in your shell, or add them to
 a configuration file. The tool will automatically load configuration from

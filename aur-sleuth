@@ -115,6 +115,315 @@ ALLOWED_LLM_RESPONSE_TAGS = {"security_assessment", "decision", "details", "evid
 EVIDENCE_MAX_LINES = 12
 EVIDENCE_MAX_CHARS = 1500
 
+
+# --- i18n ----------------------------------------------------------------------
+#
+# The console speaks the operator's language; the report file does not.
+# Every message a TUI method renders goes to the terminal AND, through
+# report.write, into the audit report -- and that report is archived to the
+# public audit-reports branch and rendered by the dashboard, which is English
+# and parsed by bench scripts. So the translation boundary is the terminal
+# only: call sites pass the localized string as the message and the exact
+# English string the code wrote before as report_msg=, and the report bytes
+# never change with the operator's locale.
+#
+# What is deliberately NOT translated: the LLM prompts (a prompt edit lands on
+# the makepkg gate and is the most regression-prone surface in this repo), the
+# frontmatter keys and verdict values bench scripts parse, the security_assessment
+# XML tags, and SafeStatus.name. Per-file verdict text is the model's output and
+# is left as the model wrote it.
+_TRANSLATIONS = {
+    "zh": {
+        # progress and steps
+        "Downloading sources (attempt {attempt}/{max_retries})...": "正在下载源（第 {attempt}/{max_retries} 次尝试）...",
+        "Retrying in {delay}s...": "{delay} 秒后重试...",
+        "Reviewing {files}...": "正在审查 {files}...",
+        "Reviewing {what}...": "正在审查 {what}...",
+        "Reviewed {file}.": "已审查 {file}。",
+        "Reviewed all {what}.": "已全部审查 {what}。",
+        "the AUR repository's files": "AUR 仓库中的文件",
+        "Performing initial audit of PKGBUILD to ensure that we can safely run `makepkg`": "正在对 PKGBUILD 进行初步审计，以确保可以安全运行 `makepkg`",
+        "Initial PKGBUILD audit complete {summary}": "PKGBUILD 初步审计完成 {summary}",
+        "Initial PKGBUILD check doesn't look good: {summary}": "PKGBUILD 初步检查结果不理想：{summary}",
+        "makepkg --nobuild --nodeps --noprepare successful": "makepkg --nobuild --nodeps --noprepare 执行成功",
+        "Analyzing {package_name} AUR package with {model}": "正在使用 {model} 分析 {package_name} 的 AUR 包",
+        "Cloning {clone_url}...": "正在克隆 {clone_url}...",
+        "Cloned {package_name}": "已克隆 {package_name}",
+        "{package_name} is built from {pkgbase}": "{package_name} 由 {pkgbase} 构建",
+        "Command failed: {error}": "命令执行失败：{error}",
+        "An unexpected error occurred: {error}": "发生意外错误：{error}",
+        # notes and status lines
+        "Status: ": "状态：",
+        "Note: {n} remote source(s) have no checksum (sha256sums=SKIP), so the fetched bytes are not verifiable and can change without any AUR update: {sources}": "提示：有 {n} 个远程源没有校验和（sha256sums=SKIP），获取到的字节无法验证，可能在没有任何 AUR 更新的情况下被更改：{sources}",
+        "Note: the PKGBUILD names {n} file(s) in the downloaded sources ({examples}{more}); they are upstream content and were not reviewed.": "提示：PKGBUILD 在下载的源中提到了 {n} 个文件（{examples}{more}）；它们是上游内容，未纳入审查。",
+        "Reviewing the {n} file(s) in the AUR repository. The {m} downloaded file(s) are upstream content, outside the threat model, and are not read.": "正在审查 AUR 仓库中的 {n} 个文件。下载的 {m} 个文件属于上游内容，不在威胁模型范围内，不会被读取。",
+        "Reviewing the {n} file(s) in the AUR repository. No downloaded files are included in the review.": "正在审查 AUR 仓库中的 {n} 个文件。审查不包含任何已下载的文件。",
+        "makepkg --nobuild could not fetch all upstream sources; continuing with the AUR repository files, which are the complete maintainer-controlled audit boundary. Downloaded-source facts are unavailable.": "makepkg --nobuild 无法获取全部上游源；继续审查 AUR 仓库文件（这是维护者控制的完整审计边界）。已下载源的相关事实不可用。",
+        # verdict labels (console display only; SafeStatus.name stays English)
+        "SAFE": "安全",
+        "UNSAFE": "不安全",
+        "INCONCLUSIVE": "无法判定",
+        "SKIPPED": "已跳过",
+        "No issues found": "未发现问题",
+        "Unsafe": "不安全",
+        "Inconclusive": "无法判定",
+        "Skipped": "已跳过",
+        " -- DO NOT INSTALL!": " —— 请勿安装！",
+        " -- NO VERDICT": " —— 无判定",
+        # summary
+        "Audit complete!": "审计完成！",
+        "Result:": "结果：",
+        "Audit Log": "审计日志",
+        # verdict report labels (console display only; the report keeps English)
+        "Summary: ": "总结：",
+        "Details: ": "详情：",
+        "Evidence": "证据",
+        " (line {n})": "（第 {n} 行）",
+        "# Issues ({n} total)": "# 问题（共 {n} 个）",
+        "(Inconclusive {n} files: {items})": "（无法判定 {n} 个文件：{items}）",
+        "(Skipped {n} files: {items})": "（已跳过 {n} 个文件：{items}）",
+        "API Usage Summary": "API 用量摘要",
+        "Models: ": "模型：",
+        "Prompt Tokens: ": "提示词 Token：",
+        "Completion Tokens: ": "生成 Token：",
+        "Total Tokens: ": "总 Token：",
+        "Total Cost: ": "总成本：",
+        "Execution Time: {seconds:.2f} seconds": "执行时间：{seconds:.2f} 秒",
+        # verdict translation progress and failures (console log lines)
+        "Translating verdicts for display...": "正在翻译审查结论...",
+        "No translator instruction for {language}; verdicts stay English": "没有 {language} 语言的翻译指令；审查结论保持英文",
+        "Verdict translation failed for {package_name}; keeping English: {error}": "审查结论翻译失败（{package_name}），保持英文：{error}",
+        "Verdict translation for {package_name} did not parse; keeping English": "审查结论翻译（{package_name}）无法解析，保持英文",
+        # operator log lines that stream to the console at INFO level
+        "Working in {pkgdir}, calling {url}": "工作目录：{pkgdir}，调用：{url}",
+        "Full audit report: {path}": "完整审计报告：{path}",
+        "Per-call token ledger written to {path}": "逐次调用 Token 账本已写入：{path}",
+        "source uses manual://; not retrying unavailable vendor archive": "源使用 manual://；不重试不可用的厂商归档",
+        "Cloning {package_name} into {tmpdir}": "正在克隆 {package_name} 到 {tmpdir}",
+        "Cloned {package_name} into {tmpdir}": "已克隆 {package_name} 到 {tmpdir}",
+        # The verdict translator's instruction for THIS language. It lives in
+        # the table so the target language can never drift from the display
+        # language: adding a language means adding its own "translate into
+        # this language" instruction here, and a language without one simply
+        # gets no translation. Protocol -- the <translations>/<item>/<summary>
+        # tags the reply is parsed from -- stays in code, like the audit's own
+        # XML contract. Keyed by a stable id, not by a display string: this
+        # text is never shown to the user.
+        "_verdict_translator": """你是翻译，负责把 Arch User Repository（AUR）包的安全审查结论从英文翻译成简体中文。阅读者是看不懂英文审查意见的中文用户。
+规则：
+- 忠实且通顺地翻译 summary 和 details；不得弱化、添加或遗漏任何结论。
+- 文件路径、URL、包名、命令名和代码片段一律保持原样。
+- 只输出要求的 <translations> 块，不输出任何其他内容。""",
+    },
+}
+
+
+def _match_language(code: str) -> str:
+    """Map a locale code to a table language, or '' when nothing matches.
+
+    Priority, per the requirement for regional variants: the exact code
+    ("zh_CN") first, then the bare language ("zh"), then any other key for
+    that language ("zh_TW", "zh_HK", ...), else no match. Case-insensitive
+    ("zh_cn" and "zh_CN" both resolve), so a locale string works as-is.
+    """
+    code = (code or "").strip().replace("-", "_")
+    if not code:
+        return ""
+    for c in (code, code.lower()):
+        if c in _TRANSLATIONS:
+            return c
+    lang = code.lower().split("_", 1)[0]
+    if lang in _TRANSLATIONS:
+        return lang
+    for key in _TRANSLATIONS:
+        if key.split("_", 1)[0].lower() == lang:
+            return key
+    return ""
+
+
+def current_language() -> str:
+    """The language of the console, 'en' when nothing selects another.
+
+    The system locale decides, so no configuration is needed for the common
+    case: LC_ALL, then LC_MESSAGES, then LANG (POSIX precedence), each
+    matched against the table with _match_language's priority -- LANG=zh_CN.UTF-8
+    selects zh today and a finer zh_CN table entry if one is added later.
+    AUR_SLEUTH_LANG overrides the locale explicitly; anything unmatched
+    falls back to English rather than guessing.
+    """
+    explicit = os.environ.get("AUR_SLEUTH_LANG", "").strip()
+    if explicit:
+        return _match_language(explicit) or "en"
+    for var in ("LC_ALL", "LC_MESSAGES", "LANG"):
+        loc = os.environ.get(var, "").strip()
+        if loc:
+            matched = _match_language(loc.split(".", 1)[0])
+            if matched:
+                return matched
+    return "en"
+
+
+def _(msgid: str) -> str:
+    """Translate a console message, or return it unchanged.
+
+    Keys are the English strings with {placeholders}; callers apply .format()
+    after lookup. The report_msg= a TUI method receives is the untranslated
+    English string, so the published report never depends on the locale.
+    """
+    return _TRANSLATIONS.get(current_language(), {}).get(msgid, msgid)
+
+
+# --- verdict prose translation (display only) --------------------------------
+#
+# The audit call writes <summary>/<details> in the model's language, which is
+# English. A Chinese speaker cannot read the findings, so -- when the console
+# language is not English -- a SEPARATE narrow call translates the prose after
+# the audit, purely for display. This is the "summary" surface the user reads,
+# and it is deliberately not part of the audit prompt: the review prompt, the
+# decision, the report file, and the second look are all untouched, and the
+# translation cannot change a verdict or leak into anything published.
+#
+# Only verdicts worth reading are sent: SAFE verdicts say nothing the reader
+# needs (their prose is skipped), so a typical clean package costs nothing.
+# Everything here is best effort: any failure keeps the English text.
+VERDICT_TRANSLATIONS: Dict[int, Tuple[str, str]] = {}
+
+_TRANSLATE_ITEMS_MAX = 40
+_TRANSLATE_DETAIL_CHARS = 4000
+
+# The translator's system instruction is per-language content and lives in
+# _TRANSLATIONS under the "_verdict_translator" key (see the entry's comment);
+# translate_verdicts_batch() looks it up for the active language. The format
+# prompt below is protocol: the <translations>/<item>/<summary> tags are what
+# _parse_verdict_translations() parses, so they stay in code like the audit's
+# own XML contract.
+_VERDICT_TRANSLATOR_PROMPT = """Translate each item below.
+
+<items>
+{item_xml}
+</items>
+
+Reply with exactly one block, one <item> per input item, with the same index values:
+
+<translations>
+<item index="0"><summary>译文</summary><details>译文</details></item>
+</translations>"""
+
+
+def verdict_translation_enabled() -> bool:
+    """Translate model-written verdict prose for the console (display only).
+
+    OFF by default: it costs a second LLM call per flagged verdict, so it is
+    opt-in. AUR_SLEUTH_TRANSLATE_VERDICTS=1 (environment or config file)
+    turns it on; any other value leaves it off. Never in dry-run mode, which
+    builds prompts without calling a model. The translation is a second,
+    narrow call that reads only the verdict text, so it cannot influence the
+    audit decision; a language without a translator instruction in the table
+    simply gets none (the batch checks, and skips rather than guessing).
+    """
+    switch = os.environ.get("AUR_SLEUTH_TRANSLATE_VERDICTS", "").strip().lower()
+    if switch not in ("1", "true", "yes", "on"):
+        return False
+    return current_language() != "en" and not dry_run_enabled()
+
+
+def _parse_verdict_translations(reply: str) -> Dict[int, Tuple[str, str]]:
+    """Parse the translator's <translations> block into {index: (summary, details)}.
+
+    Returns {} on any malformed reply; the caller keeps the English text.
+    """
+    reply = strip_markdown_fences(reply or "")
+    match = re.search(r"<translations>(.*)</translations>", reply, re.S)
+    if not match:
+        return {}
+    try:
+        root = ET.fromstring(f"<root>{match.group(1)}</root>")
+    except ET.ParseError:
+        return {}
+    out = {}
+    for item in root.findall("item"):
+        idx = item.get("index")
+        if idx is None or not idx.isdigit():
+            continue
+        out[int(idx)] = (item.findtext("summary") or "", item.findtext("details") or "")
+    return out
+
+
+def translate_verdicts_batch(tui: "ConsoleUI", llm_client: "LLMClient", audit_results: "List[AuditResult]", package_name: str) -> None:
+    """One call translating every non-SAFE verdict's prose into the console
+    language; stores the result in VERDICT_TRANSLATIONS keyed by id(result).
+
+    A no-op when translation is off, nothing needs translating, or the call
+    fails -- the display then falls back to the English text. The translation
+    is display-only: it reads the verdict text and writes nothing back to the
+    results or the report. Failures are loud (a warning in the console log),
+    so a missing translation is never silent.
+    """
+    results = [
+        r for r in (audit_results or [])
+        if r.status in (SafeStatus.UNSAFE, SafeStatus.INCONCLUSIVE)
+        and (r.summary or r.details)
+    ]
+    if not results or not verdict_translation_enabled():
+        return
+    # The translator's instruction is per-language content (see the table
+    # entry's comment). A language without one gets no translation rather
+    # than a prompt that names the wrong target language.
+    translator_system = _TRANSLATIONS.get(current_language(), {}).get("_verdict_translator")
+    if not translator_system:
+        logger.warning(
+            _("No translator instruction for {language}; verdicts stay English").format(
+                language=current_language()
+            )
+        )
+        return
+    # The spinner still reads "reviewing" otherwise; say what is happening.
+    tui.update_status(
+        _("Translating verdicts for display..."),
+        report_msg="Translating verdicts for display...",
+    )
+    results = results[:_TRANSLATE_ITEMS_MAX]
+    items = []
+    for i, r in enumerate(results):
+        details = (r.details or "")[:_TRANSLATE_DETAIL_CHARS]
+        items.append(
+            f'<item index="{i}"><summary>{sanitize_xml_string(r.summary or "")}</summary>'
+            f"<details>{sanitize_xml_string(details)}</details></item>"
+        )
+    # A translation call wants determinism and brevity, not reasoning; the
+    # audit's own temperature and effort stay untouched.
+    params = get_llm_params_from_env()
+    llm = LLM(
+        limit_tokens=SESSION_AUDIT_LIMIT_TOKENS,
+        llm_client=llm_client,
+        model=params.model,
+        system_prompt=translator_system,
+        temperature=0.0,
+        reasoning_effort="low",
+        stage="translate",
+        label=package_name,
+    )
+    try:
+        reply = llm.chat(_VERDICT_TRANSLATOR_PROMPT.format(item_xml="\n".join(items)))
+    except Exception as e:
+        logger.warning(
+            _("Verdict translation failed for {package_name}; keeping English: {error}").format(
+                package_name=package_name, error=describe_error(e)
+            )
+        )
+        return
+    parsed = _parse_verdict_translations(reply)
+    if not parsed:
+        logger.warning(
+            _("Verdict translation for {package_name} did not parse; keeping English").format(
+                package_name=package_name
+            )
+        )
+        return
+    VERDICT_TRANSLATIONS.update(
+        {id(results[i]): parsed[i] for i in parsed if 0 <= i < len(results)}
+    )
+
 # The review set -- every file the AUR maintainer controls (maintainer_files())
 # -- and two facts about what was NOT read: how many files makepkg downloaded,
 # and which of them the PKGBUILD names by path (find_upstream_invocations()).
@@ -695,7 +1004,7 @@ class AuditResult(NamedTuple):
                 fpath = f"{self.file_path.name}: "
         return f"{fpath}[{self.status.name}] {self.summary}{deets}"
 
-    def report_text(self, use_color=True) -> str:
+    def report_text(self, use_color=True, translations=None) -> str:
         # The path relative to the package, not the bare name: a fixture
         # PKGBUILD under bench/synthetics/ was reported as "PKGBUILD", which
         # reads as the real one.
@@ -705,24 +1014,35 @@ class AuditResult(NamedTuple):
                 header = str(self.file_path.relative_to(self.pkgdir))
             except ValueError:
                 header = self.file_path.name
+        # translations is present exactly when this text is being rendered for
+        # the console: labels follow the operator's language and the verdict
+        # prose is the translated copy. The report file renders without it and
+        # keeps the English bytes.
+        localized = translations is not None
         content = f"## {header}\n\n"
 
         if use_color:
             color = self.status.get_color()
-            content += f"Status: [{color}] {self.status.name}[/{color}]\n\n"
+            content += f"{_('Status: ')}[{color}] {_(self.status.name) if localized else self.status.name}[/{color}]\n\n"
         else:
-            content += f"Status: {self.status.name}\n\n"
+            content += f"{_('Status: ') if localized else 'Status: '}{_(self.status.name) if localized else self.status.name}\n\n"
 
-        content += f"Summary: {self.summary}\n\n"
+        t_summary, t_details = self.summary, self.details
+        if localized and id(self) in translations:
+            t_summary, t_details = translations[id(self)]
+
+        content += f"{_('Summary: ') if localized else 'Summary: '}{t_summary}\n\n"
 
         if self.evidence:
-            where = f" (line {self.evidence_line})" if self.evidence_line else ""
+            where = ""
+            if self.evidence_line:
+                where = _(" (line {n})").format(n=self.evidence_line) if localized else f" (line {self.evidence_line})"
             # Shell code is full of "[...]", which rich reads as markup.
             snippet = rich_escape(self.evidence) if use_color else self.evidence
-            content += f"Evidence{where}:\n\n```\n{snippet}\n```\n\n"
+            content += f"{_('Evidence') if localized else 'Evidence'}{where}:\n\n```\n{snippet}\n```\n\n"
 
-        if self.details:
-            content += f"Details:\n\n{self.details}\n\n"
+        if t_details:
+            content += f"{_('Details: ') if localized else 'Details: '}{t_details}\n\n"
 
         return content
 
@@ -841,13 +1161,23 @@ def generate_report_text(
     use_color: bool,
     execution_time: Optional[float],
     llm_client: LLMClient,
+    translations: Optional[Dict[int, Tuple[str, str]]] = None,
+    log_path: bool = True,
 ) -> str:
+    # translations is present exactly when this text is being rendered for the
+    # console: labels follow the operator's language and the verdict prose is
+    # the translated copy. The report file renders without it and keeps the
+    # English bytes (labels included).
+    localized = translations is not None
     content = ""
     nunsafe = len(results_by_status[SafeStatus.UNSAFE])
     if nunsafe > 0:
-        content += f"# Issues ({nunsafe} total)\n\n"
+        if localized:
+            content += _("# Issues ({n} total)").format(n=nunsafe) + "\n\n"
+        else:
+            content += f"# Issues ({nunsafe} total)\n\n"
         for issue in results_by_status[SafeStatus.UNSAFE]:
-            content += issue.report_text(use_color=use_color) + "---\n\n"
+            content += issue.report_text(use_color=use_color, translations=translations) + "---\n\n"
 
     ninconclusive = len(results_by_status[SafeStatus.INCONCLUSIVE])
     if ninconclusive > 0:
@@ -855,9 +1185,14 @@ def generate_report_text(
             (r.file_path.name if r.file_path else r.summary)
             for r in results_by_status[SafeStatus.INCONCLUSIVE]
         )
-        content += (
-            f"(Inconclusive {ninconclusive} file{'' if ninconclusive == 1 else 's'}: {inconclusive_items})\n\n"
-        )
+        if localized:
+            content += _("(Inconclusive {n} files: {items})").format(
+                n=ninconclusive, items=inconclusive_items
+            ) + "\n\n"
+        else:
+            content += (
+                f"(Inconclusive {ninconclusive} file{'' if ninconclusive == 1 else 's'}: {inconclusive_items})\n\n"
+            )
 
     nskips = len(results_by_status[SafeStatus.SKIPPED])
     if nskips > 0:
@@ -865,42 +1200,61 @@ def generate_report_text(
             (r.file_path.name if r.file_path else r.summary)
             for r in results_by_status[SafeStatus.SKIPPED]
         )
-        content += (
-            f"(Skipped {nskips} file{'' if nskips == 1 else 's'}: {skipped_files})\n\n"
-        )
+        if localized:
+            content += _("(Skipped {n} files: {items})").format(
+                n=nskips, items=skipped_files
+            ) + "\n\n"
+        else:
+            content += (
+                f"(Skipped {nskips} file{'' if nskips == 1 else 's'}: {skipped_files})\n\n"
+            )
 
     usage_summary_all = llm_client.get_usage_summary()
     usage_summary = usage_summary_all["total"]
     models = usage_summary_all["by-model"].keys()
 
+    # Labels are looked up once: the colorized section and the plain section
+    # share them, and en passes through `_()` unchanged.
+    lbl_models = _("Models: ")
+    lbl_prompt = _("Prompt Tokens: ")
+    lbl_completion = _("Completion Tokens: ")
+    lbl_total = _("Total Tokens: ")
+    lbl_cost = _("Total Cost: ")
+    lbl_time = _("Execution Time: {seconds:.2f} seconds")
+    usage_title = _("API Usage Summary")
+
     if use_color:
-        gradient_title = gradient("API Usage Summary", 0.7, 0.89)
+        gradient_title = gradient(usage_title, 0.7, 0.89)
 
         usage_details = gradient_title + "\n"
         usage_details += (
-            f"  [bold {GREY}]Models:[/] [bold white]{', '.join(models)}[/]\n"
+            f"  [bold {GREY}]{lbl_models}[/] [bold white]{', '.join(models)}[/]\n"
         )
-        usage_details += f"  [bold {GREY}]Prompt Tokens:[/] [bold white]{usage_summary['prompt_tokens']}[/]\n"
-        usage_details += f"  [bold {GREY}]Completion Tokens:[/] [bold white]{usage_summary['completion_tokens']}[/]\n"
-        usage_details += f"  [bold {GREY}]Total Tokens:[/] [bold white]{usage_summary['total_tokens']}[/]\n"
-        usage_details += f"  [bold {GREY}]Total Cost:[/] [bold white]{usage_summary['total_cost']}[/]\n"
-        usage_details += f"  [bold {GREY}]Execution Time:[/] [bold white]{execution_time:.2f} seconds[/]\n"
+        usage_details += f"  [bold {GREY}]{lbl_prompt}[/] [bold white]{usage_summary['prompt_tokens']}[/]\n"
+        usage_details += f"  [bold {GREY}]{lbl_completion}[/] [bold white]{usage_summary['completion_tokens']}[/]\n"
+        usage_details += f"  [bold {GREY}]{lbl_total}[/] [bold white]{usage_summary['total_tokens']}[/]\n"
+        usage_details += f"  [bold {GREY}]{lbl_cost}[/] [bold white]{usage_summary['total_cost']}[/]\n"
+        usage_details += f"  [bold {GREY}]{lbl_time.format(seconds=execution_time)}[/]\n"
     else:
         # Plain text version without colors
-        usage_details = "API Usage Summary\n"
-        usage_details += f"  Models: {', '.join(models)}\n"
-        usage_details += f"  Prompt Tokens: {usage_summary['prompt_tokens']}\n"
-        usage_details += f"  Completion Tokens: {usage_summary['completion_tokens']}\n"
-        usage_details += f"  Total Tokens: {usage_summary['total_tokens']}\n"
-        usage_details += f"  Total Cost: {usage_summary['total_cost']}\n"
-        usage_details += f"  Execution Time: {execution_time:.2f} seconds\n"
+        usage_details = usage_title + "\n"
+        usage_details += f"  {lbl_models}{', '.join(models)}\n"
+        usage_details += f"  {lbl_prompt}{usage_summary['prompt_tokens']}\n"
+        usage_details += f"  {lbl_completion}{usage_summary['completion_tokens']}\n"
+        usage_details += f"  {lbl_total}{usage_summary['total_tokens']}\n"
+        usage_details += f"  {lbl_cost}{usage_summary['total_cost']}\n"
+        usage_details += f"  {lbl_time.format(seconds=execution_time)}\n"
 
     content += usage_details
     # Deliberately not part of the report. This text is written into the report
     # itself, where naming its own path tells the reader nothing they do not
     # have and describes the machine that ran the audit to everyone the report
-    # is published to.
-    logger.info("Full audit report: %s", report_path)
+    # is published to. Logged once per render that needs it; the console-only
+    # render (translations set) reuses the same path, so it does not re-log.
+    if log_path:
+        logger.info(
+            _("Full audit report: {path}").format(path=report_path)
+        )
     return content
 
 
@@ -910,12 +1264,22 @@ class ConsoleUI(abc.ABC):
     def __init__(self, report: Report):
         raise NotImplementedError("Subclasses must implement __init__.")
 
-    def update_status(self, text):
-        """Updates the status text."""
+    def update_status(self, text, report_msg=None):
+        """Updates the status text.
+
+        text is what the terminal shows (possibly translated); report_msg is
+        what the report file records and stays English when localization is
+        on. When report_msg is None both get text, so untranslated call sites
+        are unchanged.
+        """
         raise NotImplementedError("Subclasses must implement update_status.")
 
-    def finalize_step(self, message, status: Optional[SafeStatus] = None):
-        """Finalizes a step with a message."""
+    def finalize_step(self, message, status: Optional[SafeStatus] = None, report_msg=None):
+        """Finalizes a step with a message.
+
+        Same split as update_status: message goes to the terminal, report_msg
+        to the report file.
+        """
         raise NotImplementedError("Subclasses must implement finalize_step.")
 
     def show_summary(
@@ -943,15 +1307,19 @@ class TUIPlain(ConsoleUI):
     def __exit__(self, exc_type, exc_val, exc_tb):
         pass
 
-    def update_status(self, text):
-        self.report.write(text, stdout=True)
+    def update_status(self, text, report_msg=None):
+        # The report keeps the English string; only the terminal is localized.
+        self.report.write(report_msg if report_msg is not None else text)
+        print(text)
 
-    def finalize_step(self, message, status: Optional[SafeStatus] = None):
+    def finalize_step(self, message, status: Optional[SafeStatus] = None, report_msg=None):
         if status is not None:
             icon = status.get_icon()
-            self.report.write(f"{icon} {message}", stdout=True)
+            self.report.write(f"{icon} {report_msg if report_msg is not None else message}")
+            print(f"{icon} {message}")
         else:
-            self.report.write(message, stdout=True)
+            self.report.write(report_msg if report_msg is not None else message)
+            print(message)
 
     def show_summary(
         self,
@@ -963,6 +1331,11 @@ class TUIPlain(ConsoleUI):
         results_by_status = partition_results_by_status(audit_results)
         overall_status = compute_overall_status(results_by_status)
 
+        # Generate the content first: this fires the "Full audit report" log
+        # line, which the original code emitted before the completion line.
+        # The report keeps the English content (it is the published artifact);
+        # the terminal renders with the verdict translations (an empty map when
+        # there is nothing to translate), which localizes the labels too.
         content = generate_report_text(
             report_path,
             results_by_status,
@@ -972,11 +1345,27 @@ class TUIPlain(ConsoleUI):
         )
 
         recommended_action = recommended_action_for_status(overall_status)
+        # The report line stays English (it is the published artifact); the
+        # terminal line follows the operator's locale.
         self.report.write(
-            f"Audit complete! Result: {overall_status.cautious_name}{recommended_action}",
-            stdout=True,
+            f"Audit complete! Result: {overall_status.cautious_name}{recommended_action}"
         )
-        self.report.write(content, stdout=True)
+        print(
+            f"{_('Audit complete!')} {_('Result:')} "
+            f"{_(overall_status.cautious_name)}{_(recommended_action)}"
+        )
+        self.report.write(content)
+        print(
+            generate_report_text(
+                report_path,
+                results_by_status,
+                use_color=False,
+                execution_time=execution_time,
+                llm_client=llm_client,
+                translations=VERDICT_TRANSLATIONS,
+                log_path=False,
+            )
+        )
 
 
 class TUI(ConsoleUI):
@@ -1015,29 +1404,31 @@ class TUI(ConsoleUI):
         renderables = []
         if self.history:
             history_text = Text.from_markup("\n".join(self.history))
-            history_panel = Panel(history_text, box=box.ROUNDED, title="Audit Log")
+            history_panel = Panel(history_text, box=box.ROUNDED, title=_("Audit Log"))
             renderables.append(history_panel)
 
         renderables.append(self.spinner)
         return Group(*renderables)
 
-    def update_status(self, text):
+    def update_status(self, text, report_msg=None):
         """Updates the status text within the live display."""
         if not self.live or not self.live.is_started:
             raise RuntimeError("TUI is not started. Call __enter__() first.")
-        self.report.write(text)
+        self.report.write(report_msg if report_msg is not None else text)
         self.spinner.text = Text(f" {text}", style="bold blue")
         with self._render_lock:
             self.live.update(self._get_renderable(), refresh=True)
 
-    def finalize_step(self, message, status: Optional[SafeStatus] = None):
+    def finalize_step(self, message, status: Optional[SafeStatus] = None, report_msg=None):
         """Adds a message to the history and updates the display."""
         status = status or SafeStatus.SAFE
         icon = status.get_icon()
         color = status.get_color()
 
         self.history.append(f"[{color}]{icon}[/{color}] {message}")
-        self.report.write(strip_rich_tags(message))
+        self.report.write(
+            strip_rich_tags(report_msg if report_msg is not None else message)
+        )
         # Update the live display with the new history
         with self._render_lock:
             self.live.update(self._get_renderable(), refresh=True)
@@ -1062,9 +1453,15 @@ class TUI(ConsoleUI):
         result_color = overall_status.get_color()
 
         recommended_action = recommended_action_for_status(overall_status)
-        audit_complete_text = gradient("Audit complete!", 0.25, 0.0)
-        title = f"{audit_complete_text} Result: [{result_color}]{overall_status.cautious_name}{recommended_action}[/{result_color}]"
+        audit_complete_text = gradient(_("Audit complete!"), 0.25, 0.0)
+        title = (
+            f"{audit_complete_text} {_('Result:')} "
+            f"[{result_color}]{_(overall_status.cautious_name)}{_(recommended_action)}[/{result_color}]"
+        )
 
+        # The report keeps the English content (it is the published artifact);
+        # the panel renders with the verdict translations (an empty map when
+        # there is nothing to translate), which localizes the labels too.
         content = generate_report_text(
             report_path,
             results_by_status,
@@ -1072,10 +1469,22 @@ class TUI(ConsoleUI):
             execution_time=execution_time,
             llm_client=llm_client,
         )
-
         self.report.write(strip_rich_tags(content))
 
-        panel = Panel(content, title=title, box=box.ROUNDED, expand=False)
+        panel = Panel(
+            generate_report_text(
+                report_path,
+                results_by_status,
+                use_color=True,
+                execution_time=execution_time,
+                llm_client=llm_client,
+                translations=VERDICT_TRANSLATIONS,
+                log_path=False,
+            ),
+            title=title,
+            box=box.ROUNDED,
+            expand=False,
+        )
         self.console.print(panel)
 
 
@@ -2130,11 +2539,17 @@ def download_sources(tui: ConsoleUI, max_retries: int = 3):
     cmd = ["makepkg", "--nobuild", "--nodeps", "--noprepare", "--skippgpcheck"]
     for attempt in range(1, max_retries + 1):
         tui.update_status(
-            f"Downloading sources (attempt {attempt}/{max_retries})..."
+            _("Downloading sources (attempt {attempt}/{max_retries})...").format(
+                attempt=attempt, max_retries=max_retries
+            ),
+            report_msg=f"Downloading sources (attempt {attempt}/{max_retries})...",
         )
         try:
             run_makepkg(cmd)
-            tui.finalize_step("makepkg --nobuild --nodeps --noprepare successful")
+            tui.finalize_step(
+                _("makepkg --nobuild --nodeps --noprepare successful"),
+                report_msg="makepkg --nobuild --nodeps --noprepare successful",
+            )
             return True
         except subprocess.TimeoutExpired:
             # No retry: a mirror that stalled for the whole ceiling is not going
@@ -2150,11 +2565,14 @@ def download_sources(tui: ConsoleUI, max_retries: int = 3):
             # operator to place it locally. Retrying cannot change that state
             # and only delays the maintainer-file audit.
             if "manual://" in (e.stderr or ""):
-                logger.info("source uses manual://; not retrying unavailable vendor archive")
+                logger.info(_("source uses manual://; not retrying unavailable vendor archive"))
                 return False
             if attempt < max_retries:
                 delay = 2 ** attempt
-                tui.update_status(f"Retrying in {delay}s...")
+                tui.update_status(
+                    _("Retrying in {delay}s...").format(delay=delay),
+                    report_msg=f"Retrying in {delay}s...",
+                )
                 time.sleep(delay)
     return False
 
@@ -2776,7 +3194,10 @@ def audit_files(
     def _update_status():
         files_str = ", ".join(processing_files)
         progress_str = f"[{completed_count}/{total_count}]"
-        tui.update_status(f"{progress_str} Reviewing {files_str}...")
+        tui.update_status(
+            f"{progress_str} " + _("Reviewing {files}...").format(files=files_str),
+            report_msg=f"{progress_str} Reviewing {files_str}...",
+        )
 
     def add_file_to_processing(f):
         with processing_files_lock:
@@ -2804,7 +3225,10 @@ def audit_files(
         return (f, result)
 
     # Review files in parallel
-    tui.update_status(f"Reviewing {processing_description}...")
+    tui.update_status(
+        _("Reviewing {what}...").format(what=_(processing_description)),
+        report_msg=f"Reviewing {processing_description}...",
+    )
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_jobs) as executor:
         future_to_file = {
@@ -2826,7 +3250,10 @@ def audit_files(
             completed_count += 1
             remove_file_from_processing(f_rel)
 
-            status_txt = "Status: "
+            status_txt = _("Status: ")
+            # The English twin of status_txt keeps the published report
+            # byte-identical to what it held before localization.
+            english_status = "Status: "
             if tui.has_color:
                 color = result.status.get_color()
                 summary_color = (
@@ -2834,25 +3261,35 @@ def audit_files(
                     if result.status in (SafeStatus.UNSAFE, SafeStatus.INCONCLUSIVE)
                     else f"{GREY}"
                 )
-                status_txt += f"[{color}]{result.status.name}[/{color}] [{GREY}]--[/] [{summary_color}]{result.summary}[/]"
+                status_txt += f"[{color}]{_(result.status.name)}[/{color}] [{GREY}]--[/] [{summary_color}]{result.summary}[/]"
+                english_status += f"[{color}]{result.status.name}[/{color}] [{GREY}]--[/] [{summary_color}]{result.summary}[/]"
                 tui.finalize_step(
-                    f"[{GREY}]Reviewed {f_rel}.[/] {status_txt}", status=result.status
+                    f"[{GREY}]{_('Reviewed {file}.').format(file=f_rel)}[/] {status_txt}",
+                    status=result.status,
+                    report_msg=f"[{GREY}]Reviewed {f_rel}.[/] {english_status}",
                 )
             else:
-                status_txt += f"{result.status.name} -- {result.summary}"
+                status_txt += f"{_(result.status.name)} -- {result.summary}"
+                english_status += f"{result.status.name} -- {result.summary}"
                 tui.finalize_step(
-                    f"Reviewed {f_rel}. {status_txt}", status=result.status
+                    f"{_('Reviewed {file}.').format(file=f_rel)} {status_txt}",
+                    status=result.status,
+                    report_msg=f"Reviewed {f_rel}. {english_status}",
                 )
 
             audit_results.append(result)
 
-    tui.finalize_step(f"Reviewed all {processing_description}.")
+    tui.finalize_step(
+        _("Reviewed all {what}.").format(what=_(processing_description)),
+        report_msg=f"Reviewed all {processing_description}.",
+    )
     return audit_results
 
 
 def check_pkgbuild(tui, report, package_name, pkgdir, llm_client) -> AuditResult:
     tui.update_status(
-        "Performing initial audit of PKGBUILD to ensure that we can safely run `makepkg`"
+        _("Performing initial audit of PKGBUILD to ensure that we can safely run `makepkg`"),
+        report_msg="Performing initial audit of PKGBUILD to ensure that we can safely run `makepkg`",
     )
 
     extra_instructions = """We're about to run `makepkg --nobuild --nodeps --noprepare` and
@@ -2906,8 +3343,9 @@ PKGBUILD review that follows.)"""
     else:
         summary_txt = f"-- {result.summary}"
     tui.finalize_step(
-        f"Initial PKGBUILD audit complete {summary_txt}",
+        _("Initial PKGBUILD audit complete {summary}").format(summary=summary_txt),
         status=result.status,
+        report_msg=f"Initial PKGBUILD audit complete {summary_txt}",
     )
     return result
 
@@ -2932,12 +3370,19 @@ def do_agentic_audit(
     UPSTREAM_FILE_COUNT[0] = 0
     UPSTREAM_NAMED[:] = []
     UNPINNED_SOURCES[:] = []
+    VERDICT_TRANSLATIONS.clear()
 
     pkgbuild_result = check_pkgbuild(tui, report, package_name, pkgdir, llm_client)
     if pkgbuild_result.status != SafeStatus.SAFE:
         msg = "Initial PKGBUILD check doesn't look good: " + pkgbuild_result.summary
         report.write(msg + "\n\n" + pkgbuild_result.details)
-        tui.finalize_step(msg, pkgbuild_result.status)
+        tui.finalize_step(
+            _("Initial PKGBUILD check doesn't look good: {summary}").format(
+                summary=pkgbuild_result.summary
+            ),
+            pkgbuild_result.status,
+            report_msg=msg,
+        )
         return [pkgbuild_result]
 
     sources_fetched = download_sources(tui)
@@ -2949,7 +3394,7 @@ def do_agentic_audit(
             "audit boundary. Downloaded-source facts are unavailable."
         )
         report.write(msg + "\n")
-        tui.finalize_step(msg)
+        tui.finalize_step(_(msg), report_msg=msg)
 
     # Report unpinned remote sources as a fact about the package. This is deliberately
     # NOT a verdict: SKIP checksums are ordinary AUR practice, so failing on them would
@@ -2957,10 +3402,16 @@ def do_agentic_audit(
     # nothing pins the bytes being installed.
     UNPINNED_SOURCES[:] = find_unpinned_remote_sources(pkgdir)
     if UNPINNED_SOURCES:
-        tui.finalize_step(
+        msg = (
             f"Note: {len(UNPINNED_SOURCES)} remote source(s) have no checksum "
             f"(sha256sums=SKIP), so the fetched bytes are not verifiable and can change "
             f"without any AUR update: {', '.join(UNPINNED_SOURCES)}"
+        )
+        tui.finalize_step(
+            _("Note: {n} remote source(s) have no checksum (sha256sums=SKIP), so the fetched bytes are not verifiable and can change without any AUR update: {sources}").format(
+                n=len(UNPINNED_SOURCES), sources=", ".join(UNPINNED_SOURCES)
+            ),
+            report_msg=msg,
         )
 
     # What was not read, said plainly, so a clean verdict cannot be mistaken
@@ -2975,19 +3426,34 @@ def do_agentic_audit(
         examples = ", ".join(UPSTREAM_NAMED[:3])
         more = f" and {len(UPSTREAM_NAMED) - 3} more" if len(UPSTREAM_NAMED) > 3 else ""
         tui.finalize_step(
-            f"Note: the PKGBUILD names {len(UPSTREAM_NAMED)} file(s) in the downloaded "
-            f"sources ({examples}{more}); they are upstream content and were not reviewed."
+            _("Note: the PKGBUILD names {n} file(s) in the downloaded sources ({examples}{more}); they are upstream content and were not reviewed.").format(
+                n=len(UPSTREAM_NAMED), examples=examples, more=more
+            ),
+            report_msg=(
+                f"Note: the PKGBUILD names {len(UPSTREAM_NAMED)} file(s) in the downloaded "
+                f"sources ({examples}{more}); they are upstream content and were not reviewed."
+            ),
         )
     if sources_fetched:
         tui.finalize_step(
-            f"Reviewing the {len(MAINTAINER_FILES)} file(s) in the AUR repository. The "
-            f"{UPSTREAM_FILE_COUNT[0]} downloaded file(s) are upstream content, outside "
-            "the threat model, and are not read."
+            _("Reviewing the {n} file(s) in the AUR repository. The {m} downloaded file(s) are upstream content, outside the threat model, and are not read.").format(
+                n=len(MAINTAINER_FILES), m=UPSTREAM_FILE_COUNT[0]
+            ),
+            report_msg=(
+                f"Reviewing the {len(MAINTAINER_FILES)} file(s) in the AUR repository. The "
+                f"{UPSTREAM_FILE_COUNT[0]} downloaded file(s) are upstream content, outside "
+                "the threat model, and are not read."
+            ),
         )
     else:
         tui.finalize_step(
-            f"Reviewing the {len(MAINTAINER_FILES)} file(s) in the AUR repository. "
-            "No downloaded files are included in the review."
+            _("Reviewing the {n} file(s) in the AUR repository. No downloaded files are included in the review.").format(
+                n=len(MAINTAINER_FILES)
+            ),
+            report_msg=(
+                f"Reviewing the {len(MAINTAINER_FILES)} file(s) in the AUR repository. "
+                "No downloaded files are included in the review."
+            ),
         )
 
     return audit_files(
@@ -3176,14 +3642,25 @@ def run_aur_sleuth_audit(
         # The working directory and the endpoint belong in the operator's log,
         # not in the report: the report is published, and both describe the
         # machine that ran the audit rather than the package it audited.
-        logger.info("Working in %s, calling %s", pkgdir, get_base_url())
+        logger.info(
+            _("Working in {pkgdir}, calling {url}").format(
+                pkgdir=pkgdir, url=get_base_url()
+            )
+        )
         tui.finalize_step(
-            f"Analyzing {package_name} AUR package with {model}"
+            _("Analyzing {package_name} AUR package with {model}").format(
+                package_name=package_name, model=model
+            ),
+            report_msg=f"Analyzing {package_name} AUR package with {model}",
         )
 
         os.chdir(pkgdir)
 
         audit_results = do_agentic_audit(tui, report, package_name, pkgdir, llm_client)
+        # Display-layer verdict translation: a separate call after the audit,
+        # on the console's own language. Opt-in (default off), never in
+        # dry-run; a no-op when disabled or when nothing needs translating.
+        translate_verdicts_batch(tui, llm_client, audit_results, package_name)
 
     # Both messages are written into the published report, so neither may
     # carry the exception's own text: an APIError that escapes audit_file's
@@ -3193,12 +3670,20 @@ def run_aur_sleuth_audit(
     except subprocess.CalledProcessError as e:
         msg = f"Command failed: {describe_error(e)}"
         logger.error(msg, exc_info=True)
-        tui.finalize_step(msg, status=SafeStatus.INCONCLUSIVE)
+        tui.finalize_step(
+            _("Command failed: {error}").format(error=describe_error(e)),
+            status=SafeStatus.INCONCLUSIVE,
+            report_msg=msg,
+        )
         audit_results.append(AuditResult(None, pkgdir, SafeStatus.INCONCLUSIVE, msg))
     except Exception as e:
         msg = f"An unexpected error occurred: {describe_error(e)}"
         logger.error(msg, exc_info=True)
-        tui.finalize_step(msg, status=SafeStatus.INCONCLUSIVE)
+        tui.finalize_step(
+            _("An unexpected error occurred: {error}").format(error=describe_error(e)),
+            status=SafeStatus.INCONCLUSIVE,
+            report_msg=msg,
+        )
         audit_results.append(AuditResult(None, pkgdir, SafeStatus.INCONCLUSIVE, msg))
         raise
     finally:
@@ -3239,7 +3724,9 @@ def run_aur_sleuth_audit(
 
         ledger_path = write_call_ledger(report_file, package_name)
         if ledger_path:
-            logger.info("Per-call token ledger written to %s", ledger_path)
+            logger.info(
+                _("Per-call token ledger written to {path}").format(path=ledger_path)
+            )
 
     return 0 if audit_ok else 1
 
@@ -3304,13 +3791,25 @@ def download_package_to_tmpdir(
     if not clone_url:
         pkgbase = resolve_pkgbase(package_name)
         if pkgbase != package_name:
-            tui.finalize_step(f"{package_name} is built from {pkgbase}")
+            tui.finalize_step(
+                _("{package_name} is built from {pkgbase}").format(
+                    package_name=package_name, pkgbase=pkgbase
+                ),
+                report_msg=f"{package_name} is built from {pkgbase}",
+            )
         clone_url = f"https://aur.archlinux.org/{pkgbase}.git"
 
     # The destination is a temporary path on the machine running the audit, and
     # this line ends up in the published report. Keep it out of there.
-    logger.info("Cloning %s into %s", package_name, tmpdir)
-    tui.update_status(f"Cloning {clone_url}...")
+    logger.info(
+        _("Cloning {package_name} into {tmpdir}").format(
+            package_name=package_name, tmpdir=tmpdir
+        )
+    )
+    tui.update_status(
+        _("Cloning {clone_url}...").format(clone_url=clone_url),
+        report_msg=f"Cloning {clone_url}...",
+    )
     subprocess.run(
         ["git", "clone", clone_url, tmpdir],
         check=True,
@@ -3322,8 +3821,15 @@ def download_package_to_tmpdir(
     # nothing must not proceed to call "nothing" a verdict.
     if not (Path(tmpdir) / "PKGBUILD").is_file():
         raise PackageNotFound(package_name, clone_url)
-    logger.info("Cloned %s into %s", package_name, tmpdir)
-    tui.finalize_step(f"Cloned {package_name}")
+    logger.info(
+        _("Cloned {package_name} into {tmpdir}").format(
+            package_name=package_name, tmpdir=tmpdir
+        )
+    )
+    tui.finalize_step(
+        _("Cloned {package_name}").format(package_name=package_name),
+        report_msg=f"Cloned {package_name}",
+    )
     return Path(tmpdir).resolve()
 
 
@@ -3562,6 +4068,8 @@ def load_config():
                 "LLM_TOP_P",
                 "LLM_REASONING_EFFORT",
                 "AUDIT_FAILURE_FATAL",
+                "AUR_SLEUTH_LANG",
+                "AUR_SLEUTH_TRANSLATE_VERDICTS",
             ]:
                 if key in config_section and key not in os.environ:
                     logger.debug("Setting %s from %s", key, config_file)
@@ -4037,6 +4545,229 @@ def selftest_redaction():
     assert written.count(REDACTED) == 2, written
 
 
+def selftest_i18n():
+    """Language selection, translation lookup, and the console/report split.
+
+    The split is the load-bearing part: the report file must never carry a
+    translated string, because it is archived to the public branch and parsed
+    by bench scripts. TUIPlain renders text to the terminal and English to the
+    report; this asserts both sides of that boundary.
+    """
+    import contextlib
+    import io
+
+    saved = {k: os.environ.get(k) for k in ("AUR_SLEUTH_LANG", "LC_ALL", "LC_MESSAGES", "LANG")}
+    try:
+        # Explicit AUR_SLEUTH_LANG wins over the locale variables.
+        os.environ.pop("AUR_SLEUTH_LANG", None)
+        os.environ["LANG"] = "zh_CN.UTF-8"
+        assert current_language() == "zh", current_language()
+        assert _("Cloning {clone_url}...") == "正在克隆 {clone_url}...", _("Cloning {clone_url}...")
+        assert _("No such string at all") == "No such string at all"
+
+        # Unsupported locales and unsupported explicit values fall back to en.
+        os.environ["LANG"] = "de_DE.UTF-8"
+        assert current_language() == "en", current_language()
+        os.environ["LANG"] = "C"
+        assert current_language() == "en", current_language()
+        os.environ["AUR_SLEUTH_LANG"] = "zh"
+        assert current_language() == "zh", current_language()
+        os.environ["AUR_SLEUTH_LANG"] = "bogus"
+        assert current_language() == "en", current_language()
+
+        # Console localized, report English, in one call.
+        os.environ["AUR_SLEUTH_LANG"] = "zh"
+        buf = io.StringIO()
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "r.txt"
+            with Report(path) as report:
+                with TUIPlain(report) as tui:
+                    with contextlib.redirect_stdout(buf):
+                        tui.update_status(
+                            _("Cloning {clone_url}...").format(clone_url="https://x"),
+                            report_msg="Cloning https://x...",
+                        )
+                        tui.finalize_step(
+                            _("Cloned {package_name}").format(package_name="foo"),
+                            report_msg="Cloned foo",
+                        )
+            written = path.read_text(encoding="utf-8")
+        assert "正在克隆 https://x..." in buf.getvalue(), buf.getvalue()
+        assert "已克隆 foo" in buf.getvalue(), buf.getvalue()
+        assert "Cloning https://x..." in written and "Cloned foo" in written, written
+        assert "正在" not in written and "已克隆" not in written, written
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+    print("✓ selftest_i18n")
+
+
+def selftest_verdict_translation():
+    """The display-layer verdict translation: reply parsing, gating, and the
+    guarantee that the report path never sees the translated prose."""
+
+    # Parser: well-formed replies round-trip; malformed ones keep English.
+    parsed = _parse_verdict_translations(
+        '<translations><item index="0"><summary>中文</summary><details>详情</details></item>'
+        '<item index="1"><summary>s2</summary></item></translations>'
+    )
+    assert parsed == {0: ("中文", "详情"), 1: ("s2", "")}, parsed
+    assert _parse_verdict_translations("no xml at all") == {}
+    assert _parse_verdict_translations("") == {}
+    assert _parse_verdict_translations(
+        '<translations><item index="x"><summary>a</summary></item></translations>'
+    ) == {}
+
+    saved = {k: os.environ.get(k) for k in ("AUR_SLEUTH_LANG", "AUR_SLEUTH_DRY_RUN", "AUR_SLEUTH_TRANSLATE_VERDICTS")}
+    try:
+        # Gating: OFF by default (it costs a second call per flagged verdict);
+        # =1 turns it on for a non-English console; never in dry-run; the
+        # language's own absence of a translator also disables it (the batch).
+        os.environ.pop("AUR_SLEUTH_DRY_RUN", None)
+        os.environ.pop("AUR_SLEUTH_TRANSLATE_VERDICTS", None)
+        os.environ["AUR_SLEUTH_LANG"] = "zh"
+        assert not verdict_translation_enabled(), "off by default, even for zh"
+        os.environ["AUR_SLEUTH_TRANSLATE_VERDICTS"] = "1"
+        assert verdict_translation_enabled(), "explicit on for zh"
+        os.environ["AUR_SLEUTH_LANG"] = "en"
+        assert not verdict_translation_enabled(), "never into English"
+        os.environ["AUR_SLEUTH_LANG"] = "zh"
+        os.environ["AUR_SLEUTH_TRANSLATE_VERDICTS"] = "0"
+        assert not verdict_translation_enabled(), "explicit off wins"
+        os.environ["AUR_SLEUTH_TRANSLATE_VERDICTS"] = "1"
+        os.environ["AUR_SLEUTH_DRY_RUN"] = "1"
+        assert not verdict_translation_enabled(), "dry-run never translates"
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+    # Language selection from the SYSTEM locale, with regional priority:
+    # zh_CN (exact) -> zh (bare) -> any other zh_XX -> en. AUR_SLEUTH_LANG is
+    # only an explicit override; the locale alone must select the language.
+    saved2 = {k: os.environ.get(k) for k in ("AUR_SLEUTH_LANG", "LC_ALL", "LC_MESSAGES", "LANG")}
+    saved_table = dict(_TRANSLATIONS)
+    try:
+        os.environ.pop("AUR_SLEUTH_LANG", None)
+        _TRANSLATIONS["zh"] = saved_table["zh"]
+        _TRANSLATIONS["zh_CN"] = {"_probe": "exact-region-entry"}
+        os.environ["LANG"] = "zh_CN.UTF-8"
+        assert current_language() == "zh_CN", current_language()  # exact wins
+        del _TRANSLATIONS["zh_CN"]
+        assert current_language() == "zh", current_language()  # bare falls back
+        os.environ["LANG"] = "de_DE.UTF-8"
+        assert current_language() == "en", current_language()
+        os.environ["LANG"] = "C"
+        assert current_language() == "en", current_language()
+        os.environ["AUR_SLEUTH_LANG"] = "zh_cn"  # explicit override, case-insensitive
+        assert current_language() == "zh", current_language()
+    finally:
+        _TRANSLATIONS.clear()
+        _TRANSLATIONS.update(saved_table)
+        for k, v in saved2.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+    # The batch call, end to end: one fake translator call produces the
+    # Chinese prose; the report text stays English; only the console render
+    # carries the translation, and only for the verdicts worth reading.
+    class FakeLLM:
+        last = None
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+            FakeLLM.last = self
+        def chat(self, _prompt):
+            return (
+                '<translations><item index="0"><summary>不安全总结</summary>'
+                "<details>不安全详情</details></item></translations>"
+            )
+
+    class _UsageClient:
+        def get_usage_summary(self):
+            return {
+                "total": {"prompt_tokens": 0, "completion_tokens": 0,
+                          "total_tokens": 0, "total_cost": 0},
+                "by-model": {},
+            }
+
+    class FakeTUI:
+        def __init__(self):
+            self.statuses = []
+        def update_status(self, text, report_msg=None):
+            self.statuses.append((text, report_msg))
+
+    saved2 = {k: os.environ.get(k) for k in ("AUR_SLEUTH_LANG", "AUR_SLEUTH_DRY_RUN", "AUR_SLEUTH_TRANSLATE_VERDICTS")}
+    import types
+    old_llm, old_params = LLM, get_llm_params_from_env
+    try:
+        os.environ["AUR_SLEUTH_LANG"] = "zh"
+        os.environ["AUR_SLEUTH_TRANSLATE_VERDICTS"] = "1"
+        os.environ.pop("AUR_SLEUTH_DRY_RUN", None)
+        globals()["LLM"] = FakeLLM
+        globals()["get_llm_params_from_env"] = lambda: types.SimpleNamespace(model="fake-model")
+        pkg = Path("/tmp/fake-pkg")
+        safe = AuditResult(pkg / "a", pkg, SafeStatus.SAFE, "all fine", details="nothing here")
+        bad = AuditResult(pkg / "b", pkg, SafeStatus.UNSAFE, "malicious curl", details="exfiltrates /etc/shadow")
+        incon = AuditResult(pkg / "c", pkg, SafeStatus.INCONCLUSIVE, "no verdict", details="parse failed")
+        tui = FakeTUI()
+        VERDICT_TRANSLATIONS.clear()
+        translate_verdicts_batch(tui, object(), [safe, bad, incon], "fake-pkg")
+        assert id(bad) in VERDICT_TRANSLATIONS, VERDICT_TRANSLATIONS
+        assert VERDICT_TRANSLATIONS[id(bad)] == ("不安全总结", "不安全详情")
+        assert id(safe) not in VERDICT_TRANSLATIONS, "SAFE verdicts are not translated"
+        # The fake reply carries only index 0; a missing item keeps English.
+        assert id(incon) not in VERDICT_TRANSLATIONS, VERDICT_TRANSLATIONS
+        # The TUI said it was translating instead of sitting on "reviewing".
+        assert any("正在翻译审查结论" in t or "Translating verdicts for display" in r for t, r in tui.statuses), tui.statuses
+        # The translator instruction comes from the language table, not from a
+        # hardcoded prompt: the system prompt the call was built with is the
+        # table's zh entry.
+        assert FakeLLM.last is not None and "你是翻译" in FakeLLM.last.kwargs.get("system_prompt", ""), (
+            FakeLLM.last.kwargs if FakeLLM.last else None
+        )
+        # Console render uses the translation; the report render does not.
+        by_status = partition_results_by_status([safe, bad, incon])
+        console = generate_report_text(pkg, by_status, use_color=False, execution_time=1.0,
+                                       llm_client=_UsageClient(), translations=VERDICT_TRANSLATIONS)
+        report = generate_report_text(pkg, by_status, use_color=False, execution_time=1.0,
+                                      llm_client=_UsageClient())
+        assert "不安全详情" in console and "不安全总结" in console, console
+        assert "malicious curl" in report and "不安全" not in report, report
+        assert "总结：" in console, console  # labels localize on the console
+        assert "Summary: " in report, report  # labels stay English in the report
+        # A language with display strings but no translator instruction gets
+        # no translation at all: never prompt for the wrong target language.
+        saved_table = dict(_TRANSLATIONS)
+        try:
+            _TRANSLATIONS["zz-fake"] = {"Some display": "某显示"}
+            os.environ["AUR_SLEUTH_LANG"] = "zz-fake"
+            VERDICT_TRANSLATIONS.clear()
+            tui.statuses.clear()
+            translate_verdicts_batch(tui, object(), [bad], "fake-pkg")
+            assert not VERDICT_TRANSLATIONS, VERDICT_TRANSLATIONS
+            assert not tui.statuses, "no translating status without a translator"
+        finally:
+            _TRANSLATIONS.clear()
+            _TRANSLATIONS.update(saved_table)
+            os.environ["AUR_SLEUTH_LANG"] = "zh"
+    finally:
+        globals()["LLM"] = old_llm
+        globals()["get_llm_params_from_env"] = old_params
+        for k, v in saved2.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+    print("✓ selftest_verdict_translation")
+
+
 def selftest():
     selftest_llm_response_parsing()
     selftest_evidence()
@@ -4048,6 +4779,8 @@ def selftest():
     selftest_file_caps()
     selftest_benchmark_arms()
     selftest_redaction()
+    selftest_i18n()
+    selftest_verdict_translation()
     report_path = Path("/tmp/aur-sleuth-tui-selftest.txt")
 
     with Report(report_path) as report:
