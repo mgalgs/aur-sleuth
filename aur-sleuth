@@ -219,6 +219,14 @@ _TRANSLATIONS = {
 - 只输出要求的 <translations> 块，不输出任何其他内容。""",
     },
 }
+# The bare "zh" is the generic-Chinese fallback and aliases the zh_CN content
+# (the only Chinese translation shipped). It keeps the resolution chain
+# explicit -- exact (zh_CN) -> bare (zh) -> any other zh_XX -- mirroring the
+# English side, where en_US/en_UK fall back to the bare "en", the hardcoded
+# default that needs no table entry. A zh_TW/zh_SG user gets Simplified until
+# a dedicated entry exists. The alias shares the dict, so the two keys can
+# never drift.
+_TRANSLATIONS["zh"] = _TRANSLATIONS["zh_CN"]
 
 
 def _match_language(code: str) -> str:
@@ -4573,8 +4581,8 @@ def selftest_i18n():
         assert current_language() == "en", current_language()
         os.environ["LANG"] = "C"
         assert current_language() == "en", current_language()
-        os.environ["AUR_SLEUTH_LANG"] = "zh"  # the bare shorthand resolves
-        assert current_language() == "zh_CN", current_language()
+        os.environ["AUR_SLEUTH_LANG"] = "zh"  # the bare alias is an exact key
+        assert current_language() == "zh", current_language()
         os.environ["AUR_SLEUTH_LANG"] = "bogus"
         assert current_language() == "en", current_language()
 
@@ -4660,13 +4668,13 @@ def selftest_verdict_translation():
         os.environ["LANG"] = "zh_CN.UTF-8"
         assert current_language() == "zh_CN", current_language()  # exact match
         os.environ["LANG"] = "zh_TW.UTF-8"
-        assert current_language() == "zh_CN", current_language()  # other zh_XX falls back
+        assert current_language() == "zh", current_language()  # other zh_XX falls back to the bare zh alias
         os.environ["LANG"] = "de_DE.UTF-8"
         assert current_language() == "en", current_language()
         os.environ["LANG"] = "C"
         assert current_language() == "en", current_language()
-        os.environ["AUR_SLEUTH_LANG"] = "zh_cn"  # explicit override, case-insensitive
-        assert current_language() == "zh_CN", current_language()
+        os.environ["AUR_SLEUTH_LANG"] = "zh_cn"  # lowercase: resolves to the bare zh alias, same content
+        assert current_language() == "zh", current_language()
     finally:
         for k, v in saved2.items():
             if v is None:

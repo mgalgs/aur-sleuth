@@ -43,7 +43,7 @@ try:
     check("C locale -> en", m.current_language() == "en", m.current_language())
 
     setenv(AUR_SLEUTH_LANG="zh")
-    check("explicit AUR_SLEUTH_LANG wins", m.current_language() == "zh_CN", m.current_language())
+    check("explicit AUR_SLEUTH_LANG wins", m.current_language() == "zh", m.current_language())
     setenv(AUR_SLEUTH_LANG="bogus", LANG="zh_CN.UTF-8")
     check("bogus explicit -> en", m.current_language() == "en", m.current_language())
     setenv(LC_ALL="zh_CN.UTF-8", LANG="de_DE.UTF-8")
@@ -111,7 +111,7 @@ try:
         setenv2(LANG="zh_CN.UTF-8")
         check("exact regional entry wins", m.current_language() == "zh_CN", m.current_language())
         setenv2(LANG="zh_TW.UTF-8")
-        check("other zh_XX falls back to zh_CN", m.current_language() == "zh_CN", m.current_language())
+        check("other zh_XX falls back to the bare zh alias", m.current_language() == "zh", m.current_language())
         setenv2(LANG="de_DE.UTF-8")
         check("unmatched locale -> en", m.current_language() == "en", m.current_language())
     finally:

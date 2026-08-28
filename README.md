@@ -120,10 +120,10 @@ The tool can be configured with environment variables:
 - `AUDIT_FAILURE_FATAL`: Whether audit failures should be fatal (exit with error). Set to `false` to make audit failures non-fatal. Defaults to `true`.
 - `AUR_SLEUTH_LANG`: Language of the terminal output, taken from the system locale by
   default: `LC_ALL`, then `LC_MESSAGES`, then `LANG`, each matched with regional priority
-  (e.g. `zh_CN.UTF-8` selects the shipped `zh_CN` -- Simplified Chinese -- entry, and
-  other `zh_XX` locales fall back to it until they get their own, else English) -- so no
-  configuration is needed on a Chinese-locale system. `AUR_SLEUTH_LANG` overrides the
-  locale explicitly. Only the console is translated: the report file stays English,
+  (e.g. `zh_CN.UTF-8` selects `zh_CN` -- Simplified Chinese -- and bare `zh` plus other
+  `zh_XX` locales fall back to the same content until they get their own, else English) --
+  so no configuration is needed on a Chinese-locale system. `AUR_SLEUTH_LANG` overrides
+  the locale explicitly. Only the console is translated: the report file stays English,
   because reports are published to the dashboard and parsed by the pipeline scripts.
 - `AUR_SLEUTH_TRANSLATE_VERDICTS`: Whether to translate the model's written findings
   (`summary`/`details`) into the console language for display. **Off by default**; set to
