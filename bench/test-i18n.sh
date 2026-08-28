@@ -219,5 +219,14 @@ missing = sorted(mid for mid in msgids if mid not in m._TRANSLATIONS["zh"] and m
 check("every literal msgid has a zh entry", not missing, missing)
 check("the table is not empty", bool(m._TRANSLATIONS["zh"]))
 
+# --- deployment isolation -----------------------------------------------------
+# The public pipeline must never translate verdicts: the reports it publishes
+# are parsed by bench scripts, and translation is an opt-in paid call. Both
+# deployment invocations pin AUR_SLEUTH_TRANSLATE_VERDICTS=0 explicitly, so a
+# container-wide enable cannot leak in; this check fails if the pin is lost.
+deploy_files = ["bench/pipeline.sh", "bench/benchmark.sh"]
+unpinned = [f for f in deploy_files if "AUR_SLEUTH_TRANSLATE_VERDICTS=0" not in open(f, encoding="utf-8").read()]
+check("deployment invocations pin verdict translation off", not unpinned, unpinned)
+
 raise SystemExit(1 if fails else 0)
 PY

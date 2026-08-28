@@ -206,7 +206,10 @@ audit_one() {
     local model="$1" report_dir="$2" logname="$3" rc=0
     shift 3
     mkdir -p "$report_dir"
+    # Same explicit pin as pipeline.sh: a benchmark must never translate
+    # verdicts, whatever the surrounding environment enables.
     AUDIT_FAILURE_FATAL=true AUR_SLEUTH_ASCII_ICONS=1 \
+        AUR_SLEUTH_TRANSLATE_VERDICTS=0 \
         OPENAI_MODEL="$model" \
         AUR_SLEUTH_REPORT_DIR="$report_dir" \
         timeout --kill-after=30s "$AUDIT_TIMEOUT" \
