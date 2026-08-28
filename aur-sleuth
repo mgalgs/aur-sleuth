@@ -133,7 +133,10 @@ EVIDENCE_MAX_CHARS = 1500
 # XML tags, and SafeStatus.name. Per-file verdict text is the model's output and
 # is left as the model wrote it.
 _TRANSLATIONS = {
-    "zh": {
+    # The shipped translation is Simplified Chinese, so the key names it:
+    # zh_CN. Other zh_* locales (zh_TW, zh_SG, ...) fall back to this entry
+    # until they get their own; the matching is in _match_language().
+    "zh_CN": {
         # progress and steps
         "Downloading sources (attempt {attempt}/{max_retries})...": "正在下载源（第 {attempt}/{max_retries} 次尝试）...",
         "Retrying in {delay}s...": "{delay} 秒后重试...",
@@ -4561,7 +4564,7 @@ def selftest_i18n():
         # Explicit AUR_SLEUTH_LANG wins over the locale variables.
         os.environ.pop("AUR_SLEUTH_LANG", None)
         os.environ["LANG"] = "zh_CN.UTF-8"
-        assert current_language() == "zh", current_language()
+        assert current_language() == "zh_CN", current_language()
         assert _("Cloning {clone_url}...") == "正在克隆 {clone_url}...", _("Cloning {clone_url}...")
         assert _("No such string at all") == "No such string at all"
 
@@ -4570,8 +4573,8 @@ def selftest_i18n():
         assert current_language() == "en", current_language()
         os.environ["LANG"] = "C"
         assert current_language() == "en", current_language()
-        os.environ["AUR_SLEUTH_LANG"] = "zh"
-        assert current_language() == "zh", current_language()
+        os.environ["AUR_SLEUTH_LANG"] = "zh"  # the bare shorthand resolves
+        assert current_language() == "zh_CN", current_language()
         os.environ["AUR_SLEUTH_LANG"] = "bogus"
         assert current_language() == "en", current_language()
 
@@ -4648,27 +4651,23 @@ def selftest_verdict_translation():
                 os.environ[k] = v
 
     # Language selection from the SYSTEM locale, with regional priority:
-    # zh_CN (exact) -> zh (bare) -> any other zh_XX -> en. AUR_SLEUTH_LANG is
+    # exact (zh_CN) -> bare (zh) -> any other zh_XX -> en; the shipped entry
+    # is zh_CN, so other zh_* locales fall back to it. AUR_SLEUTH_LANG is
     # only an explicit override; the locale alone must select the language.
     saved2 = {k: os.environ.get(k) for k in ("AUR_SLEUTH_LANG", "LC_ALL", "LC_MESSAGES", "LANG")}
-    saved_table = dict(_TRANSLATIONS)
     try:
         os.environ.pop("AUR_SLEUTH_LANG", None)
-        _TRANSLATIONS["zh"] = saved_table["zh"]
-        _TRANSLATIONS["zh_CN"] = {"_probe": "exact-region-entry"}
         os.environ["LANG"] = "zh_CN.UTF-8"
-        assert current_language() == "zh_CN", current_language()  # exact wins
-        del _TRANSLATIONS["zh_CN"]
-        assert current_language() == "zh", current_language()  # bare falls back
+        assert current_language() == "zh_CN", current_language()  # exact match
+        os.environ["LANG"] = "zh_TW.UTF-8"
+        assert current_language() == "zh_CN", current_language()  # other zh_XX falls back
         os.environ["LANG"] = "de_DE.UTF-8"
         assert current_language() == "en", current_language()
         os.environ["LANG"] = "C"
         assert current_language() == "en", current_language()
         os.environ["AUR_SLEUTH_LANG"] = "zh_cn"  # explicit override, case-insensitive
-        assert current_language() == "zh", current_language()
+        assert current_language() == "zh_CN", current_language()
     finally:
-        _TRANSLATIONS.clear()
-        _TRANSLATIONS.update(saved_table)
         for k, v in saved2.items():
             if v is None:
                 os.environ.pop(k, None)

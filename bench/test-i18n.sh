@@ -31,7 +31,7 @@ def setenv(**kw):
 saved = {k: os.environ.get(k) for k in ("AUR_SLEUTH_LANG", "LC_ALL", "LC_MESSAGES", "LANG")}
 try:
     setenv(LANG="zh_CN.UTF-8")
-    check("LANG zh_CN -> zh", m.current_language() == "zh", m.current_language())
+    check("LANG zh_CN -> zh_CN", m.current_language() == "zh_CN", m.current_language())
     check("zh lookup keeps placeholders",
           m._("Cloning {clone_url}...") == "正在克隆 {clone_url}...",
           m._("Cloning {clone_url}..."))
@@ -43,11 +43,11 @@ try:
     check("C locale -> en", m.current_language() == "en", m.current_language())
 
     setenv(AUR_SLEUTH_LANG="zh")
-    check("explicit AUR_SLEUTH_LANG wins", m.current_language() == "zh", m.current_language())
+    check("explicit AUR_SLEUTH_LANG wins", m.current_language() == "zh_CN", m.current_language())
     setenv(AUR_SLEUTH_LANG="bogus", LANG="zh_CN.UTF-8")
     check("bogus explicit -> en", m.current_language() == "en", m.current_language())
     setenv(LC_ALL="zh_CN.UTF-8", LANG="de_DE.UTF-8")
-    check("LC_ALL beats LANG", m.current_language() == "zh", m.current_language())
+    check("LC_ALL beats LANG", m.current_language() == "zh_CN", m.current_language())
 
     # Console display labels translate; the enum names they stand for do not.
     setenv(AUR_SLEUTH_LANG="zh")
@@ -109,10 +109,9 @@ try:
     saved_table = dict(m._TRANSLATIONS)
     try:
         setenv2(LANG="zh_CN.UTF-8")
-        m._TRANSLATIONS["zh_CN"] = {"_probe": "exact"}
         check("exact regional entry wins", m.current_language() == "zh_CN", m.current_language())
-        del m._TRANSLATIONS["zh_CN"]
-        check("bare language falls back", m.current_language() == "zh", m.current_language())
+        setenv2(LANG="zh_TW.UTF-8")
+        check("other zh_XX falls back to zh_CN", m.current_language() == "zh_CN", m.current_language())
         setenv2(LANG="de_DE.UTF-8")
         check("unmatched locale -> en", m.current_language() == "en", m.current_language())
     finally:
@@ -170,7 +169,7 @@ try:
         # The translator instruction is per-language content: it must come from
         # the zh table, and a language without one gets no translation.
         check("translator prompt lives in the table",
-              "你是翻译" in m._TRANSLATIONS["zh"].get("_verdict_translator", ""))
+              "你是翻译" in m._TRANSLATIONS["zh_CN"].get("_verdict_translator", ""))
         check("batch uses the table's translator prompt",
               FakeLLM.last is not None and "你是翻译" in FakeLLM.last.kwargs.get("system_prompt", ""),
               FakeLLM.last.kwargs if FakeLLM.last else None)
@@ -215,9 +214,9 @@ allowed_missing = {
     "No such string at all",  # the selftest's passthrough probe
 }
 msgids = {m[1] for m in re.findall(r"_\(\s*(['\"])(.*?)\1\s*\)", src)}
-missing = sorted(mid for mid in msgids if mid not in m._TRANSLATIONS["zh"] and mid not in allowed_missing)
+missing = sorted(mid for mid in msgids if mid not in m._TRANSLATIONS["zh_CN"] and mid not in allowed_missing)
 check("every literal msgid has a zh entry", not missing, missing)
-check("the table is not empty", bool(m._TRANSLATIONS["zh"]))
+check("the table is not empty", bool(m._TRANSLATIONS["zh_CN"]))
 
 # --- deployment isolation -----------------------------------------------------
 # The public pipeline must never translate verdicts: the reports it publishes

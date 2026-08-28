@@ -120,11 +120,11 @@ The tool can be configured with environment variables:
 - `AUDIT_FAILURE_FATAL`: Whether audit failures should be fatal (exit with error). Set to `false` to make audit failures non-fatal. Defaults to `true`.
 - `AUR_SLEUTH_LANG`: Language of the terminal output, taken from the system locale by
   default: `LC_ALL`, then `LC_MESSAGES`, then `LANG`, each matched with regional priority
-  (e.g. `zh_CN.UTF-8` prefers a `zh_CN` table entry, then `zh`, then any other `zh_XX`,
-  else English) -- so no configuration is needed on a Chinese-locale system.
-  `AUR_SLEUTH_LANG` overrides the locale explicitly. Only the console is translated: the
-  report file stays English, because reports are published to the dashboard and parsed by
-  the pipeline scripts.
+  (e.g. `zh_CN.UTF-8` selects the shipped `zh_CN` -- Simplified Chinese -- entry, and
+  other `zh_XX` locales fall back to it until they get their own, else English) -- so no
+  configuration is needed on a Chinese-locale system. `AUR_SLEUTH_LANG` overrides the
+  locale explicitly. Only the console is translated: the report file stays English,
+  because reports are published to the dashboard and parsed by the pipeline scripts.
 - `AUR_SLEUTH_TRANSLATE_VERDICTS`: Whether to translate the model's written findings
   (`summary`/`details`) into the console language for display. **Off by default**; set to
   `true` (environment or `~/.config/aur-sleuth.conf`) to enable. This is a separate
@@ -151,7 +151,7 @@ LLM_TEMPERATURE = 0.7  # Omit to use the model default
 LLM_TOP_P = 0.9        # ditto
 LLM_REASONING_EFFORT = high  # low | medium | high
 AUDIT_FAILURE_FATAL = false  # Set to false to make audit failures non-fatal
-AUR_SLEUTH_LANG = zh  # Console language; defaults to the system locale
+AUR_SLEUTH_LANG = zh_CN  # Console language: zh_CN (Simplified Chinese); defaults to the system locale
 AUR_SLEUTH_TRANSLATE_VERDICTS = true  # Translate findings into the console language; default false
 ```
 
