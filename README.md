@@ -38,7 +38,7 @@ high rate of false positives -- highly model dependent).
 
 Browse audit results at **[mgalgs.io/aur-sleuth](https://mgalgs.io/aur-sleuth/)** — a static dashboard generated from the [`audit-reports`](https://github.com/mgalgs/aur-sleuth/tree/audit-reports) branch.
 
-Audited a package yourself? Reports are submitted by invitation, over the maintainer's private network: you register once by adding your SSH signing key to the `trusted-contributors` branch in a signed one-line pull request, and an invitation follows. What you send lands on the page as community-submitted information, a tier below advisory. [docs/SUBMITTING-REPORTS.md](docs/SUBMITTING-REPORTS.md) has the whole flow, and why the bar is there.
+Audited a package yourself? Reports are submitted by invitation, over the maintainer's private network: you register once by adding your SSH signing key to the `trusted-contributors` file in a signed one-line pull request, and an invitation follows. What you send lands on the page as community-submitted information: advisory, so it is context and never a vote. [docs/SUBMITTING-REPORTS.md](docs/SUBMITTING-REPORTS.md) has the whole flow, and why the bar is there.
 
 ## Demo
 

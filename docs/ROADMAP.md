@@ -106,8 +106,8 @@ only with a version bump.
 - **The private side of community submissions** (queued 2026-08-28). The
   public half is done: `bench/register-contributor.py` and its workflow decide
   who may submit, `aur-sleuth-submit` is the client, and the `ingest` container
-  stage verifies a submission's signature against the `trusted-contributors`
-  branch and commits what it accepts. What is missing lives outside this
+  stage verifies a submission's signature against `trusted-contributors` as
+  `master` has it, and commits what it accepts. What is missing lives outside this
   repository, on the maintainer's own network, and is recorded here so whoever
   builds it has the contract.
 
@@ -126,10 +126,10 @@ only with a version bump.
   contributor the whole run — send the interval you actually mean. The gateway
   keeps its own host allowlist; the endpoint is reachable from nowhere else.
 
-  **The invitation watcher.** Watches the `trusted-contributors` branch for a
-  new line, mints an invitation to the network for it, and emails the invite to
-  the address on that line. One line, one invitation, and never a second for a
-  line it has already seen.
+  **The invitation watcher.** Watches `master`'s `trusted-contributors` file
+  for a new line, mints an invitation to the network for it, and emails the
+  invite to the address on that line. One line, one invitation, and never a
+  second for a line it has already seen.
 
   **The drain.** Runs the `ingest` container stage once per spooled bundle,
   passing `AUR_SLEUTH_SUBMISSION_URL` (the bundle path),

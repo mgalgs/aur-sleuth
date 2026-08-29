@@ -855,7 +855,9 @@ SRC_DIR="$PWD"
 # shellcheck disable=SC2034
 REPORTS_BRANCH="audit-reports"
 # shellcheck disable=SC2034
-CONTRIB_BRANCH="trusted-contributors"
+CONTRIB_REF="master"
+# shellcheck disable=SC2034
+CONTRIB_FILE="trusted-contributors"
 # shellcheck disable=SC2034
 FETCH_URL="$REPO"
 # shellcheck disable=SC2034
@@ -863,10 +865,11 @@ INTERNAL_STRINGS="svc.cluster.local"
 GIT_STORE="$tmp/store/.git"
 mkdir -p "$tmp/store" "$DATA_DIR/bulk-audit"
 
-# The registry, on the branch the stage fetches it from. FETCH_URL is $REPO
-# here, standing in for the public repository.
+# The registry, in the tree of the branch the stage fetches it from -- master,
+# since the maintainer moved it off a data branch. FETCH_URL is $REPO here,
+# standing in for the public repository.
 contrib_blob="$(git --git-dir="$REPO" hash-object -w --stdin < "$SIGNERS")"
-git --git-dir="$REPO" update-ref refs/heads/trusted-contributors \
+git --git-dir="$REPO" update-ref refs/heads/master \
     "$(git --git-dir="$REPO" commit-tree \
         "$(printf '100644 blob %s\ttrusted-contributors\n' "$contrib_blob" \
            | git --git-dir="$REPO" mktree)" -m registry)"

@@ -31,11 +31,11 @@ It does not raise what a submission counts for, and it is not meant to.
 
 ## The bar, and why it is there
 
-To submit, you open one pull request against a data branch of this repository,
-containing exactly one signed commit that adds exactly one line — your email
-and your SSH signing public key — to the `trusted-contributors` file.
-Automation merges it when every check passes, and an invitation to the private
-network reports are submitted over is then emailed to you.
+To submit, you open one pull request against `master`, containing exactly one
+signed commit that adds exactly one line — your email and your SSH signing
+public key — to the `trusted-contributors` file at the root of the tree. When
+every check passes, an invitation to the private network reports are submitted
+over is emailed to you.
 
 That is deliberately more work than opening a pull request, and the extra work
 is the point. A signed commit, a signing key GitHub already attributes to your
@@ -80,8 +80,8 @@ type and base64 body, and your GitHub login as a comment:
 ```bash
 gh repo fork mgalgs/aur-sleuth --clone --remote   # or fork on the web, then clone
 cd aur-sleuth
-git fetch upstream trusted-contributors
-git checkout -b register-me upstream/trusted-contributors
+git fetch upstream master
+git checkout -b register-me upstream/master
 printf '%s %s # %s\n' "you@example.org" \
     "$(cut -d' ' -f1,2 ~/.ssh/id_ed25519_signing.pub)" "your-github-login" \
     >> trusted-contributors
@@ -89,7 +89,7 @@ git add trusted-contributors
 git commit -S -m "register: your-github-login"
 git push origin register-me
 gh pr create --repo mgalgs/aur-sleuth \
-    --base trusted-contributors --head your-github-login:register-me \
+    --base master --head your-github-login:register-me \
     --title "register: your-github-login"
 ```
 
@@ -116,8 +116,8 @@ of them has to pass:
 1. Exactly one commit.
 2. Exactly one file changed — `trusted-contributors`, one line added, none
    removed, nothing else touched — and the file as your branch has it is
-   byte-for-byte the file on `trusted-contributors` with that one line
-   appended and **terminated by a newline**. Your editor may drop that last
+   byte-for-byte the file on `master` with that one line appended and
+   **terminated by a newline**. Your editor may drop that last
    newline; most will not, but if yours does, the merged file is one nobody
    can append to and the next person to register is refused for it.
 3. The added line is well formed, its email is the commit's author email, and
@@ -247,7 +247,8 @@ report from one written by whoever poisoned the package it clears. So:
   nothing, so the archive records nothing rather than a number it did not
   measure.
 - `submitted_by` is **not** a label anyone typed. The ingest verifies the
-  commit's signature against the `trusted-contributors` branch, requires the
+  commit's signature against `trusted-contributors` as `master` has it,
+  fetched fresh at every submission, requires the
   signature's principal to be the commit's own author, and records the login on
   that key's line. It is the identity your key proves.
 - The ingest names the file. Your filename is discarded in favour of

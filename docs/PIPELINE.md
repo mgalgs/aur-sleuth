@@ -129,8 +129,8 @@ escalation, which exists to force a ruling.
 **Ingest: community submissions.** Anyone can run `aur-sleuth` on a package,
 but sending the report takes an invitation. A would-be contributor registers
 once -- one signed commit adding one line, their email and their SSH signing
-public key, to the `trusted-contributors` file on a data branch of its own --
-and `.github/workflows/register-contributor.yml` merges it when every rule in
+public key, to the `trusted-contributors` file at the root of `master` --
+and `.github/workflows/register-contributor.yml` says so when every rule in
 `bench/register-contributor.py` passes, or closes it with the reasons.
 `docs/SUBMITTING-REPORTS.md` is the contributor's side, and says why the bar
 is where it is. The private side then mints an invitation to the maintainer's
@@ -145,8 +145,9 @@ throwaway repository, applies `bench/ingest-submission.py` (every rule in
 code, no model) and commits what it accepts.
 
 Who sent it is the one input here that is not untrusted, and it is checked
-twice. The stage fetches the `trusted-contributors` branch from the public
-repository -- no credential, like `prepare` -- and the script requires the
+twice. The stage fetches `master`'s `trusted-contributors` from the public
+repository -- no credential, like `prepare`, and fresh at every submission, so
+a contributor the maintainer removed stops verifying -- and the script requires the
 submission's commit to verify against it as an SSH `allowed_signers` file,
 requires the signature's principal to be the commit's own author email, and
 records `submitted_by` as the `# <login>` on the line the key is on. The

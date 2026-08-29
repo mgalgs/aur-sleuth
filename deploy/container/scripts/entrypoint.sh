@@ -52,10 +52,12 @@ DATA_DIR="${AUR_SLEUTH_DATA_DIR:-/data}"
 SRC_DIR="/opt/aur-sleuth"
 GIT_STORE="$DATA_DIR/git"
 REPORTS_BRANCH="audit-reports"
-# Who may submit an audit report: one line per contributor, on an orphan
-# branch of its own. It is an SSH allowed_signers file, and the ingest hands
-# it to git verify-commit unchanged (bench/trusted-contributors.sh).
-CONTRIB_BRANCH="trusted-contributors"
+# Who may submit an audit report: one line per contributor, in one file at the
+# root of `master` in the public repository. It is an SSH allowed_signers
+# file, and the ingest hands it to git verify-commit unchanged
+# (bench/trusted-contributors.sh).
+CONTRIB_REF="master"
+CONTRIB_FILE="trusted-contributors"
 # Where the public page lives: the reviewed reports tree plus index.html and
 # _dashboard/*, rebuilt by this image at every publish. A branch of its own,
 # so audit-reports carries only what the audit stage wrote and origin's copy
@@ -1397,7 +1399,7 @@ PY
 # Who sent it is the one thing here that is NOT untrusted, and it is checked
 # twice. The gateway in front of the endpoint identifies the caller by their
 # node and stamps the invitation ring, which arrive as AUR_SLEUTH_SUBMITTED_BY
-# and AUR_SLEUTH_SUBMISSION_RING. The trusted-contributors branch is then
+# and AUR_SLEUTH_SUBMISSION_RING. The trusted-contributors file is then
 # fetched from FETCH_URL -- public, no credential, like prepare -- into the
 # same throwaway repository, and the script requires the submission commit to
 # carry a signature by a key on it. The login the KEY maps to is what gets
@@ -1444,15 +1446,17 @@ do_ingest() {
 
     # The registry, straight from the public repository. It is fetched rather
     # than read out of the store because the store holds reports, not this:
-    # the branch is public data the endpoint's own side also mints from.
+    # it is public data on `master` that the endpoint's own side also mints
+    # from. Fetched at every ingest, and never cached, so a contributor the
+    # maintainer removed stops verifying at the next submission.
     local signers
     signers="$(mktemp)"
     git --git-dir="$repo" fetch --quiet --no-tags "$FETCH_URL" \
-        "+refs/heads/$CONTRIB_BRANCH:refs/trusted-contributors" \
-        || die "could not fetch $CONTRIB_BRANCH from $FETCH_URL;" \
+        "+refs/heads/$CONTRIB_REF:refs/contrib" \
+        || die "could not fetch $CONTRIB_REF from $FETCH_URL;" \
                "without the registry there is no way to say whose submission this is"
-    git --git-dir="$repo" show "refs/trusted-contributors:$CONTRIB_BRANCH" > "$signers" \
-        || die "$CONTRIB_BRANCH branch has no $CONTRIB_BRANCH file"
+    git --git-dir="$repo" show "refs/contrib:$CONTRIB_FILE" > "$signers" \
+        || die "$CONTRIB_REF has no $CONTRIB_FILE file"
 
     local out needles
     out="$(mktemp -d)"

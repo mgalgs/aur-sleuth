@@ -1,10 +1,15 @@
 #!/usr/bin/env bash
-# The trusted contributors file: the branch that holds it, and its format.
+# The trusted contributors file: where it lives, and its format.
 #
-# A person who may submit an audit report is one line in a single file on the
-# orphan `trusted-contributors` branch. Registration automation merges into
-# that branch and never into `master`, so a bug in the check can only touch
-# one data file and nothing that builds.
+# A person who may submit an audit report is one line in `trusted-contributors`
+# at the root of `master`. It was an orphan branch of its own until the
+# maintainer decided otherwise: a data branch meant a contributor had to fetch
+# and branch from something they had no other reason to have, and the registry
+# is small, public, and reviewed like any other file. What keeps a registration
+# from touching anything that builds is not the branch it lands on, it is rule 2
+# of `bench/register-contributor.py`: the diff must be exactly
+# `1 0 trusted-contributors`, and the merged bytes must be the base file with
+# that one line appended. Nothing else can ride in.
 #
 # The file IS an SSH `allowed_signers` file, unchanged: the ingest hands it
 # straight to `git -c gpg.ssh.allowedSignersFile=... verify-commit`, so the
@@ -19,7 +24,6 @@
 # is on rather than from anything the submission or the gateway said.
 #
 # Usage:
-#   trusted-contributors.sh init          create the orphan branch (once)
 #   trusted-contributors.sh check FILE    validate a copy of the file
 #
 # `check` refuses anything but comment lines, blank lines, and lines of
@@ -29,47 +33,11 @@
 # are judged by one implementation.
 set -euo pipefail
 
-BRANCH="trusted-contributors"
-FILE="trusted-contributors"
-
 die() { printf 'trusted-contributors: %s\n' "$*" >&2; exit 2; }
 
 usage() {
     sed -n '/^# Usage:/,/^#$/p' "$0" | sed 's/^# \{0,1\}//'
     exit 2
-}
-
-# --- init ---------------------------------------------------------------------
-
-# Create the branch with an empty file and a header comment, as an orphan: it
-# shares no history with anything that builds, exactly like `audit-reports`.
-# Refuses if the branch is already there, because the file on it is the
-# registry and re-creating it would drop every contributor on it.
-cmd_init() {
-    git rev-parse --git-dir >/dev/null 2>&1 || die "not a git repository"
-    if git rev-parse --verify --quiet "refs/heads/$BRANCH" >/dev/null; then
-        die "$BRANCH already exists; it holds the registry, so it is never re-created"
-    fi
-
-    local blob tree commit
-    blob="$(git hash-object -w --stdin <<EOF
-# Contributors who may submit audit reports, one per line.
-#
-# This is an SSH allowed_signers file, and it is consumed as one. The format
-# of a line is:
-#
-#     <email> <key-type> <base64-key> # <github-login>
-#
-# Lines are added by the registration automation
-# (.github/workflows/register-contributor.yml), never by hand: a line here is
-# an assertion that GitHub verified a commit signed by that key, made by the
-# account named in the comment. See docs/SUBMITTING-REPORTS.md.
-EOF
-)"
-    tree="$(printf '100644 blob %s\t%s\n' "$blob" "$FILE" | git mktree)"
-    commit="$(git commit-tree "$tree" -m "trusted-contributors: the empty registry")"
-    git update-ref "refs/heads/$BRANCH" "$commit"
-    printf 'created %s at %s with an empty %s\n' "$BRANCH" "${commit:0:12}" "$FILE"
 }
 
 # --- check --------------------------------------------------------------------
@@ -136,7 +104,6 @@ cmd_check() {
 }
 
 case "${1:-}" in
-    init)  shift; cmd_init "$@" ;;
     check) shift; cmd_check "$@" ;;
     *)     usage ;;
 esac

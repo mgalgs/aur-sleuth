@@ -79,7 +79,7 @@ EOF
 build() {
     local d="$tmp/case"
     rm -rf "$d"; mkdir -p "$d"
-    printf '{"number": 7, "user": {"login": "%s"}, "base": {"ref": "trusted-contributors"}}\n' \
+    printf '{"number": 7, "user": {"login": "%s"}, "base": {"ref": "master"}}\n' \
         "$F_LOGIN" > "$d/pr.json"
     {
         printf '['
@@ -394,7 +394,7 @@ import sys
 lines = open(sys.argv[1], encoding="utf-8").read().split("\n")
 out, on = [], False
 for ln in lines:
-    if 'gh api "repos/$GH_REPO/contents/trusted-contributors' in ln:
+    if ln.strip().startswith("base_url="):
         on = True
     if not on:
         continue
@@ -414,13 +414,13 @@ else
 # Stands in for `gh api`. Real gh writes the response body -- including an
 # error body -- to stdout, and its own message to stderr.
 #
-# The fragment makes two fetches of the same file at two refs -- the branch,
+# The fragment makes two fetches of the same file at two refs -- `master`,
 # and the pull request's head -- and they fail for different reasons and mean
 # different things, so which one is being answered is read off the ref in the
 # URL rather than guessed.
 case "$*" in
-    *"ref=trusted-contributors"*) mode="${GH_STUB:-ok}"; body="$GH_STUB_BODY" ;;
-    *)                            mode="${GH_STUB_HEAD:-ok}"; body="$GH_STUB_HEAD_BODY" ;;
+    *"ref=master"*) mode="${GH_STUB:-ok}"; body="$GH_STUB_BODY" ;;
+    *)              mode="${GH_STUB_HEAD:-ok}"; body="$GH_STUB_HEAD_BODY" ;;
 esac
 case "$mode" in
     ok)      printf '%s' "$body"; exit 0 ;;
