@@ -115,7 +115,11 @@ of them has to pass:
 
 1. Exactly one commit.
 2. Exactly one file changed — `trusted-contributors`, one line added, none
-   removed, nothing else touched.
+   removed, nothing else touched — and the file as your branch has it is
+   byte-for-byte the file on `trusted-contributors` with that one line
+   appended and **terminated by a newline**. Your editor may drop that last
+   newline; most will not, but if yours does, the merged file is one nobody
+   can append to and the next person to register is refused for it.
 3. The added line is well formed, its email is the commit's author email, and
    its `# <login>` is your GitHub login.
 4. GitHub verified the commit's signature.

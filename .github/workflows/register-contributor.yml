@@ -100,6 +100,29 @@ jobs:
             exit 1
           fi
 
+          # And the same file as the HEAD COMMIT has it, which is what a merge
+          # actually puts on the branch. The rules otherwise judge a
+          # reconstruction of those bytes -- a pair of counts, and a string
+          # this job builds by appending the added line -- and a
+          # reconstruction always ends in a newline whether the head does or
+          # not. register-contributor.py compares the two.
+          #
+          # No 404 case here. An absent base is correct before the first
+          # contributor lands, but the head of a registration always has the
+          # file: rule 2's numstat says a line was added to it. So anything
+          # other than success is an infrastructure failure, and the job stops
+          # rather than judging bytes it does not have.
+          head_url="repos/$GH_REPO/contents/trusted-contributors?ref=$HEAD_SHA"
+          if gh api "$head_url" \
+               -H "Accept: application/vnd.github.raw" \
+               > inputs/head.raw 2> inputs/head.err; then
+            mv inputs/head.raw inputs/head
+          else
+            echo "could not read trusted-contributors at the head commit:" >&2
+            cat inputs/head.err >&2
+            exit 1
+          fi
+
       - name: Decide
         id: decide
         run: |
@@ -113,6 +136,7 @@ jobs:
             --diff inputs/numstat.txt \
             --added-line inputs/line.txt \
             --base-file inputs/base \
+            --head-file inputs/head \
             --public-events "$(cat inputs/events.txt)" \
             > inputs/reasons.txt 2>&1 || rc=$?
           cat inputs/reasons.txt

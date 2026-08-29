@@ -49,6 +49,16 @@ reset() {
     F_REPOS=3
     F_EVENTS=0
     F_BASE="$(printf '# the registry\nprior@example.org ssh-ed25519 %s # prior-person\n' "$THEIRS")"
+    # Whether the file on the branch ends in a newline. It always should;
+    # a base that does not is a file nothing can be appended to, and saying so
+    # is what keeps that from reading as the next submitter's fault.
+    F_BASE_NEWLINE=true
+    # The file as the head commit has it: what a merge actually puts on the
+    # branch. `derive` is the contributor who did it right -- the base with
+    # the line appended and terminated -- so every fixture that does not care
+    # about the merged bytes gets the honest ones. A case that DOES care sets
+    # the exact bytes instead, and they are written without a newline added.
+    F_HEAD=derive
 }
 
 # One commit record, or none, or two: the shape the commits endpoint returns.
@@ -86,7 +96,16 @@ build() {
         "$F_REGISTERED" > "$d/keys.json"
     printf '%s\n' "$F_NUMSTAT" > "$d/numstat.txt"
     printf '%s\n' "$F_LINE" > "$d/line.txt"
-    printf '%s\n' "$F_BASE" > "$d/base"
+    if $F_BASE_NEWLINE; then
+        printf '%s\n' "$F_BASE" > "$d/base"
+    else
+        printf '%s' "$F_BASE" > "$d/base"
+    fi
+    if [[ "$F_HEAD" == derive ]]; then
+        { cat "$d/base"; printf '%s\n' "$F_LINE"; } > "$d/head"
+    else
+        printf '%s' "$F_HEAD" > "$d/head"
+    fi
     printf '%s' "$d"
 }
 
@@ -98,7 +117,8 @@ run() {
     OUT="$(python3 "$REGISTER" --pr "$d/pr.json" --commits "$d/commits.json" \
         --user "$d/user.json" --signing-keys "$d/keys.json" \
         --diff "$d/numstat.txt" --added-line "$d/line.txt" \
-        --base-file "$d/base" --public-events "$F_EVENTS" \
+        --base-file "$d/base" --head-file "$d/head" \
+        --public-events "$F_EVENTS" \
         --now 2026-08-28T00:00:00Z 2>&1)" || rc=$?
     return $rc
 }
@@ -181,6 +201,34 @@ reset
 F_NUMSTAT="$(printf '1\t0\tsomething-else')"
 breaks "a one-line change to another file" "rule 2"
 
+# What merges is the head commit's bytes, and every rule but this one judges
+# a reconstruction of them. The reconstruction is built here, so it always
+# ends in a newline; the head need not, and a head that does not passes every
+# other rule and leaves the branch in a state the next registration cannot
+# append to. These are the shapes the byte comparison is for.
+reset
+F_HEAD="$(printf '%s\n%s' "$F_BASE" "$F_LINE")"
+breaks "a merged file with no final newline" "does not end in a newline"
+
+reset
+F_HEAD="$(printf '# the registry\n%s\nprior@example.org ssh-ed25519 %s # prior-person\n' \
+                 "$F_LINE" "$THEIRS")"
+breaks "the line inserted mid-file rather than appended" "does not begin with"
+
+reset
+F_HEAD="$(printf '%s\n%s\nsneak@example.org ssh-ed25519 %s # sneak\n' \
+                 "$F_BASE" "$F_LINE" "$THEIRS")"
+breaks "a second line the diff did not account for" "first differ at byte"
+
+# And the other direction: the base file itself already lacks a final
+# newline, so nothing can be appended to it. That is the maintainer's problem
+# and the message says so, because blaming the submitter for it is how one
+# bad byte on the branch reads as every later contributor's fault.
+reset
+F_BASE_NEWLINE=false
+F_HEAD="$(printf '%s\n%s\n' "$F_BASE" "$F_LINE")"
+breaks "a base file with no final newline" "not the submitter's doing"
+
 reset
 F_LINE="octocat@example.org ssh-ed25519 $MINE octocat"
 breaks "a malformed added line" "rule 3"
@@ -250,6 +298,27 @@ reset
 F_REPOS=0
 F_EVENTS=0
 breaks "no public repos and no public activity" "rule 8"
+
+# The other half of a rule that refuses more shapes: the shapes it must still
+# accept. Every bug this rule is here for is "one bad line shuts the door",
+# and a fix that quietly narrows the door is the same failure wearing the
+# other hat.
+echo "== what the merged-bytes check must still let through =="
+reset
+F_BASE=""
+F_BASE_NEWLINE=false
+if run; then
+    ok "the first registration ever, against a branch with no file yet"
+else
+    bad "an empty base is the honest one before anybody has registered: $OUT"
+fi
+reset
+F_BASE="$(printf '# the registry\n\nprior@example.org ssh-ed25519 %s # prior-person\n\n' "$THEIRS")"
+if run; then
+    ok "a base with blank lines and comments in it, appended to as usual"
+else
+    bad "blank lines are legal in an allowed_signers file: $OUT"
+fi
 
 echo "== the activity floor is either-or =="
 reset
@@ -344,8 +413,17 @@ else
 #!/usr/bin/env bash
 # Stands in for `gh api`. Real gh writes the response body -- including an
 # error body -- to stdout, and its own message to stderr.
-case "${GH_STUB:-ok}" in
-    ok)      printf '%s' "$GH_STUB_BODY"; exit 0 ;;
+#
+# The fragment makes two fetches of the same file at two refs -- the branch,
+# and the pull request's head -- and they fail for different reasons and mean
+# different things, so which one is being answered is read off the ref in the
+# URL rather than guessed.
+case "$*" in
+    *"ref=trusted-contributors"*) mode="${GH_STUB:-ok}"; body="$GH_STUB_BODY" ;;
+    *)                            mode="${GH_STUB_HEAD:-ok}"; body="$GH_STUB_HEAD_BODY" ;;
+esac
+case "$mode" in
+    ok)      printf '%s' "$body"; exit 0 ;;
     404)     echo "gh: Not Found (HTTP 404)" >&2; exit 1 ;;
     500)     echo '{"message":"Server Error"}'
              echo "gh: Internal Server Error (HTTP 500)" >&2; exit 1 ;;
@@ -354,12 +432,16 @@ esac
 STUB
     chmod +x "$tmp/bin/gh"
 
-    fetch() {  # $1 = stub mode; echoes the exit code, leaves inputs/ behind
-        local d="$tmp/fetch.$1"
+    # $1 = the mode for the base fetch, $2 = the mode for the head fetch.
+    # Echoes the exit code and leaves inputs/ behind for the caller to read.
+    fetch() {
+        local d="$tmp/fetch.$1${2:+.$2}"
         rm -rf "$d"; mkdir -p "$d"
         local rc=0
-        ( cd "$d" && PATH="$tmp/bin:$PATH" GH_REPO=o/r GH_STUB="$1" \
-          GH_STUB_BODY="$F_BASE" bash "$frag" >/dev/null 2>&1 ) || rc=$?
+        ( cd "$d" && PATH="$tmp/bin:$PATH" GH_REPO=o/r HEAD_SHA=deadbeef \
+          GH_STUB="$1" GH_STUB_BODY="$F_BASE" \
+          GH_STUB_HEAD="${2:-ok}" GH_STUB_HEAD_BODY="$F_BASE" \
+          bash "$frag" >/dev/null 2>&1 ) || rc=$?
         echo "$rc"
     }
 
@@ -379,6 +461,27 @@ STUB
             ok "a $mode failure stops the job instead of guessing at the base"
         else
             bad "a $mode failure left the job running with a base it did not read"
+        fi
+    done
+
+    # And the same file at the pull request's head, which is what actually
+    # merges. Nothing here may become an empty file: an absent base is
+    # correct before the first contributor lands, but a registration's head
+    # always HAS the file -- the diff says a line was added to it -- so every
+    # failure is an infrastructure failure and none of them is a fact about
+    # the submitter.
+    if [[ "$(fetch ok ok)" == 0 \
+          && "$(cat "$tmp/fetch.ok.ok/inputs/head")" == "$F_BASE" ]]; then
+        ok "the file at the head commit is fetched too, and it is what merges"
+    else
+        bad "a successful head fetch did not land in inputs/head"
+    fi
+    for mode in 404 500 network; do
+        if [[ "$(fetch ok "$mode")" != 0 \
+              && ! -e "$tmp/fetch.ok.$mode/inputs/head" ]]; then
+            ok "a $mode on the head file stops the job rather than guessing"
+        else
+            bad "a $mode on the head file left the job running without it"
         fi
     done
 fi

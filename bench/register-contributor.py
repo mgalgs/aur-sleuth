@@ -17,7 +17,8 @@ The rules:
 
   1. Exactly one commit.
   2. Exactly one file changed -- `trusted-contributors`, one line added, none
-     removed.
+     removed -- AND the file as the head commit has it is byte-for-byte the
+     file on the branch with that line appended and terminated.
   3. The added line is well formed, its email is the commit's author email,
      and its `# <login>` is the pull request author's login.
   4. GitHub verified the signature: `verified` is true and `reason` is
@@ -42,6 +43,7 @@ Usage:
   register-contributor.py --pr pr.json --commits commits.json --user user.json
                           --signing-keys keys.json --diff numstat.txt
                           --added-line line.txt --base-file trusted-contributors
+                          --head-file head-trusted-contributors
                           [--public-events N] [--now ISO8601]
 
 Exit 0 means merge. Exit 1 prints every reason it may not, one per line.
@@ -153,6 +155,8 @@ def check(args):
         added_line = added_line[:-1]
     with open(args.base_file, encoding="utf-8", newline="") as f:
         base_text = f.read()
+    with open(args.head_file, encoding="utf-8", newline="") as f:
+        head_text = f.read()
 
     author = str((pr.get("user") or {}).get("login") or "")
     if not author:
@@ -167,6 +171,9 @@ def check(args):
     detail = c.get("commit") or {}
 
     # --- 2: exactly one file, one line added ----------------------------------
+    # Two checks, and they are not redundant. The numstat is the friendly one:
+    # it names the case -- too many files, a line removed -- in the words a
+    # contributor can act on. The byte comparison below is the honest one.
     if len(numstat) != 1:
         bad.append(f"rule 2: {len(numstat)} files changed; a registration "
                    f"touches only {REGISTRY_FILE}")
@@ -175,6 +182,50 @@ def check(args):
         if fields != EXPECTED_NUMSTAT:
             bad.append(f"rule 2: the diff is '{numstat[0]}'; it must be exactly "
                        f"'1\t0\t{REGISTRY_FILE}' -- one line added, none removed")
+
+    # What actually merges is the head commit's bytes. Everything else in this
+    # script judges a RECONSTRUCTION of them: the numstat is a pair of counts,
+    # and `run_check` below is shown `base_text + added_line + "\n"`, a string
+    # this script builds and therefore always terminates. So a head file that
+    # ends WITHOUT a final newline passes every other rule, merges, and the
+    # branch is left in a state nothing here can produce: the next
+    # registration's append either mangles that last line into a joined one or
+    # shows as one line removed, and rule 2 refuses it. One contributor's
+    # missing byte shuts the door on everyone after them, with a message that
+    # blames the wrong person -- the same failure the added-line comment above
+    # warns about, arriving by a third door.
+    #
+    # The workflow cannot see it either: the diff's `\ No newline at end of
+    # file` marker starts with a backslash, and the `grep '^+'` that lifts the
+    # added line out of the patch drops it.
+    #
+    # So compare the bytes. One equality subsumes the missing final newline, a
+    # trailing space, a CR, a line inserted mid-file rather than appended, and
+    # a second file the numstat somehow did not name -- everything that could
+    # make what merges differ from what rule 3 was shown.
+    expected = base_text + added_line + "\n"
+    if head_text != expected:
+        if base_text and not base_text.endswith("\n"):
+            bad.append("rule 2: the trusted-contributors file on the branch does "
+                       "not end in a newline, so no line can be appended to it "
+                       "cleanly; this is not the submitter's doing, and the "
+                       "branch needs a hand edit")
+        elif head_text == base_text + added_line:
+            bad.append("rule 2: the file this pull request would merge does not "
+                       "end in a newline; add one, so the next registration can "
+                       "append to it")
+        elif not head_text.startswith(base_text):
+            bad.append("rule 2: the file this pull request would merge does not "
+                       f"begin with the {REGISTRY_FILE} that is on the branch; "
+                       "a line is added to the END of the file, and the branch "
+                       "may have moved -- rebase onto it and push again")
+        else:
+            at = next((i for i, (a, b) in enumerate(zip(head_text, expected))
+                       if a != b), min(len(head_text), len(expected)))
+            bad.append("rule 2: the file this pull request would merge is not the "
+                       "file on the branch with the added line appended to it; "
+                       f"they first differ at byte {at}, and every byte after "
+                       "that point is one no rule below has read")
 
     # --- 3: the added line, and whose it says it is ---------------------------
     # Duplicates are rule 7's answer to give, so they are dropped here rather
@@ -265,6 +316,8 @@ def main():
                     help="the one line the commit added")
     ap.add_argument("--base-file", required=True,
                     help="trusted-contributors as the branch has it")
+    ap.add_argument("--head-file", required=True,
+                    help="trusted-contributors as the pull request's head has it")
     ap.add_argument("--public-events", type=int, default=0,
                     help="how many recent public events the account has")
     ap.add_argument("--now", default="",
