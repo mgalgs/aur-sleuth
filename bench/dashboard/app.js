@@ -713,6 +713,14 @@ function squareNote(value, type, pkg) {
     return '';
 }
 
+// The hover on a community square: who sent it and how far in they are,
+// both escaped as attribute text because both came from a submission's
+// frontmatter.
+function communityTitle(by, ring) {
+    return 'community — submitted by ' + escapeAttr(by || 'unknown')
+        + ', ring ' + escapeAttr(ring || '?');
+}
+
 function renderSquares(items, type, pkg) {
     if (!items || items.length === 0) return '<span class="dim">—</span>';
     return '<span class="sqs">' + items.map(item => {
@@ -720,8 +728,14 @@ function renderSquares(items, type, pkg) {
         const model = shortModel(item.model || 'unknown');
         // An advisory report is information, not a vote: one muted style
         // whatever it said, so a free model's "unsafe" never reads as a flag.
+        // A community submission is advisory too, and gets the same glyph --
+        // but the hover attributes it, because who sent it is the whole of
+        // what it is worth. No new readout and no new count: a title on a
+        // square that was already there.
         if (item.advisory) {
-            return '<span class="sq sq-advisory" title="' + escapeAttr(model + ': ' + value + ' (advisory — informational only, not a vote)') + '"></span>';
+            return '<span class="sq sq-advisory" title="' + (item.source === 'community'
+                ? communityTitle(item.submitted_by, item.submitted_ring)
+                : escapeAttr(model + ': ' + value + ' (advisory — informational only, not a vote)')) + '"></span>';
         }
         const label = item.reaudit ? 'second audit' : type;
         const cls = squareClass(value, type, pkg) + (item.reaudit ? ' sq-reaudit' : '');
@@ -989,7 +1003,9 @@ function renderDetail(name, data) {
                 }
                 full += '<pre class="report-body">' + escapeHtml(a.body || '') + '</pre>';
                 return '<div class="report"><div class="line">'
-                    + '<span class="sq ' + cls + '"></span>'
+                    + '<span class="sq ' + cls + '"'
+                    + (community ? ' title="' + communityTitle(fm.submitted_by, fm.submitted_ring) + '"' : '')
+                    + '></span>'
                     + (advisory
                         ? '<span class="verdict dim">' + escapeHtml(result) + '</span><span class="meta">advisory — informational only, not a vote</span>'
                         : '<span class="verdict result-' + escapeAttr(result) + confirmedCls + '">' + escapeHtml(result) + '</span>')

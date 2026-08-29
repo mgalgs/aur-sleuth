@@ -488,6 +488,10 @@ def build_index_data(audits, judges, now=None, coverage_inputs=None, escalation_
             # the next sweep, and a submission must never do that.
             "source": fm.get("source", ""),
             "submitted_by": fm.get("submitted_by", ""),
+            # Which invitation ring the gateway saw the submitter on. Like
+            # submitted_by it is attribution and nothing else: it decides no
+            # state, and it is what the page names on the square's hover.
+            "submitted_ring": fm.get("submitted_ring", ""),
         })
 
     # Build set of re-audit filenames from judge data for backward compat
@@ -591,7 +595,9 @@ def build_index_data(audits, judges, now=None, coverage_inputs=None, escalation_
                  **({"model_alias": a["model_alias"]} if a.get("model_alias") else {}),
                  "reaudit": bool(a.get("triggered_by")),
                  **({"advisory": True} if a.get("advisory") else {}),
-                 **({"source": a["source"]} if a.get("source") else {})}
+                 **({"source": a["source"]} if a.get("source") else {}),
+                 **({"submitted_by": a["submitted_by"]} if a.get("submitted_by") else {}),
+                 **({"submitted_ring": a["submitted_ring"]} if a.get("submitted_ring") else {})}
                 for a in pkg_audits
             ],
             "judges": [{"verdict": j["correct_verdict"], "model": j.get("model", "unknown"),

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Unit test for bench/generate-dashboard.py's command line.
+# Unit tests for bench/generate-dashboard.py's command line, and for how the
+# page renders a community submission.
 #
 # The no-argument path commits to the audit-reports branch, and every
 # unrecognised argument used to fall through to it: running the script with
@@ -9,6 +10,12 @@
 #
 # load_reports and commit_to_branch are replaced with functions that raise,
 # so a regression fails here loudly instead of writing to a real branch.
+#
+# The second half lifts the square-rendering functions out of
+# bench/dashboard/app.js and runs them, so the attribution a community square
+# carries on hover is asserted against the real code rather than described.
+# That needs node, which nothing else here does; without it those checks say
+# SKIP rather than failing, loudly enough to notice.
 #
 # Costs nothing: no model is called, no network is touched, no git is run.
 #
@@ -113,6 +120,67 @@ for flag in gd.VALUE_FLAGS | gd.BARE_FLAGS:
 if fails:
     print(f"FAILED: {fails} check(s)")
     sys.exit(1)
-if not quiet:
-    print("all checks passed")
 PY
+
+# --- what a community square says when you hover it --------------------------
+#
+# A submission's square is the same muted advisory glyph every other advisory
+# report gets -- no new readout, no new count. What is added is the title:
+# who sent it and how far in they are, which is the whole of what a community
+# report is worth. bench/test-ingest.sh proves the two values reach the page's
+# JSON; this proves the page puts them on the square.
+
+QUIET=false
+[[ "${1:-}" == "-q" ]] && QUIET=true
+fails=0
+ok()  { $QUIET || printf '  ok    %s\n' "$1"; }
+bad() { printf '  FAIL  %s\n' "$1"; fails=$(( fails + 1 )); }
+
+if command -v node >/dev/null 2>&1; then
+    lift() { sed -n "/^function $1(/,/^}/p" bench/dashboard/app.js; }
+    html="$( { lift escapeAttr; lift shortModel; lift communityTitle; lift renderSquares
+               cat <<'JS'
+const audits = [
+    {result: 'unsafe', model: 'openai/gpt-5.4', advisory: true, source: 'community',
+     submitted_by: 'octocat', submitted_ring: '2'},
+    {result: 'safe', model: 'openrouter/free', advisory: true},
+    {result: 'unsafe', model: 'x/y', advisory: true, source: 'community',
+     submitted_by: 'a"b', submitted_ring: '<3'},
+];
+process.stdout.write(renderSquares(audits, 'audit', {}));
+JS
+             } | node )"
+    if grep -qF 'title="community — submitted by octocat, ring 2"' <<< "$html"; then
+        ok "a community square attributes on hover"
+    else
+        bad "the community square carries no attribution: $html"
+    fi
+    if grep -qF 'sq sq-advisory' <<< "$html" \
+       && ! grep -qF 'sq-unsafe' <<< "$html"; then
+        ok "it is still the advisory glyph: no new readout, no new count"
+    else
+        bad "a community unsafe should render as the advisory square: $html"
+    fi
+    if grep -qF 'advisory — informational only, not a vote' <<< "$html"; then
+        ok "an ordinary advisory square keeps its own title"
+    else
+        bad "the non-community advisory title was lost: $html"
+    fi
+    if grep -qF 'a&quot;b' <<< "$html" && grep -qF '&lt;3' <<< "$html" \
+       && ! grep -qF 'by a"b' <<< "$html"; then
+        ok "both values are escaped as attribute text"
+    else
+        bad "the attribution is not escaped: $html"
+    fi
+else
+    # Nothing else in this repository needs node, so a machine without it is
+    # not a regression -- but the skip is printed even under -q, because a
+    # check nobody runs is the same as no check.
+    printf '  SKIP  node is not installed; app.js was not executed here\n'
+fi
+
+if (( fails )); then
+    printf 'FAILED: %d check(s)\n' "$fails"
+    exit 1
+fi
+$QUIET || echo "all checks passed"

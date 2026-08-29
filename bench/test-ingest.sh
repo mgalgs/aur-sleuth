@@ -515,6 +515,10 @@ if len(com) != 1:
     fails.append(f"expected one community audit on vivaldi, got {len(com)}")
 elif not com[0].get("advisory"):
     fails.append("the community audit is not marked advisory in the summary")
+elif com[0].get("submitted_by") != "octocat" or com[0].get("submitted_ring") != "2":
+    # The page attributes a community square on hover, and it reads the
+    # summary to do it, so both values have to survive the summary.
+    fails.append(f"the summary audit lost its attribution: {com[0]}")
 detail = json.load(open(os.path.join(os.environ["EMIT"], "_dashboard/pkg/vivaldi.json")))
 fm = [a["frontmatter"] for a in detail["audits"]
       if a["frontmatter"].get("source") == "community"]
