@@ -235,8 +235,11 @@ SAFE verdicts, and do not let it run without the malicious fixtures in the gate.
 - `bench/ingest-submission.py` — the gate on a community-submitted report.
   Decides in code what may land and rewrites what does: `advisory: true` and
   `source: community` are forced whatever the submission claimed, so a
-  contributor's claim can never become a vote — a tier below advisory, and
-  the one thing on the branch no model ever reads. It also decides WHO: the
+  contributor's claim can never become a vote. That stamp is also all that
+  separates it from one of the pipeline's own advisory runs: there are two
+  tiers, not three, so a submission is in the judge's pile, in the review
+  stage's advisory read, and in the audited index under `--include-advisory`,
+  exactly as any advisory report is. It also decides WHO: the
   submission's commit must verify against `trusted-contributors` as `master`
   has it, read as an SSH `allowed_signers` file, and `submitted_by` is the login on the
   line the signing key is on, not the label the caller was given. The

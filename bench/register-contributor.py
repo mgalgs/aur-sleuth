@@ -37,9 +37,9 @@ The rules:
 
 Rule 8 is a SPAM COST, not a security control. An account old enough and used
 enough to clear it is not thereby trustworthy; it is merely not free to
-produce in bulk. What a submission is worth does not change with any of this
--- a community report stays a tier below advisory, information for people and
-never a vote. What the bar buys is that the person behind one is reachable.
+produce in bulk. What a submission is worth is decided at the ingest, not
+here -- a community report is advisory: context a model may read, never a
+vote. What the bar buys is that the person behind one is reachable.
 
 Usage:
   register-contributor.py --pr pr.json --commits commits.json --user user.json

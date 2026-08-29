@@ -159,44 +159,50 @@ gateway's own label (`AUR_SLEUTH_SUBMITTED_BY`) is compared to that login
 rather than believed, and a disagreement refuses the submission. The ring
 arrives as `AUR_SLEUTH_SUBMISSION_RING` and is recorded as `submitted_ring`.
 
-What is verified is WHO, never WHAT. A submission is a tier **below advisory**,
-and the ordering is worth stating in full: a real audit votes; an advisory
-report is this pipeline running a model it does not trust yet, so it carries no
-vote but a judge reads it as context; a community report is an unverified claim
-about both which model ran and what it decided. The one concrete consequence of
-that last step down: an advisory report reaches the judge behind the
-untrusted-data fence, and a community report never reaches a model at all. The
-registration bar raises who may submit; it does not raise what a submission
-counts for.
+What is verified is WHO, never WHAT. A submission is **advisory**, the same
+tier the pipeline's own free models write into, and there are two tiers in
+total: a real audit votes; an advisory report carries no vote but a judge reads
+it as context, behind the untrusted-data fence. Registration is what earns that
+standing -- the signing flow says a named GitHub account stands behind the
+report, which is worth as much as an untrusted model of our own, and no more.
+What registration does not raise is what a submission counts for; that is fixed
+at the ingest by the stamp below, and by what the accounting still refuses to
+count.
 
 Its frontmatter says which model ran and what it decided, and nothing can check
 either, so the ingest keeps the claim as a claim and stamps what it actually
-is: `advisory: true`, which is why a submission counts toward nothing above,
-plus `source: community`, which says who said it. The stamp is forced whatever
-the file claimed, `triggered_by` and the pipeline's own accounting (`cost`, the
-token counts, `execution_time`) are stripped -- a submission spent none of this
-deployment's money -- the submission's commit sha is recorded, and the ingest
-names the file -- a forger controls their own filename, and the archive does
-not let them pick where it lands. A `.json` is
+is: `advisory: true`, which is what places it in the second tier and keeps it
+out of every vote, plus `source: community`, which says who said it. The stamp
+is forced whatever the file claimed, `triggered_by` and the pipeline's own
+accounting (`cost`, the token counts, `execution_time`) are stripped -- a
+submission spent none of this deployment's money -- the submission's commit sha
+is recorded, and the ingest names the file -- a forger controls their own
+filename, and the archive does not let them pick where it lands. A `.json` is
 refused outright, because a `-judge.json` is a ruling the page counts; so is
 any path the branch already has, which is the overwrite attack.
 
-`source: community` then goes one step further than `advisory: true`. It is
-not coverage in the audited index even under `--include-advisory`, so a
-submission cannot keep a package away from the free sweep or the paid seats.
-And it is not in the pile the judge reads, where ordinary advisory reports
-are: a submission's body is text a person chose, aimed at a model the pipeline
-pays for. The untrusted-data fence around the judge's reports stays as defence
-in depth; exclusion is the rule. And it is in none of the page's accounting:
-every figure that says what this deployment spent or which models it ran --
-the spend total, the per-model tables, the week's "packages read" and audit
-counts, the cost-per-package the coverage line divides, and which models get a
-seat in the diagram -- is computed over the pipeline's own reports
-(`pipeline_audits` and `latest_measured_date` in `bench/generate-dashboard.py`,
-`kinds` in `auditRow()`). Stripping the accounting keys at the ingest is not
-what does that: `model` and `date` have to survive, so anything that counts
-reports would move if it counted a submission. What is left is the page, which
-shows it with the advisory glyph, labelled community, attributed to the
+`advisory: true` is what places it, and `source: community` says only who. So
+it is coverage in the audited index exactly as an advisory report is -- counted
+under `--include-advisory` and never toward the paid seats -- and it is in the
+pile the judge reads and in the review stage's advisory read, behind the same
+untrusted-data fence every report's text sits behind. That fence is the whole
+protection, and it does not get stronger or weaker with who wrote the text.
+
+Where `source: community` does still decide something, the question is not
+trust but authorship of the *run*. A submission's `model:` and `date:` describe
+a run this deployment did not make, so it is in none of the page's accounting:
+every figure that says what this deployment spent or which models it ran -- the
+spend total, the per-model tables, the week's "packages read" and audit counts,
+the cost-per-package the coverage line divides, and which models get a seat in
+the diagram -- is computed over the pipeline's own reports (`pipeline_audits`
+and `latest_measured_date` in `bench/generate-dashboard.py`, `kinds` in
+`auditRow()`). For the same reason a submission is not in the benchmark's
+stratified sample or its scoring (`bench/benchmark-sample.py`): scoring a
+candidate model against a verdict means comparing it to a run this pipeline
+made, and a submission is not one. Stripping the accounting keys at the ingest
+is not what does that: `model` and `date` have to survive, so anything that
+counts reports would move if it counted a submission. What is left is the page,
+which shows it with the advisory glyph, labelled community, attributed to the
 submitter and the ring on the square's hover.
 
 ## Model aliases

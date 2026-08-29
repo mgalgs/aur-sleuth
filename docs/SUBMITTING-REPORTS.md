@@ -11,23 +11,30 @@ can decide whether the work is worth it to you.
 
 ## What a submission is worth
 
-The pipeline has three tiers, in this order:
+The pipeline has two tiers, in this order:
 
-**a real audit > an advisory report > a community report.**
+**a real audit > an advisory report.**
 
-A real audit is a model on a paid seat, and it votes. An advisory report is
-this pipeline running a model it does not trust yet — usually a free one — so
-it carries no vote, but it is our own run and a judge reads it as context. A
-community report is a tier below that: an unverified *claim*, about both which
-model ran and what it decided. So it is **information for people reading the
-dashboard** and nothing else.
+A real audit is a model on a paid seat, and it votes. An advisory report does
+not vote, but it is context: a judge reads it behind the untrusted-data fence,
+and the review stage's advisory read sees it. Two things land in that second
+tier — this pipeline running a model it does not trust yet, usually a free one,
+and **a report you submit once you are registered.** They are the same tier.
+There is no third one below.
 
-The one concrete difference from advisory: an advisory report reaches the judge
-behind the untrusted-data fence, and **a community report never reaches any
-model at all.**
+Your submission is advisory because the signing flow says who sent it. That is
+what registering buys: the rules below verify that a real GitHub account, whose
+profile carries the signing key, stands behind the report. A claim from a known
+person is worth reading; an anonymous one would not be.
 
-None of that changes when you register. The bar below decides *who may submit*.
-It does not raise what a submission counts for, and it is not meant to.
+What registering does **not** buy is a vote. `advisory: true` and
+`source: community` are stamped on your report at ingest whatever the file
+claimed, so no submission can become a verdict. And the figures that say what
+*this deployment* ran or spent stay closed to it — the spend, the per-model
+tables, the week's counts, the coverage denominator, the benchmark's sample.
+Those are not a judgement about you. They are a different question: your
+`model:` and `date:` describe a run this pipeline did not make, so it cannot
+count them as its own however much it trusts you.
 
 ## The bar, and why it is there
 
@@ -278,34 +285,42 @@ On the page, a community report shows with the advisory glyph, labelled
 "community", attributed to you on hover, and its full text folds out like any
 other report.
 
-Everywhere else it counts for nothing, by design — this is what the tier below
-advisory means in practice:
+Two things follow from it being advisory, and they cut in opposite
+directions. What it **is** read by:
 
-- **No model in this pipeline ever reads it.** It never triggers the judge and
-  it is not in the pile the judge reads. Advisory reports from the pipeline's
-  own free models are in that pile, behind a fence that tells the judge to
-  treat report text as untrusted data. A community report is kept out of it
-  entirely: its text is chosen by whoever sent it, the judge is a model the
-  maintainer pays for, and a fence is a weaker thing to rely on than not
-  sending the text at all.
+- **A model does read it.** Your report goes into the pile the judge reads,
+  behind the fence that tells the judge to treat every report's text as
+  untrusted data — the same pile, and the same fence, as an advisory report
+  from one of the pipeline's own free models. The review stage's advisory read
+  sees it too. That fence is the protection; being a known contributor is not
+  a reason to lower it, and it is not lowered for you.
+- **It marks the package as advisory-covered.** A later advisory sweep will
+  dig deeper into the popular set rather than re-cover a package you already
+  read. It does not mark the package audited for the paid seats, so it never
+  keeps a package away from a real verdict.
+
+And what it is **not** counted in — every one of these because the figure says
+what *this deployment* ran, decided or spent, which your report does not
+describe:
+
 - It never counts toward agreement, a majority, a verdict, or a package's
   state. A community `unsafe` puts nothing on the flagged list — not on the
   operator's "Reports worth a look" before a publish, and not in the `flagged`
   number the published page carries. Nor does it appear in that summary's
-  verdict breakdown, or in its "no findings" count of runs that errored: those
-  say what this deployment's own reads came back with. The one line your report
-  does move is `audit reports`, which counts what the push carries, and the
-  summary prints a `community:` line beside it naming you and your count, so
-  the person publishing can see the difference.
-- It never marks a package as already audited, so it cannot keep a package away
-  from the pipeline's own reads.
+  verdict breakdown, or in its "no findings" count of runs that errored. The
+  summary does print a `community:` line naming you, your count, and how many
+  of yours were flagged, so the person publishing sees the report and knows
+  which number it did not move.
 - It is in no figure that says what this deployment spent or which models it
   ran: not the spend total, not the per-model tables, not the week's "packages
   read" and audit counts, and not the cost-per-package the coverage line
-  divides. Dropping your
-  `cost` line is not what does that — your `model:` and `date:` are kept, and
-  anything that *counts reports* would move if it counted yours. The dashboard
-  computes those figures over the pipeline's own reports instead.
+  divides. Nor is it in the benchmark's sample or its scoring, which compare
+  candidate models against runs this pipeline made. Dropping your `cost` line
+  is not what does that — your `model:` and `date:` are kept, and anything that
+  *counts reports* would move if it counted yours. The dashboard computes those
+  figures over the pipeline's own reports instead.
+- The one line your report does move is `audit reports`, which counts what the
+  push carries.
 
 If you think a package deserves a real verdict, saying so is more use than the
 report's own `result:` line — the maintainer can queue an escalation, which is

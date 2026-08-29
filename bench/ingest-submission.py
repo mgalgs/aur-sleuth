@@ -5,8 +5,10 @@ Anyone can run `aur-sleuth <pkg>` and offer the report. What arrives is a
 *claim*: the frontmatter says which model ran and what it decided, and nothing
 here can check either. So the claim is kept as a claim -- `model:` still says
 what the contributor says it was -- and the ingest stamps every accepted file
-with what it actually is: `advisory: true` (counts toward nothing) and
-`source: community` (never read by a model, never in the audited index).
+with what it actually is: `advisory: true` (no vote) and `source: community`
+(who said it). Advisory is a real tier, not a holding pen: the report is read
+by the judge and by the review stage's advisory read, behind the same
+untrusted-data fence every report's text sits behind.
 
 Who sent it IS verified, and twice over. A report arrives over the
 maintainer's private network, through a gateway that identifies the caller by
@@ -14,8 +16,10 @@ their node and stamps the invitation ring it came in on, so `--submitted-by`
 and `--submission-ring` are facts the transport established rather than
 labels a submission chose. Neither is re-derived here. But the gateway's
 label is not trusted alone: the submission's commit has to carry a signature
-made by a key on the `trusted-contributors` branch
-(`--allowed-signers`, an SSH allowed_signers file), the signature's principal
+made by a key in the `trusted-contributors` registry, which reaches this
+script as a path (`--allowed-signers`, an SSH allowed_signers file) so that
+where the registry lives is the caller's business, not this script's; the
+signature's principal
 has to be the commit's own author email, and the `# <login>` comment on that
 key's line has to be what `--submitted-by` says. What is recorded is the
 login the KEY maps to. A submission whose signature does not verify, or whose
@@ -23,7 +27,8 @@ key is on nobody's line, is refused whole.
 
 What is verified is WHO, never WHAT. The report's own claims are untouched by
 any of it: a signed report from a registered contributor is still `advisory:
-true`, still `source: community`, still read by no model.
+true` and still `source: community`. Being registered is what earns advisory
+standing rather than nothing; it never earns a vote.
 
 Fail closed: one bad file refuses the whole submission, every reason listed,
 exit 1, nothing written to --out. Half a submission landing would leave the

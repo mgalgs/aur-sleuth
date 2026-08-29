@@ -1388,8 +1388,10 @@ PY
 
 # --- ingest -------------------------------------------------------------------
 
-# Take a community-submitted report onto the reports branch, as advisory
-# information and nothing else.
+# Take a community-submitted report onto the reports branch, as an advisory
+# report: the same tier one of the pipeline's own untrusted free models writes
+# into, so a judge and the review stage's advisory read both see it, and
+# nothing votes on it.
 #
 # Everything here is untrusted. The submission is a public git ref that anyone
 # may push to; its frontmatter is a claim, its filename is a claim, and its
@@ -1399,9 +1401,13 @@ PY
 #     store, for the same reason publish stages one: a repository's config and
 #     hooks are executable input. A fetch runs no remote code, and the accepted
 #     bytes are inert markdown the publish gate already permits.
-#   - bench/ingest-submission.py decides every rule in code -- no model reads
-#     any of it -- and stamps what it accepts `advisory: true` and
-#     `source: community`, which is what the rest of the pipeline keys on.
+#   - bench/ingest-submission.py decides every rule in code -- the RULES are a
+#     model-free gate, whatever happens to the report downstream -- and stamps
+#     what it accepts `advisory: true` and `source: community`, which is what
+#     the rest of the pipeline keys on. `advisory: true` places it; the only
+#     thing `source: community` still closes off is the accounting that says
+#     what THIS deployment ran or spent, because a submission's `model:` and
+#     `date:` describe a run this pipeline did not make.
 #
 # Who sent it is the one thing here that is NOT untrusted, and it is checked
 # twice. The gateway in front of the endpoint identifies the caller by their
@@ -1527,7 +1533,8 @@ do_ingest() {
     for path in "${files[@]}"; do
         log "  $path"
     done
-    log "They are advisory: informational only, never a vote, never read by a model."
+    log "They are advisory: context a judge and the review read, never a vote,"
+    log "and in no figure that says what this deployment ran or spent."
 }
 
 # --- bundle -------------------------------------------------------------------
