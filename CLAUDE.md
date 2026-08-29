@@ -236,8 +236,23 @@ SAFE verdicts, and do not let it run without the malicious fixtures in the gate.
   Decides in code what may land and rewrites what does: `advisory: true` and
   `source: community` are forced whatever the submission claimed, so a
   contributor's claim can never become a vote — a tier below advisory, and
-  the one thing on the branch no model ever reads. The container's `ingest`
-  stage runs it; `docs/SUBMITTING-REPORTS.md` is the contributor's side.
+  the one thing on the branch no model ever reads. It also decides WHO: the
+  submission's commit must verify against the `trusted-contributors` branch
+  as an SSH `allowed_signers` file, and `submitted_by` is the login on the
+  line the signing key is on, not the label the caller was given. The
+  container's `ingest` stage runs it; `docs/SUBMITTING-REPORTS.md` is the
+  contributor's side.
+- `bench/register-contributor.py` — the gate on who may submit at all. Eight
+  rules over one pull request that adds one signed line to
+  `trusted-contributors`, every input a file so the whole set runs offline
+  (`bench/test-register.sh`); `.github/workflows/register-contributor.yml`
+  merges on a pass and closes with reasons on a failure, and
+  `bench/trusted-contributors.sh` owns the file's format and creates its
+  branch. The activity floor is a spam cost, not a security control.
+- `aur-sleuth-submit` — the contributor's client. Signs one commit adding
+  `<package>/<name>.md`, bundles it, and POSTs it to the endpoint named in
+  their invitation, backing off on the `429`/`503` that says the endpoint is
+  at capacity. `bench/test-submit.sh` stands a local server in for it.
 - `bench/scout.py` — the code-only shortlist of catalog models that could undercut a
   seat, and (`screen-list`) the one answer to which of them to screen next. The
   `screen` container stage runs `benchmark.sh --sample 0` over that list, cheapest

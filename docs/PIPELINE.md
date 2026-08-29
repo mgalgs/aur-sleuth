@@ -126,36 +126,50 @@ leads. This is how an untrusted (usually free) model contributes without
 being able to escalate anything. An advisory run cannot combine with
 escalation, which exists to force a ruling.
 
-**Ingest: community submissions.** Anyone can run `aur-sleuth` on a package
-and offer the report, as a pull request against `audit-reports`;
-`docs/SUBMITTING-REPORTS.md` is the contributor's side of it. A workflow
-(`.github/workflows/report-submission.yml`) comments on the pull request and
-closes it at once, so no submission sits in the open-PR list waiting on an
-operator, and a closed pull request is the normal outcome rather than a
-rejection. The container's `ingest` stage then takes the head — GitHub
-publishes it at `refs/pull/<N>/head` on the base repository, readable with no
-credential, so `AUR_SLEUTH_SUBMISSION_PR=<N>` resolves both the URL and the
-ref — fetches it into a throwaway repository, applies
-`bench/ingest-submission.py` (every rule in code, no model) and commits what
-it accepts. The branch is never merged: a GitHub merge would put a commit on
-origin that the store has not seen, and publish requires origin to be an
-ancestor of the store.
+**Ingest: community submissions.** Anyone can run `aur-sleuth` on a package,
+but sending the report takes an invitation. A would-be contributor registers
+once -- one signed commit adding one line, their email and their SSH signing
+public key, to the `trusted-contributors` file on a data branch of its own --
+and `.github/workflows/register-contributor.yml` merges it when every rule in
+`bench/register-contributor.py` passes, or closes it with the reasons.
+`docs/SUBMITTING-REPORTS.md` is the contributor's side, and says why the bar
+is where it is. The private side then mints an invitation to the maintainer's
+network and emails it.
 
-A submission is a tier **below advisory**, and the ordering is worth stating
-in full: a real audit votes; an advisory report is this pipeline running a
-model it does not trust yet, so it carries no vote but a judge reads it as
-context; a community report is an unverified claim from an unverified person
-about both which model ran and what it decided. The one concrete consequence
-of that last step down: an advisory report reaches the judge behind the
-untrusted-data fence, and a community report never reaches a model at all.
+Reports arrive over that network only. A gateway identifies the caller by
+their node and stamps the invitation ring; the endpoint behind it spools each
+accepted upload as a git bundle on the volume. The container's `ingest` stage
+fetches one of those bundles (`AUR_SLEUTH_SUBMISSION_URL` plus
+`AUR_SLEUTH_SUBMISSION_REF` -- a bundle path is a URL git fetches) into a
+throwaway repository, applies `bench/ingest-submission.py` (every rule in
+code, no model) and commits what it accepts.
 
-Its frontmatter says which model ran and what it decided, and nothing can
-check either, so the ingest keeps the claim as a claim and stamps what it
-actually is: `advisory: true`, which is why a
-submission counts toward nothing above, plus `source: community`, which says
-who said it. The stamp is forced whatever the file claimed, `triggered_by` is
-stripped, the pull request number and the submission's commit sha are
-recorded, and the ingest names the file — a forger controls their own
+Who sent it is the one input here that is not untrusted, and it is checked
+twice. The stage fetches the `trusted-contributors` branch from the public
+repository -- no credential, like `prepare` -- and the script requires the
+submission's commit to verify against it as an SSH `allowed_signers` file,
+requires the signature's principal to be the commit's own author email, and
+records `submitted_by` as the `# <login>` on the line the key is on. The
+gateway's own label (`AUR_SLEUTH_SUBMITTED_BY`) is compared to that login
+rather than believed, and a disagreement refuses the submission. The ring
+arrives as `AUR_SLEUTH_SUBMISSION_RING` and is recorded as `submitted_ring`.
+
+What is verified is WHO, never WHAT. A submission is a tier **below advisory**,
+and the ordering is worth stating in full: a real audit votes; an advisory
+report is this pipeline running a model it does not trust yet, so it carries no
+vote but a judge reads it as context; a community report is an unverified claim
+about both which model ran and what it decided. The one concrete consequence of
+that last step down: an advisory report reaches the judge behind the
+untrusted-data fence, and a community report never reaches a model at all. The
+registration bar raises who may submit; it does not raise what a submission
+counts for.
+
+Its frontmatter says which model ran and what it decided, and nothing can check
+either, so the ingest keeps the claim as a claim and stamps what it actually
+is: `advisory: true`, which is why a submission counts toward nothing above,
+plus `source: community`, which says who said it. The stamp is forced whatever
+the file claimed, `triggered_by` is stripped, the submission's commit sha is
+recorded, and the ingest names the file -- a forger controls their own
 filename, and the archive does not let them pick where it lands. A `.json` is
 refused outright, because a `-judge.json` is a ruling the page counts; so is
 any path the branch already has, which is the overwrite attack.
@@ -164,11 +178,11 @@ any path the branch already has, which is the overwrite attack.
 not coverage in the audited index even under `--include-advisory`, so a
 submission cannot keep a package away from the free sweep or the paid seats.
 And it is not in the pile the judge reads, where ordinary advisory reports
-are: a submission's body is text anyone with a GitHub account chose, aimed at
-a model the pipeline pays for. The untrusted-data fence around the judge's
-reports stays as defence in depth; exclusion is the rule. What is left is the
-page, which shows it with the advisory glyph, labelled community, with the
-submitter's label beside it.
+are: a submission's body is text a person chose, aimed at a model the pipeline
+pays for. The untrusted-data fence around the judge's reports stays as defence
+in depth; exclusion is the rule. What is left is the page, which shows it with
+the advisory glyph, labelled community, attributed to the submitter and the
+ring on the square's hover.
 
 ## Model aliases
 

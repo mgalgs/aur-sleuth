@@ -14,11 +14,13 @@ install:
 	install -d $(DESTDIR)$(PREFIX)/share/doc/aur-sleuth
 	install -m 755 aur-sleuth $(DESTDIR)$(PREFIX)/bin/aur-sleuth
 	install -m 755 makepkg-with-sleuthing $(DESTDIR)$(PREFIX)/bin/makepkg-with-sleuthing
+	install -m 755 aur-sleuth-submit $(DESTDIR)$(PREFIX)/bin/aur-sleuth-submit
 	install -m 644 README.md $(DESTDIR)$(PREFIX)/share/doc/aur-sleuth/README.md
 
 uninstall:
 	rm -f $(DESTDIR)$(PREFIX)/bin/aur-sleuth
 	rm -f $(DESTDIR)$(PREFIX)/bin/makepkg-with-sleuthing
+	rm -f $(DESTDIR)$(PREFIX)/bin/aur-sleuth-submit
 	rm -rf $(DESTDIR)$(PREFIX)/share/doc/aur-sleuth
 
 .PHONY: install uninstall

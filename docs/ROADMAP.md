@@ -103,22 +103,36 @@ only with a version bump.
   the UI can press, or having the review stage fetch origin itself — which
   needs a credential the review Job is deliberately not given. Until then it
   clears itself within four hours.
-- **An ingest verb for community submissions** (queued 2026-08-28). The
-  `ingest` container stage exists and is covered by `bench/test-ingest.sh`;
-  what is missing is the button. The stage takes
-  `AUR_SLEUTH_SUBMISSION_PR=<N>`, so the verb's whole input is a pull request
-  number and a label for the contributor. It is a writer, so it must be
-  serialised against `prepare`, `audit`, `quarantine`, `benchmark` and
-  `screen` like every other writer.
+- **The private side of community submissions** (queued 2026-08-28). The
+  public half is done: `bench/register-contributor.py` and its workflow decide
+  who may submit, `aur-sleuth-submit` is the client, and the `ingest` container
+  stage verifies a submission's signature against the `trusted-contributors`
+  branch and commits what it accepts. What is missing lives outside this
+  repository, on the maintainer's own network, and is recorded here so whoever
+  builds it has the contract.
 
-  The larger half is the **poller**: `.github/workflows/report-submission.yml`
-  acknowledges and closes a submission the moment it opens, which leaves a
-  set of closed-but-not-yet-ingested pull requests as the actual work queue.
-  Something has to list them (the GitHub API can, with no credential beyond a
-  read token), run the stage per PR, and record which numbers have landed --
-  the branch itself is the record, since every ingested report carries
-  `submission_pr`. That poller belongs to the ops controller, in its own
-  repository; it is recorded here because the stage it drives lives here.
+  **The endpoint.** Behind a gateway that authenticates the caller by their
+  node: it takes the identity and the invitation ring from the gateway's
+  headers, accepts a POSTed git bundle, and spools it on the volume the
+  container reads, one file per upload. It never merges anything itself. A
+  per-user rate limit, and -- the part the client is already written for -- a
+  **global cap on concurrent clients**, so the maintainer's home network stays
+  usable: over the cap it either queues the client or answers `429`/`503` with
+  a `Retry-After`, and never simply drops the connection. The gateway keeps its
+  own host allowlist; the endpoint is reachable from nowhere else.
+
+  **The invitation watcher.** Watches the `trusted-contributors` branch for a
+  new line, mints an invitation to the network for it, and emails the invite to
+  the address on that line. One line, one invitation, and never a second for a
+  line it has already seen.
+
+  **The drain.** Runs the `ingest` container stage once per spooled bundle,
+  passing `AUR_SLEUTH_SUBMISSION_URL` (the bundle path),
+  `AUR_SLEUTH_SUBMISSION_REF`, `AUR_SLEUTH_SUBMITTED_BY` and
+  `AUR_SLEUTH_SUBMISSION_RING` from what the endpoint recorded beside it. It is
+  a writer, so it serialises against `prepare`, `audit`, `quarantine`,
+  `benchmark` and `screen` like every other writer, and a refused bundle is
+  kept with its reasons rather than deleted.
 - The "seen before" mark on a repeated concern lives in the reader, not in
   `bench/review-pending.py`, and it has to: the review Job mounts the volume
   read-only, so the script can neither keep its own last answer nor reach the
