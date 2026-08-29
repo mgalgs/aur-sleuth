@@ -133,6 +133,15 @@ of them has to pass:
 8. An activity floor: the account is at least 90 days old, and has at least one
    public repository or ten recent public events.
 
+Rules 4-6 are one idea in three parts, and the short version is that **a
+registration is accepted only when GitHub itself shows your commit as
+"Verified"** — that badge is exactly rule 4, the signature checking out
+against an SSH signing key on the author's profile. Rules 5 and 6 add the two
+things the badge does not say: that the signer is the pull request's author,
+and that the key you are registering on the line is one of that same
+profile's keys. So if the commit does not show Verified on GitHub, stop there
+and fix that first; nothing after it can pass.
+
 Rule 8 is a spam cost, not a judgement about you. An account that clears it is
 not thereby trustworthy — it is merely not free to produce in bulk.
 
