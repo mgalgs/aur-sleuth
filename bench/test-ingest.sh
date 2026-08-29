@@ -854,10 +854,29 @@ DATA_DIR="$tmp/data"
 SRC_DIR="$PWD"
 # shellcheck disable=SC2034
 REPORTS_BRANCH="audit-reports"
-# shellcheck disable=SC2034
-CONTRIB_REF="master"
+# Deliberately NOT master. The stage reads the registry from whatever branch
+# AUR_SLEUTH_REGISTRY_REF names, and the whole point of that variable is that
+# the stage does not care -- so the tests must not quietly depend on the
+# default either. Every check below runs against a registry that lives
+# somewhere else, and CONTRIB_REF is derived the way the stage derives it,
+# by lifting that line rather than restating it.
+# shellcheck disable=SC2034  # read by the lifted CONTRIB_REF line below
+AUR_SLEUTH_REGISTRY_REF="contributor-registry"
+eval "$(grep '^CONTRIB_REF=' "$ENTRYPOINT")"
 # shellcheck disable=SC2034
 CONTRIB_FILE="trusted-contributors"
+if [[ "$CONTRIB_REF" == "contributor-registry" ]]; then
+    ok "AUR_SLEUTH_REGISTRY_REF names the branch the registry is read from"
+else
+    bad "AUR_SLEUTH_REGISTRY_REF should set CONTRIB_REF, got '$CONTRIB_REF'"
+fi
+if [[ "$(env -u AUR_SLEUTH_REGISTRY_REF bash -c \
+            "$(grep '^CONTRIB_REF=' "$ENTRYPOINT"); echo \"\$CONTRIB_REF\"")" \
+      == "master" ]]; then
+    ok "unset, the registry branch defaults to master"
+else
+    bad "CONTRIB_REF should default to master"
+fi
 # shellcheck disable=SC2034
 FETCH_URL="$REPO"
 # shellcheck disable=SC2034
@@ -865,11 +884,10 @@ INTERNAL_STRINGS="svc.cluster.local"
 GIT_STORE="$tmp/store/.git"
 mkdir -p "$tmp/store" "$DATA_DIR/bulk-audit"
 
-# The registry, in the tree of the branch the stage fetches it from -- master,
-# since the maintainer moved it off a data branch. FETCH_URL is $REPO here,
-# standing in for the public repository.
+# The registry, in the tree of the branch the stage fetches it from.
+# FETCH_URL is $REPO here, standing in for the public repository.
 contrib_blob="$(git --git-dir="$REPO" hash-object -w --stdin < "$SIGNERS")"
-git --git-dir="$REPO" update-ref refs/heads/master \
+git --git-dir="$REPO" update-ref "refs/heads/$CONTRIB_REF" \
     "$(git --git-dir="$REPO" commit-tree \
         "$(printf '100644 blob %s\ttrusted-contributors\n' "$contrib_blob" \
            | git --git-dir="$REPO" mktree)" -m registry)"

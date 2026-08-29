@@ -52,11 +52,18 @@ DATA_DIR="${AUR_SLEUTH_DATA_DIR:-/data}"
 SRC_DIR="/opt/aur-sleuth"
 GIT_STORE="$DATA_DIR/git"
 REPORTS_BRANCH="audit-reports"
-# Who may submit an audit report: one line per contributor, in one file at the
-# root of `master` in the public repository. It is an SSH allowed_signers
+# Who may submit an audit report: one line per contributor, in one file in the
+# tree of one branch of the public repository. It is an SSH allowed_signers
 # file, and the ingest hands it to git verify-commit unchanged
 # (bench/trusted-contributors.sh).
-CONTRIB_REF="master"
+#
+# The branch is a variable because the registry is not really this project's:
+# it says who may submit, and a second thing that wanted the same list would
+# want the same file. It sits in `master`'s tree today, which is why that is
+# the default; a dedicated branch is where it is heading. Nothing in this
+# stage knows which, and neither does bench/ingest-submission.py -- the file
+# reaches it as a path.
+CONTRIB_REF="${AUR_SLEUTH_REGISTRY_REF:-master}"
 CONTRIB_FILE="trusted-contributors"
 # Where the public page lives: the reviewed reports tree plus index.html and
 # _dashboard/*, rebuilt by this image at every publish. A branch of its own,
@@ -1446,9 +1453,10 @@ do_ingest() {
 
     # The registry, straight from the public repository. It is fetched rather
     # than read out of the store because the store holds reports, not this:
-    # it is public data on `master` that the endpoint's own side also mints
-    # from. Fetched at every ingest, and never cached, so a contributor the
-    # maintainer removed stops verifying at the next submission.
+    # it is public data, on the branch $CONTRIB_REF names, that the endpoint's
+    # own side also mints from. Fetched at every ingest, and never cached, so
+    # a contributor the maintainer removed stops verifying at the next
+    # submission.
     local signers
     signers="$(mktemp)"
     git --git-dir="$repo" fetch --quiet --no-tags "$FETCH_URL" \

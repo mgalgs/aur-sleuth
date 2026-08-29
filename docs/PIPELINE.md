@@ -148,8 +148,9 @@ throwaway repository, applies `bench/ingest-submission.py` (every rule in
 code, no model) and commits what it accepts.
 
 Who sent it is the one input here that is not untrusted, and it is checked
-twice. The stage fetches `master`'s `trusted-contributors` from the public
-repository -- no credential, like `prepare`, and fresh at every submission, so
+twice. The stage fetches `trusted-contributors` from the public repository,
+out of the tree of the branch `AUR_SLEUTH_REGISTRY_REF` names (`master`
+today) -- no credential, like `prepare`, and fresh at every submission, so
 a contributor the maintainer removed stops verifying -- and the script requires the
 submission's commit to verify against it as an SSH `allowed_signers` file,
 requires the signature's principal to be the commit's own author email, and
