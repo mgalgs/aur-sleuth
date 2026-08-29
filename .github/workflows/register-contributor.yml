@@ -1,0 +1,132 @@
+---
+# Merge a registration pull request when every rule passes, close it when one
+# does not.
+#
+# Registering is how someone becomes able to submit an audit report: one pull
+# request against `trusted-contributors`, one signed commit, one line added to
+# the `trusted-contributors` file. `bench/register-contributor.py` decides;
+# this job only fetches what that script reads and acts on its exit code.
+# `docs/SUBMITTING-REPORTS.md` is the contributor's side.
+#
+# `pull_request_target` rather than `pull_request`: merging and commenting
+# need a write token, and a `pull_request` job from a fork gets a read-only
+# one. That token makes what is checked out matter, so the checkout is pinned
+# to `master` and is never the pull request's head. Nothing from the pull
+# request is executed: the untrusted values are API responses written to
+# files and passed to the script as paths, and the author's login, which is
+# passed through the environment rather than interpolated into a command.
+#
+# Merging with `--merge` is deliberate. A rebase or a squash would rewrite the
+# contributor's commit, and the whole point of the commit is its signature.
+name: register-contributor
+
+"on":
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+    branches: [trusted-contributors]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: register-contributor-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  decide:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+
+      - name: Collect what the rules read
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          LOGIN: ${{ github.event.pull_request.user.login }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p inputs
+          gh api "repos/$GH_REPO/pulls/$PR" > inputs/pr.json
+          gh api "repos/$GH_REPO/pulls/$PR/commits" > inputs/commits.json
+          gh api "users/$LOGIN" > inputs/user.json
+          gh api "users/$LOGIN/ssh_signing_keys" > inputs/keys.json
+          gh api "users/$LOGIN/events/public?per_page=100" --jq 'length' \
+            > inputs/events.txt
+
+          # The compare endpoint carries both remaining inputs: the per-file
+          # add/remove counts, and the patch the one added line is in.
+          gh api "repos/$GH_REPO/compare/$BASE_SHA...$HEAD_SHA" > inputs/compare.json
+          jq -r '.files[] | [(.additions|tostring), (.deletions|tostring), .filename]
+                 | @tsv' inputs/compare.json > inputs/numstat.txt
+          jq -r '.files[] | select(.filename == "trusted-contributors") | .patch // ""' \
+            inputs/compare.json \
+            | grep '^+' | grep -v '^+++' | sed 's/^+//' > inputs/line.txt || true
+
+          gh api "repos/$GH_REPO/contents/trusted-contributors?ref=trusted-contributors" \
+            -H "Accept: application/vnd.github.raw" > inputs/base || true
+          # An empty file is the right base before the first contributor
+          # lands, and the redirect above has already created one.
+
+      - name: Decide
+        id: decide
+        run: |
+          set -euo pipefail
+          rc=0
+          python3 bench/register-contributor.py \
+            --pr inputs/pr.json \
+            --commits inputs/commits.json \
+            --user inputs/user.json \
+            --signing-keys inputs/keys.json \
+            --diff inputs/numstat.txt \
+            --added-line inputs/line.txt \
+            --base-file inputs/base \
+            --public-events "$(cat inputs/events.txt)" \
+            > inputs/reasons.txt 2>&1 || rc=$?
+          cat inputs/reasons.txt
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+
+      - name: Merge and say the invitation is coming
+        if: steps.decide.outputs.rc == '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          gh pr merge "$PR" --merge
+          gh pr comment "$PR" --body "Every check passed and this is merged.
+
+          An invitation to the network reports are submitted over will be
+          emailed to the address on the line you added. Joining is a client
+          install and following the link in that email.
+
+          When you are on, submit with \`aur-sleuth-submit <report> <package>\`.
+          See [docs/SUBMITTING-REPORTS.md](https://github.com/mgalgs/aur-sleuth/blob/master/docs/SUBMITTING-REPORTS.md)."
+
+      - name: Say why, and close
+        if: steps.decide.outputs.rc != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          {
+            echo "This registration was not merged:"
+            echo
+            echo '```'
+            cat inputs/reasons.txt
+            echo '```'
+            echo
+            echo "Fix what is listed and reopen this pull request; the checks"
+            echo "run again on reopen. The rules are in"
+            echo "[docs/SUBMITTING-REPORTS.md](https://github.com/mgalgs/aur-sleuth/blob/master/docs/SUBMITTING-REPORTS.md)."
+          } > inputs/comment.md
+          gh pr comment "$PR" --body-file inputs/comment.md
+          gh pr close "$PR"
