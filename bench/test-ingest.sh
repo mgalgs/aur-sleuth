@@ -869,6 +869,8 @@ eval "$(sed -n '/^INGEST_RESULT_PATH=""/,/^INGEST_RESULT_COMMIT=""/p' "$ENTRYPOI
 eval "$(sed -n '/^write_ingest_result()/,/^}/p' "$ENTRYPOINT")"
 eval "$(sed -n '/^sanitize_store()/,/^}/p' "$ENTRYPOINT")"
 eval "$(sed -n '/^internal_string_needles()/,/^}/p' "$ENTRYPOINT")"
+eval "$(sed -n '/^INGEST_FETCH_TIMEOUT=/p' "$ENTRYPOINT")"
+eval "$(sed -n '/^fetch_failure_note()/,/^}/p' "$ENTRYPOINT")"
 eval "$(sed -n '/^new_stage_repo()/,/^}/p' "$ENTRYPOINT")"
 eval "$(sed -n '/^borrow_store()/,/^}/p' "$ENTRYPOINT")"
 eval "$(sed -n '/^stage_reports_repo()/,/^}/p' "$ENTRYPOINT")"
@@ -1055,6 +1057,66 @@ if [[ "$(git --git-dir="$GIT_STORE" rev-parse refs/heads/audit-reports)" == "$af
 else
     bad "an option-shaped URL moved the branch"
 fi
+
+echo "== a fetch that stalls is given up on, rather than waited on =="
+# `git fetch` has no timeout of its own -- `http.lowSpeedLimit` is unset -- so
+# without the one this stage sets, a peer that accepts the connection and then
+# says nothing keeps the stage alive until the kernel's keepalive expires, a
+# couple of hours later, with the log ending mid-fetch and no line saying why.
+#
+# The stand-in is a socket that accepts and never answers, which is exactly
+# the shape of the 03:12 blackhole: not a refused connection (that fails at
+# once and was never the problem) but an established one that goes quiet.
+if [[ "$(env -u AUR_SLEUTH_FETCH_TIMEOUT bash -c \
+            "$(grep '^INGEST_FETCH_TIMEOUT=' "$ENTRYPOINT"); echo \"\$INGEST_FETCH_TIMEOUT\"")" \
+      == "60" ]]; then
+    ok "the fetch timeout defaults to 60s, and AUR_SLEUTH_FETCH_TIMEOUT sets it"
+else
+    bad "INGEST_FETCH_TIMEOUT should default to 60"
+fi
+
+python3 - "$tmp/stall.port" <<'PYEOF' &
+import socket, sys
+s = socket.socket()
+s.bind(("127.0.0.1", 0))
+s.listen(4)
+with open(sys.argv[1], "w") as f:
+    f.write(str(s.getsockname()[1]))
+held = []
+while True:
+    conn, _ = s.accept()
+    held.append(conn)  # accepted, and answered never
+PYEOF
+stall_pid=$!
+for _ in 1 2 3 4 5 6 7 8 9 10; do [[ -s "$tmp/stall.port" ]] && break; sleep 0.2; done
+stall_port="$(cat "$tmp/stall.port" 2>/dev/null || true)"
+if [[ -n "$stall_port" ]]; then
+    rc=0
+    began=$SECONDS
+    ( INGEST_FETCH_TIMEOUT=2 \
+      AUR_SLEUTH_SUBMISSION_URL="git://127.0.0.1:$stall_port/reports.git" \
+      AUR_SLEUTH_SUBMISSION_REF=refs/heads/good \
+      AUR_SLEUTH_SUBMITTED_BY=octocat \
+      AUR_SLEUTH_SUBMISSION_RING=3 do_ingest ) > "$tmp/stall.log" 2>&1 || rc=$?
+    took=$(( SECONDS - began ))
+    if (( rc != 0 )) && (( took < 30 )); then
+        ok "a peer that accepts and goes silent does not hold the stage (${took}s)"
+    else
+        bad "the stalled fetch should have been given up on: rc=$rc after ${took}s"
+    fi
+    # And the log has to distinguish it. "that URL is wrong" and "the peer
+    # went silent" are different problems with different fixes, and the
+    # operator reads only this line.
+    if grep -q 'no answer in 2s' "$tmp/stall.log"; then
+        ok "  and the refusal says the peer went silent, not that the URL is wrong"
+    else
+        bad "the refusal should name the timeout: $(cat "$tmp/stall.log")"
+    fi
+else
+    bad "could not stand up the stalling listener"
+fi
+kill "$stall_pid" 2>/dev/null || true
+wait "$stall_pid" 2>/dev/null || true
 
 # --- the result file ----------------------------------------------------------
 

@@ -1529,6 +1529,24 @@ PYEOF
 #     The lock is taken AFTER both fetches, not before them: nothing an
 #     untrusted transfer does should be able to block every other writer in
 #     the deployment, and nothing in a fetch touches the store.
+# How long either fetch may take before the stage gives up on it.
+#
+# `git fetch` has no default timeout of its own -- `http.lowSpeedLimit` is
+# unset -- so without this a peer that accepts the connection and then says
+# nothing keeps the stage alive until the kernel's keepalive expires, a couple
+# of hours later, and the stage log ends mid-fetch with no line saying why.
+# Sixty seconds is generous for a local bundle and for one small ref from
+# GitHub: a submission that cannot be fetched in a minute is not a submission
+# worth waiting on.
+INGEST_FETCH_TIMEOUT="${AUR_SLEUTH_FETCH_TIMEOUT:-60}"
+
+# `timeout` exits 124 when it fired, and "the peer went silent" is a different
+# problem with a different fix from "that URL is wrong". Say which.
+fetch_failure_note() {
+    (( $1 == 124 )) && printf ' (no answer in %ss)' "$INGEST_FETCH_TIMEOUT"
+    return 0
+}
+
 do_ingest() {
     # Armed first, before anything that can die: the input check below, the
     # two fetches after it and the archive lock after those are all refusals a
@@ -1575,9 +1593,15 @@ do_ingest() {
     local repo
     repo="$(new_stage_repo)"
     log "Fetching $ref from $url"
-    git --git-dir="$repo" fetch --quiet --no-tags -- "$url" \
-        "+${ref}:refs/submission" \
-        || die "could not fetch $ref from $url"
+    # `fetch.fsckObjects` on this one and not the other: this is the only fetch
+    # in the image that takes objects from a stranger, so it is the one place
+    # the cost of checking every object as it arrives is earned.
+    local rc=0
+    timeout "$INGEST_FETCH_TIMEOUT" \
+        git -c fetch.fsckObjects=true --git-dir="$repo" fetch --quiet --no-tags \
+            -- "$url" "+${ref}:refs/submission" || rc=$?
+    (( rc == 0 )) || die \
+        "could not fetch $ref from $url$(fetch_failure_note "$rc")"
     local sub
     sub="$(git --git-dir="$repo" rev-parse --verify "refs/submission^{commit}")"
     log "Submission is at ${sub:0:12}, offered by $who on ring $ring"
@@ -1590,10 +1614,13 @@ do_ingest() {
     # submission.
     local signers
     signers="$(mktemp)"
-    git --git-dir="$repo" fetch --quiet --no-tags -- "$FETCH_URL" \
-        "+refs/heads/$CONTRIB_REF:refs/contrib" \
-        || die "could not fetch $CONTRIB_REF from $FETCH_URL;" \
-               "without the registry there is no way to say whose submission this is"
+    rc=0
+    timeout "$INGEST_FETCH_TIMEOUT" \
+        git --git-dir="$repo" fetch --quiet --no-tags -- "$FETCH_URL" \
+            "+refs/heads/$CONTRIB_REF:refs/contrib" || rc=$?
+    (( rc == 0 )) || die \
+        "could not fetch $CONTRIB_REF from $FETCH_URL$(fetch_failure_note "$rc");" \
+        "without the registry there is no way to say whose submission this is"
     git --git-dir="$repo" show "refs/contrib:$CONTRIB_FILE" > "$signers" \
         || die "$CONTRIB_REF has no $CONTRIB_FILE file"
 
