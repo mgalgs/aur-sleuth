@@ -16,12 +16,13 @@
 #             infrastructure, which review reports as the reason it failed.
 #             Rewrites only the unpushed commits, keeps a backup ref, and
 #             needs the volume read-write. No credential.
-#   ingest    Take a community-submitted report from a public git ref onto the
-#             audit-reports branch, as advisory information: the rules are
-#             decided in code, no model reads the submission, and every
-#             accepted file is stamped advisory and community-sourced whatever
-#             its frontmatter claimed. Needs no credential (a public fetch),
-#             needs the volume read-write, and executes nothing it fetched.
+#   ingest    Take a community-submitted report onto the audit-reports branch
+#             as advisory information: a pull request number, or any public
+#             git URL and ref. The rules are decided in code, no model reads
+#             the submission, and every accepted file is stamped advisory and
+#             community-sourced whatever its frontmatter claimed. Needs no
+#             credential (a public fetch), needs the volume read-write, and
+#             executes nothing it fetched.
 #   publish   Push the reviewed commit of the audit-reports branch, and the
 #             public page built from it to the site branch. Needs the git write
 #             credential. Refuses to push a branch carrying anything but inert
@@ -1394,10 +1395,26 @@ do_ingest() {
     local url="${AUR_SLEUTH_SUBMISSION_URL:-}"
     local ref="${AUR_SLEUTH_SUBMISSION_REF:-}"
     local who="${AUR_SLEUTH_SUBMITTED_BY:-}"
+    # A submission normally arrives as a pull request, and GitHub publishes
+    # every PR head at refs/pull/<N>/head on the base repository itself --
+    # readable with no credential, exactly like the fetch the prepare stage
+    # does. So the PR number resolves both other inputs, and the operator
+    # types the one number they were already looking at. The fork's own URL
+    # is never needed, which is one less untrusted value to carry.
+    local pr="${AUR_SLEUTH_SUBMISSION_PR:-}"
+    if [[ -n "$pr" ]]; then
+        [[ "$pr" =~ ^[0-9]+$ ]] || die "AUR_SLEUTH_SUBMISSION_PR must be a number, not '$pr'"
+        [[ -z "$ref" ]] || die \
+            "AUR_SLEUTH_SUBMISSION_PR and AUR_SLEUTH_SUBMISSION_REF both set;" \
+            "the PR number resolves the ref, so pass one or the other"
+        ref="refs/pull/$pr/head"
+        url="${url:-$FETCH_URL}"
+    fi
     [[ -n "$url" && -n "$ref" && -n "$who" ]] || die \
-        "ingest needs AUR_SLEUTH_SUBMISSION_URL (a public git URL)," \
-        "AUR_SLEUTH_SUBMISSION_REF (the branch the contributor pushed)" \
-        "and AUR_SLEUTH_SUBMITTED_BY (a label, recorded and never verified)"
+        "ingest needs AUR_SLEUTH_SUBMITTED_BY (a label, recorded and never" \
+        "verified) plus either AUR_SLEUTH_SUBMISSION_PR (a pull request" \
+        "number on $FETCH_URL) or AUR_SLEUTH_SUBMISSION_URL (a public git" \
+        "URL) and AUR_SLEUTH_SUBMISSION_REF (the branch the contributor pushed)"
     [[ -d "$GIT_STORE" ]] || die "$GIT_STORE missing; run the prepare stage first"
 
     exec 9>"$DATA_DIR/bulk-audit/archive.lock"
@@ -1431,6 +1448,7 @@ do_ingest() {
             --reports-ref "refs/heads/$REPORTS_BRANCH" \
             --submission-ref refs/submission \
             --submitted-by "$who" \
+            --submission-pr "$pr" \
             --out "$out" \
             --needles-file "$needles"; then
         rm -rf "$out" "$needles"
@@ -1470,8 +1488,10 @@ do_ingest() {
     [[ "$now" == "$head" ]] || die \
         "$REPORTS_BRANCH moved from ${head:0:12} to ${now:0:12} under the lock; refusing"
 
+    local what="${sub:0:12}"
+    [[ -n "$pr" ]] && what="#$pr, ${sub:0:12}"
     commit="$("${g[@]}" commit-tree "$tree" -p "$head" \
-        -m "ingest: ${#files[@]} community report(s) from $who (${sub:0:12})")"
+        -m "ingest: ${#files[@]} community report(s) from $who ($what)")"
     "${g[@]}" update-ref "refs/heads/$REPORTS_BRANCH" "$commit" "$head"
     rm -rf "$out"
 

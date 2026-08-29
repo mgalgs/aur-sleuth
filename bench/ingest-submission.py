@@ -18,7 +18,7 @@ contributor guessing which half.
 
 Usage:
   ingest-submission.py --git-dir DIR --reports-ref REF --submission-ref REF
-                       --submitted-by LABEL --out DIR
+                       --submitted-by LABEL --out DIR [--submission-pr N]
                        [--needles-file FILE] [--max-files N] [--max-bytes N]
 
 --git-dir is a throwaway repository holding both refs. Never the shared
@@ -58,7 +58,8 @@ RESULTS = {"safe", "unsafe", "inconclusive"}
 # them is dropped and replaced, so a forged `advisory: false` cannot survive.
 # `triggered_by` is dropped outright: it is the re-audit bookkeeping's own
 # field, and a submission has no escalation behind it to record.
-OWNED_KEYS = ("advisory", "source", "submitted_by", "submission_ref", "ingested")
+OWNED_KEYS = ("advisory", "source", "submitted_by", "submission_ref",
+              "submission_pr", "ingested")
 DROPPED_KEYS = ("triggered_by",)
 
 DEFAULT_MAX_FILES = 200
@@ -229,8 +230,10 @@ def rewrite(text, stamp):
         "source: community",
         f"submitted_by: {stamp['submitted_by']}",
         f"submission_ref: {stamp['submission_ref']}",
-        f"ingested: {stamp['ingested']}",
     ]
+    if stamp["submission_pr"]:
+        head.append(f"submission_pr: {stamp['submission_pr']}")
+    head.append(f"ingested: {stamp['ingested']}")
     return "---\n" + "\n".join(head + kept) + "\n---\n" + rest
 
 
@@ -241,6 +244,9 @@ def main():
     ap.add_argument("--submission-ref", required=True)
     ap.add_argument("--submitted-by", required=True,
                     help="a label such as a GitHub login; recorded, never verified")
+    ap.add_argument("--submission-pr", default="",
+                    help="the pull request number the submission came from, "
+                         "recorded beside the commit sha; also never verified")
     ap.add_argument("--out", required=True)
     ap.add_argument("--needles-file", default="",
                     help="internal strings, one per line; '-' for stdin")
@@ -290,9 +296,14 @@ def main():
         paths = paths[:args.max_files]
 
     when = args.now.strip() or datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    pr = args.submission_pr.strip()
+    if pr and not pr.isdigit():
+        sys.exit("--submission-pr must be a number")
+
     stamp = {
         "submitted_by": label,
         "submission_ref": sha,
+        "submission_pr": pr,
         "ingested": datetime.strptime(when, "%Y%m%d-%H%M%S")
                             .replace(tzinfo=timezone.utc)
                             .strftime("%Y-%m-%dT%H:%M:%SZ"),
