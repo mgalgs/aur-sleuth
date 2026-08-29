@@ -61,12 +61,15 @@ jobs:
 
           # The compare endpoint carries both remaining inputs: the per-file
           # add/remove counts, and the patch the one added line is in.
-          gh api "repos/$GH_REPO/compare/$BASE_SHA...$HEAD_SHA" > inputs/compare.json
-          jq -r '.files[] | [(.additions|tostring), (.deletions|tostring), .filename]
+          gh api "repos/$GH_REPO/compare/$BASE_SHA...$HEAD_SHA" \
+            > inputs/compare.json
+          jq -r '.files[]
+                 | [(.additions|tostring), (.deletions|tostring), .filename]
                  | @tsv' inputs/compare.json > inputs/numstat.txt
-          jq -r '.files[] | select(.filename == "trusted-contributors") | .patch // ""' \
-            inputs/compare.json \
-            | grep '^+' | grep -v '^+++' | sed 's/^+//' > inputs/line.txt || true
+          jq -r '.files[] | select(.filename == "trusted-contributors")
+                 | .patch // ""' inputs/compare.json \
+            | grep '^+' | grep -v '^+++' | sed 's/^+//' \
+            > inputs/line.txt || true
 
           # The base file every rule is judged against. Its absence and its
           # failure to arrive look identical in a shell, and they are opposite
@@ -129,6 +132,7 @@ jobs:
           # Without it a contributor could pass the checks and then merge
           # something else into the file that decides who may submit.
           gh pr merge "$PR" --merge --match-head-commit "$HEAD_SHA"
+          doc="https://github.com/$GH_REPO/blob/master/docs/SUBMITTING-REPORTS.md"
           gh pr comment "$PR" --body "Every check passed and this is merged.
 
           An invitation to the network reports are submitted over will be
@@ -136,7 +140,7 @@ jobs:
           install and following the link in that email.
 
           When you are on, submit with \`aur-sleuth-submit <report> <package>\`.
-          See [docs/SUBMITTING-REPORTS.md](https://github.com/mgalgs/aur-sleuth/blob/master/docs/SUBMITTING-REPORTS.md)."
+          See [docs/SUBMITTING-REPORTS.md]($doc)."
 
       - name: Say why, and close
         if: steps.decide.outputs.rc != '0'
@@ -146,6 +150,7 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
+          doc="https://github.com/$GH_REPO/blob/master/docs/SUBMITTING-REPORTS.md"
           {
             echo "This registration was not merged:"
             echo
@@ -155,7 +160,7 @@ jobs:
             echo
             echo "Fix what is listed and reopen this pull request; the checks"
             echo "run again on reopen. The rules are in"
-            echo "[docs/SUBMITTING-REPORTS.md](https://github.com/mgalgs/aur-sleuth/blob/master/docs/SUBMITTING-REPORTS.md)."
+            echo "[docs/SUBMITTING-REPORTS.md]($doc)."
           } > inputs/comment.md
           gh pr comment "$PR" --body-file inputs/comment.md
           gh pr close "$PR"
