@@ -185,6 +185,23 @@ reset
 F_LINE="octocat@example.org ssh-ed25519 $MINE octocat"
 breaks "a malformed added line" "rule 3"
 
+# What merges is the pull request's bytes, so those are the bytes rule 3 has
+# to judge. Each of these is an ordinary copy-paste artifact rather than an
+# attack, and each one is a line `trusted-contributors.sh check` refuses -- so
+# letting one through would not merely admit a scruffy line, it would leave
+# the BASE file malformed and close registration for everyone after it.
+reset
+F_LINE="octocat@example.org ssh-ed25519 $MINE # octocat "
+breaks "a trailing space on the added line" "rule 3"
+
+reset
+F_LINE=" octocat@example.org ssh-ed25519 $MINE # octocat"
+breaks "a leading space on the added line" "rule 3"
+
+reset
+F_LINE=$'octocat@example.org ssh-ed25519 '"$MINE"$' # octocat\r'
+breaks "a CR on the end of the added line" "rule 3"
+
 reset
 F_LINE="someone-else@example.org ssh-ed25519 $MINE # octocat"
 breaks "the line's email is not the commit's author email" "rule 3"

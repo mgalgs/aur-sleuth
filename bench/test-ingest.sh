@@ -548,6 +548,30 @@ else
 fi
 
 
+# A report that names no `files_reviewed` at all. Nothing in the ingest asks
+# for one -- and a real run that crashed early leaves `files_reviewed: 0` with
+# an honest `inconclusive` -- so this is a shape the gate accepts. It is here
+# because the ingest strips `cost`, and the page used to drop any report whose
+# cost and file count were both zero: between them that would have made a
+# submission's visibility hang on one field the contributor writes and nobody
+# checks. ACCEPT has to mean it shows up.
+echo "== a submission with no file count is still a submission =="
+d="$tmp/s-nocount"; mkdir -p "$d/nocount-pkg"
+{
+    printf -- '---\npackage: nocount-pkg\nmodel: free/model\nresult: inconclusive\n'
+    printf 'date: 2026-08-28T10:00:00Z\npkgver: 1.0\npkgrel: 1\n'
+    printf -- '---\nThe audit did not get far enough to say.\n'
+} > "$d/nocount-pkg/report.md"
+mkbranch refs/heads/nocount "" "$d"
+NOCOUNT_OUT="$tmp/nocount-out"
+if ingest refs/heads/nocount "$NOCOUNT_OUT" >/dev/null 2>&1 \
+   && [[ -n "$(find "$NOCOUNT_OUT" -type f)" ]]; then
+    ok "a report with no files_reviewed is accepted"
+else
+    bad "a report with no files_reviewed should be accepted"
+fi
+
+
 # --- downstream: the stamp is absolute ----------------------------------------
 #
 # Everything above decides what lands. What follows is why it is safe to let
@@ -557,6 +581,7 @@ echo "== downstream: a branch carrying community reports =="
 down="$tmp/down"; mkdir -p "$down"
 cp -r "$GOOD_OUT"/. "$down"/          # vivaldi: a community "unsafe"
 cp -r "$ORPH_OUT"/. "$down"/          # lone-pkg: nothing but a community report
+cp -r "$NOCOUNT_OUT"/. "$down"/       # nocount-pkg: a community report with no counts
 mkdir -p "$down/sweep-pkg"
 # The control: an ordinary advisory report from a free model, which IS
 # coverage for the next sweep. If the checks below passed for this one too,
@@ -585,6 +610,11 @@ if summary["package_states"].get("look"):
     fails.append("a community unsafe put a package in the 'look' state")
 if any(r["package"] == "vivaldi" for r in summary["recent"]):
     fails.append("a community unsafe put vivaldi in the flagged list")
+# The ingest accepted it, so the page has to show it: no cost (the ingest
+# strips it) and no file count is not the signature of a crashed run of ours.
+if "nocount-pkg" not in pkgs:
+    fails.append("a community report with no cost and no file count vanished "
+                 "from the page the ingest told the contributor it landed on")
 com = [a for a in v["audits"] if a.get("source") == "community"]
 if len(com) != 1:
     fails.append(f"expected one community audit on vivaldi, got {len(com)}")
@@ -673,7 +703,7 @@ if grep -q 'community report(s) from octocat' <<< "$rev"; then
 else
     bad "the review summary should name the submission: $rev"
 fi
-if grep -q '"community":{"octocat":2}' <<< "$rev"; then
+if grep -q '"community":{"octocat":3}' <<< "$rev"; then
     ok "REVIEW_JSON carries the same count"
 else
     bad "REVIEW_JSON should carry the community count"

@@ -172,6 +172,37 @@ JS
     else
         bad "the attribution is not escaped: $html"
     fi
+
+    # --- what a report's meta line says it measured -------------------------
+    #
+    # The ingest strips a submission's cost and execution time, because a
+    # submission spent none of this deployment's money. The page has to carry
+    # that through: an omitted measurement is omitted, never a zero that reads
+    # like a real audit which happened to cost nothing.
+    metas="$( { lift shortModel; lift fmtNum; lift reportMeta
+                cat <<'JS'
+const community = {model: 'openai/gpt-5.4', date: '2026-08-28T09:00:00Z',
+                   source: 'community', submitted_by: 'octocat', files_reviewed: '7'};
+const measured = {model: 'openai/gpt-5.4', date: '2026-08-28T09:00:00Z',
+                  files_reviewed: '0', cost: '0', execution_time: '0'};
+process.stdout.write(reportMeta(community) + '\n' + reportMeta(measured) + '\n');
+JS
+              } | node )"
+    if [[ "$(head -1 <<< "$metas")" != *'$'* && "$(head -1 <<< "$metas")" != *'0s'* ]]; then
+        ok "a community report claims no cost and no run time"
+    else
+        bad "a community report was given a measurement it does not carry: $metas"
+    fi
+    if [[ "$(sed -n 2p <<< "$metas")" == *'$0.0000'*'0s'* ]]; then
+        ok "a real audit that measured zero still says zero"
+    else
+        bad "a measured zero should still be shown: $metas"
+    fi
+    if [[ "$(head -1 <<< "$metas")" == *'7 files'* ]]; then
+        ok "the file count, which the ingest does not strip, survives"
+    else
+        bad "the submitted file count was dropped: $metas"
+    fi
 else
     # Nothing else in this repository needs node, so a machine without it is
     # not a regression -- but the skip is printed even under -q, because a

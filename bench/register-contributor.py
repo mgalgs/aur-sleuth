@@ -106,9 +106,9 @@ def run_check(base_text, added_line):
         base = os.path.join(d, "base")
         proposed = os.path.join(d, "proposed")
         text = base_text if base_text.endswith("\n") or not base_text else base_text + "\n"
-        with open(base, "w", encoding="utf-8") as f:
+        with open(base, "w", encoding="utf-8", newline="") as f:
             f.write(text)
-        with open(proposed, "w", encoding="utf-8") as f:
+        with open(proposed, "w", encoding="utf-8", newline="") as f:
             f.write(text + added_line + "\n")
 
         first = subprocess.run(["bash", CHECK, "check", base],
@@ -135,9 +135,23 @@ def check(args):
     keys = load_json(args.signing_keys)
     with open(args.diff, encoding="utf-8") as f:
         numstat = [ln for ln in f.read().split("\n") if ln.strip()]
-    with open(args.added_line, encoding="utf-8") as f:
-        added_line = f.read().strip("\n").strip()
-    with open(args.base_file, encoding="utf-8") as f:
+    # `newline=""` on both, because universal-newline translation is one more
+    # way to read bytes the branch does not have: it would turn a CRLF line
+    # into an LF one here while git merges the CR, and hide a CR already on
+    # the base file from the check below that says the base is well formed.
+    with open(args.added_line, encoding="utf-8", newline="") as f:
+        added_line = f.read()
+    # Exactly the bytes the diff adds, minus the newline that terminates a
+    # line in a file. Deliberately NOT `.strip()`: what lands on the branch is
+    # the pull request's bytes, not a cleaned-up copy, so a line rule 3 was
+    # shown with a trailing space, a leading space, or a CR removed is a line
+    # rule 3 did not check. Such a line passes every rule, merges, and then
+    # `run_check` fails on the BASE file for every registration after it --
+    # one copy-paste artifact closes the only door into the feature until the
+    # branch is hand-edited.
+    if added_line.endswith("\n"):
+        added_line = added_line[:-1]
+    with open(args.base_file, encoding="utf-8", newline="") as f:
         base_text = f.read()
 
     author = str((pr.get("user") or {}).get("login") or "")

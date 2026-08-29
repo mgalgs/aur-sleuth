@@ -721,6 +721,23 @@ function communityTitle(by, ring) {
         + ', ring ' + escapeAttr(ring || '?');
 }
 
+// The measurement line under a report: the model, the date, and whatever the
+// report actually MEASURED. A field the report does not carry is omitted, not
+// rendered as a zero. A community submission has no `cost` and no
+// `execution_time` -- bench/ingest-submission.py strips both, because a
+// submission spent none of this deployment's money -- and "$0.0000 · 0s"
+// would put a measurement where there was none, in the same shape as a real
+// audit that genuinely cost nothing. Absence is the honest reading, and this
+// is where it has to survive.
+function reportMeta(fm) {
+    const has = k => fm[k] !== undefined && fm[k] !== null && String(fm[k]).trim() !== '';
+    const parts = [shortModel(fm.model || 'unknown'), String(fm.date || '').split('T')[0]];
+    if (has('files_reviewed')) parts.push(fmtNum(fm.files_reviewed) + ' files');
+    if (has('cost')) parts.push('$' + (parseFloat(fm.cost) || 0).toFixed(4));
+    if (has('execution_time')) parts.push((parseFloat(fm.execution_time) || 0).toFixed(0) + 's');
+    return parts.join(' · ');
+}
+
 function renderSquares(items, type, pkg) {
     if (!items || items.length === 0) return '<span class="dim">—</span>';
     return '<span class="sqs">' + items.map(item => {
@@ -990,9 +1007,7 @@ function renderDetail(name, data) {
                 const cls = advisory ? 'sq-advisory'
                     : squareClass(result, 'audit', pkg) + (reaudit ? ' sq-reaudit' : '');
                 const bodyId = 'report-' + name.replace(/[^a-zA-Z0-9-]/g, '_') + '-' + i;
-                const meta = [shortModel(fm.model || 'unknown'), String(fm.date || '').split('T')[0],
-                    fmtNum(fm.files_reviewed || 0) + ' files', '$' + (parseFloat(fm.cost) || 0).toFixed(4),
-                    (parseFloat(fm.execution_time) || 0).toFixed(0) + 's'].join(' · ');
+                const meta = reportMeta(fm);
                 let full = '';
                 if (fv.length) {
                     full += '<table class="verdicts"><thead><tr><th>File</th><th>Status</th><th>Summary</th></tr></thead><tbody>'

@@ -72,23 +72,32 @@ git config --global user.email you@example.org
 The email in `user.email` is the address you are registering. It has to be the
 same one on the line you add, and on every submission you make afterwards.
 
-Now make the one-line commit. The line is your email, your key's type and
-base64 body, and your GitHub login as a comment:
+Now make the one-line commit. **Fork this repository first** — nobody but the
+maintainer can push a branch to it, so the branch you open the pull request
+from has to live in your own fork. The line you add is your email, your key's
+type and base64 body, and your GitHub login as a comment:
 
 ```bash
-git clone https://github.com/mgalgs/aur-sleuth.git
+gh repo fork mgalgs/aur-sleuth --clone --remote   # or fork on the web, then clone
 cd aur-sleuth
-git fetch origin trusted-contributors
-git checkout -b register-me origin/trusted-contributors
+git fetch upstream trusted-contributors
+git checkout -b register-me upstream/trusted-contributors
 printf '%s %s # %s\n' "you@example.org" \
     "$(cut -d' ' -f1,2 ~/.ssh/id_ed25519_signing.pub)" "your-github-login" \
     >> trusted-contributors
 git add trusted-contributors
 git commit -S -m "register: your-github-login"
 git push origin register-me
-gh pr create --base trusted-contributors --head register-me \
+gh pr create --repo mgalgs/aur-sleuth \
+    --base trusted-contributors --head your-github-login:register-me \
     --title "register: your-github-login"
 ```
+
+`gh repo fork --remote` names your fork `origin` and this repository
+`upstream`, which is what the `git fetch upstream` and `git push origin` above
+assume. If you forked on the web and cloned your fork by hand, add the
+`upstream` remote yourself:
+`git remote add upstream https://github.com/mgalgs/aur-sleuth.git`.
 
 Check `git log --show-signature -1` before you push: if it does not say the
 commit is signed, nothing after this will work.

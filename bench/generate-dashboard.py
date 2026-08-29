@@ -458,7 +458,18 @@ def build_index_data(audits, judges, now=None, coverage_inputs=None, escalation_
         cost = safe_float(fm.get("cost"))
         files = safe_int(fm.get("files_reviewed"))
         result = effective_audit_result(fm)
-        if cost == 0 and files == 0 and result not in ("skipped",):
+        # `cost == 0 and files == 0` recognises one thing: a run of THIS
+        # pipeline that spent nothing and read nothing, i.e. a crash. A
+        # community report is not one of those, and it cannot be judged by
+        # that test -- the ingest strips `cost` outright, because a submission
+        # spent none of this deployment's money, so the conjunction collapses
+        # to `files_reviewed`, a single field the contributor writes and
+        # nothing validates. Whether a submission may be seen was already
+        # decided, in code, by bench/ingest-submission.py; dropping it here
+        # for lacking a spend figure it is not allowed to carry would make the
+        # ingest's ACCEPT a lie.
+        community = fm.get("source") == "community"
+        if cost == 0 and files == 0 and result not in ("skipped",) and not community:
             continue
         packages[pkg]["audits"].append({
             "filename": a["filename"],
