@@ -126,6 +126,50 @@ leads. This is how an untrusted (usually free) model contributes without
 being able to escalate anything. An advisory run cannot combine with
 escalation, which exists to force a ruling.
 
+**Ingest: community submissions.** Anyone can run `aur-sleuth` on a package
+and offer the report, as a pull request against `audit-reports`;
+`docs/SUBMITTING-REPORTS.md` is the contributor's side of it. A workflow
+(`.github/workflows/report-submission.yml`) comments on the pull request and
+closes it at once, so no submission sits in the open-PR list waiting on an
+operator, and a closed pull request is the normal outcome rather than a
+rejection. The container's `ingest` stage then takes the head — GitHub
+publishes it at `refs/pull/<N>/head` on the base repository, readable with no
+credential, so `AUR_SLEUTH_SUBMISSION_PR=<N>` resolves both the URL and the
+ref — fetches it into a throwaway repository, applies
+`bench/ingest-submission.py` (every rule in code, no model) and commits what
+it accepts. The branch is never merged: a GitHub merge would put a commit on
+origin that the store has not seen, and publish requires origin to be an
+ancestor of the store.
+
+A submission is a tier **below advisory**, and the ordering is worth stating
+in full: a real audit votes; an advisory report is this pipeline running a
+model it does not trust yet, so it carries no vote but a judge reads it as
+context; a community report is an unverified claim from an unverified person
+about both which model ran and what it decided. The one concrete consequence
+of that last step down: an advisory report reaches the judge behind the
+untrusted-data fence, and a community report never reaches a model at all.
+
+Its frontmatter says which model ran and what it decided, and nothing can
+check either, so the ingest keeps the claim as a claim and stamps what it
+actually is: `advisory: true`, which is why a
+submission counts toward nothing above, plus `source: community`, which says
+who said it. The stamp is forced whatever the file claimed, `triggered_by` is
+stripped, the pull request number and the submission's commit sha are
+recorded, and the ingest names the file — a forger controls their own
+filename, and the archive does not let them pick where it lands. A `.json` is
+refused outright, because a `-judge.json` is a ruling the page counts; so is
+any path the branch already has, which is the overwrite attack.
+
+`source: community` then goes one step further than `advisory: true`. It is
+not coverage in the audited index even under `--include-advisory`, so a
+submission cannot keep a package away from the free sweep or the paid seats.
+And it is not in the pile the judge reads, where ordinary advisory reports
+are: a submission's body is text anyone with a GitHub account chose, aimed at
+a model the pipeline pays for. The untrusted-data fence around the judge's
+reports stays as defence in depth; exclusion is the rule. What is left is the
+page, which shows it with the advisory glyph, labelled community, with the
+submitter's label beside it.
+
 ## Model aliases
 
 `--model-aliases` accepts an explicit mapping such as

@@ -103,6 +103,22 @@ only with a version bump.
   the UI can press, or having the review stage fetch origin itself — which
   needs a credential the review Job is deliberately not given. Until then it
   clears itself within four hours.
+- **An ingest verb for community submissions** (queued 2026-08-28). The
+  `ingest` container stage exists and is covered by `bench/test-ingest.sh`;
+  what is missing is the button. The stage takes
+  `AUR_SLEUTH_SUBMISSION_PR=<N>`, so the verb's whole input is a pull request
+  number and a label for the contributor. It is a writer, so it must be
+  serialised against `prepare`, `audit`, `quarantine`, `benchmark` and
+  `screen` like every other writer.
+
+  The larger half is the **poller**: `.github/workflows/report-submission.yml`
+  acknowledges and closes a submission the moment it opens, which leaves a
+  set of closed-but-not-yet-ingested pull requests as the actual work queue.
+  Something has to list them (the GitHub API can, with no credential beyond a
+  read token), run the stage per PR, and record which numbers have landed --
+  the branch itself is the record, since every ingested report carries
+  `submission_pr`. That poller belongs to the ops controller, in its own
+  repository; it is recorded here because the stage it drives lives here.
 - The "seen before" mark on a repeated concern lives in the reader, not in
   `bench/review-pending.py`, and it has to: the review Job mounts the volume
   read-only, so the script can neither keep its own last answer nor reach the

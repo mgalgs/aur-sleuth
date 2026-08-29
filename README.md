@@ -38,6 +38,8 @@ high rate of false positives -- highly model dependent).
 
 Browse audit results at **[mgalgs.io/aur-sleuth](https://mgalgs.io/aur-sleuth/)** — a static dashboard generated from the [`audit-reports`](https://github.com/mgalgs/aur-sleuth/tree/audit-reports) branch.
 
+Audited a package yourself? Put the report under `<package>/<name>.md` on a branch from `audit-reports` in your fork and run `gh pr create --base audit-reports`; it lands on the page as community-submitted information, a tier below advisory. [docs/SUBMITTING-REPORTS.md](docs/SUBMITTING-REPORTS.md) has the whole flow.
+
 ## Demo
 
 Here it is in action catching the shenanigans from the infamous [malicious `google-chrome-stable` package](https://www.reddit.com/r/archlinux/comments/1me632m/is_this_another_aur_infect_package/):

@@ -232,6 +232,12 @@ SAFE verdicts, and do not let it run without the malicious fixtures in the gate.
   branch (synthetics first, then a stratified sample of real packages). Writes only
   under `$DATA_DIR/bench/`, never to the branch. `bench/test-benchmark.sh` covers the
   scoring offline. The ops UI runs it as the `benchmark` container stage.
+- `bench/ingest-submission.py` — the gate on a community-submitted report.
+  Decides in code what may land and rewrites what does: `advisory: true` and
+  `source: community` are forced whatever the submission claimed, so a
+  contributor's claim can never become a vote — a tier below advisory, and
+  the one thing on the branch no model ever reads. The container's `ingest`
+  stage runs it; `docs/SUBMITTING-REPORTS.md` is the contributor's side.
 - `bench/scout.py` — the code-only shortlist of catalog models that could undercut a
   seat, and (`screen-list`) the one answer to which of them to screen next. The
   `screen` container stage runs `benchmark.sh --sample 0` over that list, cheapest
