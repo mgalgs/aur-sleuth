@@ -426,6 +426,8 @@ else
 fi
 
 echo "== the review stage's exit status, which a caller gates on =="
+eval "$(sed -n '/^new_stage_repo()/,/^}/p' "$ENTRYPOINT")"
+eval "$(sed -n '/^borrow_store()/,/^}/p' "$ENTRYPOINT")"
 eval "$(sed -n '/^stage_reports_repo()/,/^}/p' "$ENTRYPOINT")"
 eval "$(sed -n '/^do_review()/,/^}/p' "$ENTRYPOINT")"
 

@@ -869,6 +869,8 @@ eval "$(sed -n '/^INGEST_RESULT_PATH=""/,/^INGEST_RESULT_COMMIT=""/p' "$ENTRYPOI
 eval "$(sed -n '/^write_ingest_result()/,/^}/p' "$ENTRYPOINT")"
 eval "$(sed -n '/^sanitize_store()/,/^}/p' "$ENTRYPOINT")"
 eval "$(sed -n '/^internal_string_needles()/,/^}/p' "$ENTRYPOINT")"
+eval "$(sed -n '/^new_stage_repo()/,/^}/p' "$ENTRYPOINT")"
+eval "$(sed -n '/^borrow_store()/,/^}/p' "$ENTRYPOINT")"
 eval "$(sed -n '/^stage_reports_repo()/,/^}/p' "$ENTRYPOINT")"
 eval "$(sed -n '/^do_ingest()/,/^}/p' "$ENTRYPOINT")"
 
@@ -998,18 +1000,41 @@ rc=0
   AUR_SLEUTH_SUBMITTED_BY=octocat do_ingest ) >/dev/null 2>&1 || rc=$?
 if (( rc != 0 )); then ok "no AUR_SLEUTH_SUBMISSION_RING: the stage dies"; else bad "the stage ran without a ring"; fi
 rc=0
-( exec 8>"$DATA_DIR/bulk-audit/archive.lock"; flock -n 8; stage refs/heads/orphan ) >/dev/null 2>&1 || rc=$?
+( exec 8>"$DATA_DIR/bulk-audit/archive.lock"; flock -n 8; stage refs/heads/orphan ) \
+    >/dev/null 2>&1 || rc=$?
 if (( rc != 0 )); then
     ok "the stage refuses to write under a held archive lock"
 else
     bad "the stage wrote under a held archive lock"
 fi
 
+# The hoist, pinned by which of two refusals wins. The ingest must not be the
+# one writer in the deployment that does network I/O with the writer lock in
+# its hand: a peer that accepts a connection and then goes silent would stall
+# every other writer for as long as the kernel's keepalive takes.
+#
+# So hold the lock AND give the stage a URL that cannot be fetched. Whichever
+# error comes out says which ran first. Fetch-then-lock says "could not
+# fetch"; lock-then-fetch says "another run holds the archive lock", and that
+# is the regression.
+rc=0
+( exec 8>"$DATA_DIR/bulk-audit/archive.lock"; flock -n 8
+  AUR_SLEUTH_SUBMISSION_URL="$tmp/no-such-bundle" \
+  AUR_SLEUTH_SUBMISSION_REF=refs/heads/good \
+  AUR_SLEUTH_SUBMITTED_BY=octocat \
+  AUR_SLEUTH_SUBMISSION_RING=3 do_ingest ) > "$tmp/stage-locked.log" 2>&1 || rc=$?
+if (( rc != 0 )) && grep -q 'could not fetch' "$tmp/stage-locked.log" \
+   && ! grep -q 'archive lock' "$tmp/stage-locked.log"; then
+    ok "  and it fetched before taking the lock, not under it"
+else
+    bad "the fetches should happen before the lock: $(cat "$tmp/stage-locked.log")"
+fi
+
 echo "== the submission URL is a repository, never an option =="
 # git parses options up to the first non-option argument, so a URL beginning
 # with '-' is not a URL: --upload-pack=<cmd> makes git RUN <cmd>, inside the
-# one stage that holds the archive write lock and before ingest-submission.py
-# decides anything. The endpoint mints the spooled path today, so this is
+# one stage that is a writer on the reports branch, and before
+# ingest-submission.py decides anything. The endpoint mints the spooled path today, so this is
 # defence in depth -- but that invariant lives in a component this repository
 # does not contain, and `--` makes the stage safe without it.
 pwned="$tmp/PWNED"

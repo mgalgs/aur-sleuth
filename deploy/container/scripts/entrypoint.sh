@@ -669,10 +669,27 @@ do_screen() {
 # objects read-only through alternates and copies the refs across as the plain
 # text they are, so every git command afterwards runs under configuration this
 # image wrote.
-stage_reports_repo() {
+#
+# It is two steps rather than one because they want the archive lock
+# differently. Making the repository wants nothing: it is a `git init` in a
+# fresh temporary directory, and a stage may want to fetch a stranger's ref
+# into it long before it is entitled to touch the store. Borrowing the store's
+# objects is the step that MUST be under the lock -- an alternates link is
+# read-only, but a concurrent writer pruning the store underneath it takes the
+# objects out from beneath a reader that has already resolved them. `ingest`
+# splits them for exactly that reason; every other caller wants both at once
+# and calls the wrapper.
+new_stage_repo() {
     local repo
     repo="$(mktemp -d)/reports.git"
     git init --bare --quiet "$repo"
+    printf '%s\n' "$repo"
+}
+
+# Point a staged repository at the store's objects and copy its refs across.
+# Call under the archive lock.
+borrow_store() {
+    local repo="$1"
     printf '%s\n' "$GIT_STORE/objects" > "$repo/objects/info/alternates"
     cp -f "$GIT_STORE/packed-refs" "$repo/packed-refs" 2>/dev/null || true
     mkdir -p "$repo/refs/heads"
@@ -683,6 +700,12 @@ stage_reports_repo() {
     mkdir -p "$repo/refs/remotes/origin"
     cp -f "$GIT_STORE/refs/remotes/origin/$REPORTS_BRANCH" \
           "$repo/refs/remotes/origin/$REPORTS_BRANCH" 2>/dev/null || true
+}
+
+stage_reports_repo() {
+    local repo
+    repo="$(new_stage_repo)"
+    borrow_store "$repo"
     printf '%s\n' "$repo"
 }
 
@@ -1484,7 +1507,7 @@ PYEOF
 #     passed after a `--`, because the ARGUMENT VECTOR is executable input one
 #     position over: git parses options up to the first non-option argument,
 #     so a URL beginning with `-` is not a URL, and `--upload-pack=<cmd>` runs
-#     <cmd> here, under the archive lock, before any rule below is reached.
+#     <cmd> here, before any rule below is reached.
 #   - bench/ingest-submission.py decides every rule in code -- the RULES are a
 #     model-free gate, whatever happens to the report downstream -- and stamps
 #     what it accepts `advisory: true` and `source: community`, which is what
@@ -1503,10 +1526,13 @@ PYEOF
 # recorded, and a gateway label that disagrees with it refuses the submission.
 #   - The commit is made with plumbing onto the current head, fast-forward
 #     only, under the archive lock: this stage is a writer, like quarantine.
+#     The lock is taken AFTER both fetches, not before them: nothing an
+#     untrusted transfer does should be able to block every other writer in
+#     the deployment, and nothing in a fetch touches the store.
 do_ingest() {
-    # Armed first, before anything that can die: the input check below and the
-    # archive lock after it are both refusals a contributor has to hear about,
-    # and a trap set later would miss exactly those two.
+    # Armed first, before anything that can die: the input check below, the
+    # two fetches after it and the archive lock after those are all refusals a
+    # contributor has to hear about, and a trap set later would miss them.
     INGEST_RESULT_PATH="${AUR_SLEUTH_SUBMISSION_RESULT:-}"
     if [[ -n "$INGEST_RESULT_PATH" ]]; then
         trap 'write_ingest_result "$?"' EXIT
@@ -1528,19 +1554,26 @@ do_ingest() {
         "AUR_SLEUTH_SUBMISSION_RING (the invitation ring it came in on)"
     [[ -d "$GIT_STORE" ]] || die "$GIT_STORE missing; run the prepare stage first"
 
-    exec 9>"$DATA_DIR/bulk-audit/archive.lock"
-    flock -n 9 || die "another run holds the archive lock; refusing to ingest under it"
-
-    sanitize_store
-    local g=(git --git-dir="$GIT_STORE")
-
-    local head
-    head="$("${g[@]}" rev-parse --verify --quiet "refs/heads/$REPORTS_BRANCH" || true)"
-    [[ -n "$head" ]] || die "no $REPORTS_BRANCH ref to ingest onto"
-    log "$REPORTS_BRANCH is at ${head:0:12}"
-
+    # Both fetches happen BEFORE the archive lock is taken, and nothing between
+    # here and the `flock` below touches the store.
+    #
+    # Until they were hoisted, the ingest was the only writer in the deployment
+    # that did network I/O with the writer lock in its hand, and that
+    # difference was stated nowhere. `git fetch` has no default timeout --
+    # `http.lowSpeedLimit` is unset -- so a peer that accepts a connection and
+    # then goes silent held the lock for as long as the kernel's keepalive took
+    # to give up, which is a couple of hours. A registry fetch into a blackhole
+    # at 03:12 cost the 04:00, 08:00 and 12:00 sweeps, each of which exited
+    # with "another run holds the archive lock" and no hint that a community
+    # submission was the thing sitting on it.
+    #
+    # What genuinely needs the lock is the borrow (a concurrent `prepare` could
+    # prune the objects out from under the alternates link) and the
+    # read-compare-update of the branch ref. Both are local and cheap, which
+    # leaves the ingest holding the lock for about as long as `quarantine`
+    # does -- the stage this one says it is modelled on.
     local repo
-    repo="$(stage_reports_repo)"
+    repo="$(new_stage_repo)"
     log "Fetching $ref from $url"
     git --git-dir="$repo" fetch --quiet --no-tags -- "$url" \
         "+${ref}:refs/submission" \
@@ -1563,6 +1596,20 @@ do_ingest() {
                "without the registry there is no way to say whose submission this is"
     git --git-dir="$repo" show "refs/contrib:$CONTRIB_FILE" > "$signers" \
         || die "$CONTRIB_REF has no $CONTRIB_FILE file"
+
+    # Everything from here down is local, and the lock covers all of it: the
+    # borrow, the rules script that reads blobs through it, and the commit.
+    exec 9>"$DATA_DIR/bulk-audit/archive.lock"
+    flock -n 9 || die "another run holds the archive lock; refusing to ingest under it"
+
+    sanitize_store
+    borrow_store "$repo"
+    local g=(git --git-dir="$GIT_STORE")
+
+    local head
+    head="$("${g[@]}" rev-parse --verify --quiet "refs/heads/$REPORTS_BRANCH" || true)"
+    [[ -n "$head" ]] || die "no $REPORTS_BRANCH ref to ingest onto"
+    log "$REPORTS_BRANCH is at ${head:0:12}"
 
     local out needles
     out="$(mktemp -d)"
