@@ -111,10 +111,12 @@ only with a version bump.
   repository, on the maintainer's own network, and is recorded here so whoever
   builds it has the contract.
 
-  **The endpoint.** Behind a gateway that authenticates the caller by their
-  node: it takes the identity and the invitation ring from the gateway's
-  headers, accepts a POSTed git bundle, and spools it on the volume the
-  container reads, one file per upload. It never merges anything itself.
+  **The endpoint.** A node on a tailnet of its own -- the `tailnet-pr`
+  project, which is being built to serve any repository, not this one -- so
+  the caller's identity and invitation ring come from the tailnet connection
+  itself, never from a header anyone could set. It accepts a POSTed git
+  bundle and spools it on the volume the container reads, one file per
+  upload. It never merges anything itself.
 
   It refuses a request body over N bytes -- 4 MiB is ample, a submission is
   one report -- with `413`, **before writing anything to the spool**, and
@@ -135,13 +137,16 @@ only with a version bump.
   one, because parsing a date would need `date -d` (GNU-only) and a clock it
   trusts as much as the server's. The client obeys the number as given rather
   than clipping it to its own backoff ceiling, so an over-long hint costs a
-  contributor the whole run — send the interval you actually mean. The gateway
-  keeps its own host allowlist; the endpoint is reachable from nowhere else.
+  contributor the whole run — send the interval you actually mean. The
+  endpoint is reachable from that tailnet and from nowhere else.
 
-  **The invitation watcher.** Watches `master`'s `trusted-contributors` file
-  for a new line, mints an invitation to the network for it, and emails the
-  invite to the address on that line. One line, one invitation, and never a
-  second for a line it has already seen.
+  **The invitation watcher.** Watches the registry file (the one the ingest
+  reads, at `AUR_SLEUTH_REGISTRY_REF`) for a new line, mints an invitation to
+  the tailnet for it, and delivers the invitation **encrypted to the SSH key
+  on that line**, as a comment on the contributor's own registration pull
+  request -- a public channel only their private key can open, so no email
+  is involved. One line, one invitation, and never a second for a line it has
+  already seen.
 
   **The drain.** Runs the `ingest` container stage once per spooled bundle,
   passing `AUR_SLEUTH_SUBMISSION_URL` (the bundle path),
@@ -169,6 +174,59 @@ only with a version bump.
   exists the honest answer is "not judged yet" rather than a guess. It is
   written tmp-and-rename, so an endpoint polling the path either finds the
   whole object or no file at all.
+- **Still open from the submissions review** (queued 2026-08-29). The series
+  was reviewed as a mailing-list thread: forty-three review comments on v1,
+  every one answered on its thread, fourteen fixes in v2. What follows is
+  what v2's cover letter left open on purpose, severity first, so it is not
+  lost when the mailbox is.
+  1. `LINE_RE` refuses the FIDO key types (`sk-ssh-ed25519@openssh.com`,
+     `sk-ecdsa-sha2-nistp256@openssh.com`), so the contributor with a
+     hardware-token signing key is the one who cannot register. Wants a
+     per-key-type test too; every accepted type is accepted untested.
+  2. `model_slug()` has no length cap: a 300-character `model:` makes the
+     write fail mid-loop with a traceback for a reason. A contract bug, not
+     a forged-report path -- `do_ingest` cleans up on non-zero.
+  3. Four public figures a submission still moves: `packages_audited`,
+     `package_states`, the page's "packages read so far" denominator, and
+     `stat-cost` joining a pipeline-only cost to a community-inclusive count.
+     The fix is a `pipeline_packages` set derived the way `pipeline_audits`
+     is, keeping the package present in `packages` and absent from
+     `summary`. The thing worth building is the general test: no summary or
+     page figure changes when a community report is added to a fixture
+     branch, enumerated over the JSON keys rather than the remembered ones.
+     Four review rounds each found one more of these; that test ends the
+     class.
+  4. Revocation: decided and unwritten. A maintainer removes the line, the
+     ingest refuses that key from the next submission (the registry is
+     re-fetched every ingest), the node expires with its TTL; reports already
+     ingested stay, attributed. Key rotation is impossible today -- same
+     email with a new key fails rule 7, replacing the line fails rule 2.
+  5. Rule 6 proves the key is listed on the profile, not held: a
+     registration can be signed with one key and register another. The fix
+     is a local `ssh-keygen -Y verify` of the commit's signature against the
+     key on the line. This rule is moving to `tailnet-pr`'s Action, where it
+     is being tightened first.
+  6. The workflow's concurrency group is per pull request; two registrations
+     that merge clean can leave a duplicate key that fails `check` on the
+     base for every later one. One line: `group: register-contributor`.
+  7. The community square's hover says who sent it and not that it is not a
+     vote; the pipeline's own advisory square says both.
+  8. The recipe's registration email must be a verified email on the GitHub
+     account, or rule 5 reports an empty author; a `noreply` address passes
+     the rules and is the wrong one to register. Say both in the doc.
+  9. Replay: the ingest, not the endpoint, should refuse a `submission_ref`
+     already present in the branch's stamps. Decided; not implemented.
+  10. The daily cap is the endpoint's, with a number in this file; the client
+      cannot tell a quota `429` from a capacity `429` and needs a branch for
+      it.
+  11. `backoff` does not advance while a `Retry-After` is present, so a
+      server saying `1` forever buys 1,800 POSTs. The right shape needs
+      deciding, not guessing.
+  12. Small and accepted: exit codes and two README rows; a `trap` over the
+      ingest's temporaries; a multi-line-value fixture for `rewrite()`; two
+      82-column lines. And `bench/test-publish-gate.sh`'s flake -- see Known
+      flakes -- which the review characterised independently and which
+      should be fixed, not annotated.
 - The "seen before" mark on a repeated concern lives in the reader, not in
   `bench/review-pending.py`, and it has to: the review Job mounts the volume
   read-only, so the script can neither keep its own last answer nor reach the
