@@ -286,7 +286,11 @@ print("\x1f".join([r["package"], r.get("reference", "unknown"), r.get("pkgver", 
 # The candidate judge gets the package's audit reports as they are on the
 # branch -- the same reports the incumbent judge ruled on -- materialised into
 # this run's own reports directory, and writes its ruling into this run's own
-# judge directory. bench/judge.sh does the judging; --no-archive keeps the
+# judge directory. That set is the sampler's `judge_inputs`, not `branch`: a
+# community submission is in the pile bench/judge.sh reads, so it must be in
+# this pile too or the two judges are scored on different evidence, but it is
+# NOT a `branch` row, because those are scored and it names a run this
+# pipeline never made. bench/judge.sh does the judging; --no-archive keeps the
 # ruling off the branch.
 judge_package() {
     local model="$1" line="$2" slug="${1//\//-}"
@@ -298,7 +302,7 @@ r = json.load(sys.stdin)
 print("\x1f".join([r["package"], r.get("reference", "unknown"), r.get("pkgver", ""),
                    "1" if r.get("overridden") else "0", r.get("reference_source", ""),
                    str(r.get("support", 0)),
-                   " ".join(b["path"] for b in r.get("branch") or [] if b.get("path"))]))')
+                   " ".join(r.get("judge_inputs") or [])]))')
 
     local reports_dir="$RUN_DIR/reports/$slug/judge-input/$pkg"
     local judge_dir="$RUN_DIR/reports/$slug/judge"

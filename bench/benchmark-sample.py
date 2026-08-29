@@ -11,7 +11,8 @@ Usage:
   benchmark-sample.py [--size N] [--packages a,b,c]
 
 Prints one JSON object per line: package, reference, reference_source, support,
-state, pkgver, date, overridden, branch. --packages names the set exactly and
+state, pkgver, date, overridden, branch, branch_judges, judge_inputs.
+--packages names the set exactly and
 skips the selection; a named package with no settled verdict is still emitted,
 with reference "unknown", so the run can show what the candidate said even when
 nothing can be scored.
@@ -19,16 +20,35 @@ nothing can be scored.
 The reference is the pipeline's own settled verdict (package_state), and
 disagreeing with it is disagreeing with the current models, which may be
 right: the first benchmark "missed" a package whose reference was a single
-audit's false positive. "support" is how many unsafe reports a settled unsafe
-rests on. (A file of hand-settled verdicts once outranked the models here; it
+audit's false positive. "support" is how much of this pipeline's own evidence
+the reference rests on: distinct models that said unsafe for a settled unsafe,
+non-community reports for a settled safe. (A file of hand-settled verdicts once
+outranked the models here; it
 went, because every entry in it was a detection bug with an exception filed
 instead of a fix.)
 
-"branch" carries the current models' own latest report on the package (with
-its path on the branch), and "branch_judges" what the judge ruled, so the
-benchmark can score the incumbents on the same sample at no cost. Their
-verdicts helped settle the model references, so their agreement is an upper
-bound; their cost is real.
+"branch" carries the current models' own latest report on the package, and
+"branch_judges" what the judge ruled, so the benchmark can score the incumbents
+on the same sample at no cost. Their verdicts helped settle the model
+references, so their agreement is an upper bound; their cost is real.
+
+A community-submitted report is NOT one of them, and this is the one place in
+the pipeline where that is about neither trust nor spend. `advisory: true`
+already keeps a submission out of package_state, so it can never move the
+reference a candidate is scored against. What it could still do is become a
+row in the table: `branch` is keyed on `model:`, and a submission's `model:`
+is the contributor's claim about a run this deployment never dispatched. A
+benchmark exists to answer "what would this model cost and get right HERE",
+and it answers it by comparing runs this pipeline made. A claimed run is not
+one, however trustworthy the person who claimed it -- so `latest_by_model`
+drops them, and `support` counts only this pipeline's reports.
+
+"judge_inputs" is the deliberate exception, and it points the other way. A
+judge benchmark hands the candidate the reports the incumbent judge read, and
+since the maintainer made a submission advisory rather than a tier below it,
+bench/judge.sh reads community reports like any other. Withholding them from
+the candidate would score two judges on two different piles and call the
+difference a model. So the paths include them; only the SCORED rows do not.
 """
 
 import argparse
@@ -63,13 +83,24 @@ def reference_for(state):
     return "unknown"
 
 
+def is_community(fm):
+    return fm.get("source") == "community"
+
+
 def latest_by_model(audits):
-    """package -> [{model, result, cost, pkgver, path}], the newest report per
-    model. path is the report's place on the branch, which a judge benchmark
-    materialises to hand the candidate judge the same reports the incumbent saw."""
+    """package -> [{model, result, cost, pkgver}], the newest report per model.
+
+    These are SCORED rows: each becomes an incumbent in the benchmark table,
+    credited with a verdict and a cost. So a community submission is not one.
+    Its `model:` names a run this pipeline never dispatched and its `cost` was
+    stripped at the ingest, which would enter the table as a model that got the
+    answer right for nothing. See the module docstring: this is about whose run
+    it was, not about whether the contributor is trusted."""
     newest = {}
     for a in audits:
         fm = a["frontmatter"]
+        if is_community(fm):
+            continue
         key = (a["package"], fm.get("model", "?"))
         if key not in newest or fm.get("date", "") > newest[key]["date"]:
             newest[key] = {
@@ -78,12 +109,33 @@ def latest_by_model(audits):
                 "cost": float(fm.get("cost") or 0) if str(fm.get("cost", "")).replace(".", "", 1).isdigit() else 0.0,
                 "pkgver": fm.get("pkgver", ""),
                 "date": fm.get("date", ""),
-                "path": f"{a['package']}/{a['filename']}",
             }
     out = {}
     for (pkg, _), entry in newest.items():
         out.setdefault(pkg, []).append({k: v for k, v in entry.items() if k != "date"})
     return out
+
+
+def judge_inputs_by_package(audits):
+    """package -> [path], the newest report per model, community INCLUDED.
+
+    A judge benchmark materialises these to hand the candidate judge the same
+    reports the incumbent judge ruled on, and bench/judge.sh's collect_reports
+    reads every report in the package's directory -- community ones too, since
+    a submission is advisory and advisory reports are the judge's context. Feed
+    the candidate a smaller pile than the incumbent read and the benchmark
+    measures the pile, not the judge. Nothing here is scored, so nothing here
+    credits a contributor's claim to a model."""
+    newest = {}
+    for a in audits:
+        fm = a["frontmatter"]
+        key = (a["package"], fm.get("model", "?"), is_community(fm))
+        if key not in newest or fm.get("date", "") > newest[key][0]:
+            newest[key] = (fm.get("date", ""), f"{a['package']}/{a['filename']}")
+    out = {}
+    for (pkg, _, _), (_, path) in newest.items():
+        out.setdefault(pkg, []).append(path)
+    return {pkg: sorted(paths) for pkg, paths in out.items()}
 
 
 def judges_by_package(judges):
@@ -107,15 +159,23 @@ def rows(gd):
     audits, judges = gd.load_reports()
     index = gd.build_index_data(audits, judges)
     branch = latest_by_model(audits)
+    judge_inputs = judge_inputs_by_package(audits)
     judged = judges_by_package(judges)
     out = []
     for name, ps in index["packages"].items():
         state = gd.package_state(ps)
         ref, source, support = reference_for(state), "models", 0
+        # How much of THIS pipeline's evidence the reference rests on. Both
+        # arms exclude a submission: `unsafe_models` is already advisory-free,
+        # and `audit_count` is not -- it counts every report on the branch,
+        # community ones included -- so the safe arm counts the audits itself.
+        # A number that says "3 reports agree" must not include one this
+        # deployment never ran.
         if ref == "unsafe":
-            support = int(ps.get("unsafe_audits", 0))
+            support = int(ps.get("unsafe_models", 0))
         elif ref == "safe":
-            support = int(ps.get("audit_count", 0))
+            support = sum(1 for a in ps.get("audits", [])
+                          if a.get("source") != "community")
         out.append({
             "package": name,
             "reference": ref,
@@ -128,6 +188,8 @@ def rows(gd):
             "overridden": state == "clean" and ps.get("audit_majority") in ("unsafe", "contested"),
             "branch": sorted(branch.get(name, []), key=lambda b: b["model"]),
             "branch_judges": judged.get(name, []),
+            # Paths, not verdicts: what a candidate JUDGE is handed to read.
+            "judge_inputs": judge_inputs.get(name, []),
         })
     return out
 
@@ -172,6 +234,7 @@ def main():
                 "package": name, "reference": "unknown", "reference_source": "",
                 "support": 0, "state": "unknown", "pkgver": "", "date": "",
                 "overridden": False, "branch": [], "branch_judges": [],
+                "judge_inputs": [],
             })
     else:
         picked = select(all_rows, max(0, args.size))

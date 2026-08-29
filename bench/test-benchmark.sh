@@ -267,6 +267,54 @@ check("newest first within a group", names.index("ok9") < names.index("ok6"))
 check("a tiny size still fits", len(sample.select(pool, 2)) == 2)
 check("a size larger than the pool takes what there is", len(sample.select(pool, 100)) == 19)
 
+# --- a submission is not an incumbent -----------------------------------------
+# The NAK on this file. A community report is advisory, so it never moves
+# package_state and never becomes the reference -- but `branch` is keyed on
+# `model:`, and a submission's `model:` is a claim about a run this pipeline
+# never dispatched. Scoring it would credit a model with a verdict, at the zero
+# cost the ingest left behind. `judge_inputs` is the deliberate opposite: the
+# incumbent judge DOES read community reports (bench/judge.sh, after the
+# maintainer collapsed the tiers), so a candidate judge must read them too.
+def audit(pkgname, model, result, date, filename, community=False, cost="0.01"):
+    fm = {"model": model, "result": result, "date": date, "cost": cost}
+    if community:
+        fm["source"] = "community"
+        fm["advisory"] = "true"
+        fm["cost"] = ""
+    return {"package": pkgname, "filename": filename, "frontmatter": fm}
+
+mixed = [
+    audit("vlc", "paid/seat", "safe", "2026-06-01", "2026-06-01-paid-seat.md"),
+    audit("vlc", "free/model", "safe", "2026-06-02", "2026-06-02-free-model.md"),
+    audit("vlc", "someones/claim", "unsafe", "2026-06-03",
+          "2026-06-03-community-someones-claim.md", community=True),
+]
+branch = sample.latest_by_model(mixed)
+check("a community report is not a scored incumbent row",
+      sorted(b["model"] for b in branch["vlc"]) == ["free/model", "paid/seat"])
+check("and its zero cost never lands in the table",
+      all(b["cost"] > 0 for b in branch["vlc"]))
+inputs = sample.judge_inputs_by_package(mixed)
+check("but a candidate judge is handed the same pile the incumbent read",
+      inputs["vlc"] == ["vlc/2026-06-01-paid-seat.md", "vlc/2026-06-02-free-model.md",
+                        "vlc/2026-06-03-community-someones-claim.md"])
+# A contributor who claims a model the pipeline also runs must not collide with
+# it: the pipeline's own row is the one that survives, whatever the dates say.
+collide = [
+    audit("vlc", "paid/seat", "safe", "2026-06-01", "2026-06-01-paid-seat.md"),
+    audit("vlc", "paid/seat", "unsafe", "2026-06-09",
+          "2026-06-09-community-paid-seat.md", community=True),
+]
+row = sample.latest_by_model(collide)["vlc"]
+check("a submission claiming a seat's own model does not overwrite its row",
+      len(row) == 1 and row[0]["result"] == "safe" and row[0]["cost"] > 0)
+check("and it is still in the judge's pile under its own key",
+      len(sample.judge_inputs_by_package(collide)["vlc"]) == 2)
+# benchmark.sh reads judge_inputs, not branch[].path, to build that pile.
+bench_src = open(os.path.join(bench, "benchmark.sh")).read()
+check("benchmark.sh takes the judge's pile from judge_inputs",
+      'r.get("judge_inputs")' in bench_src and 'b["path"]' not in bench_src)
+
 # --- the row splitter in benchmark.sh ----------------------------------------
 # bench_package and judge_package split a sample row into shell variables.
 # Tab is IFS whitespace, so an empty field (pkgver, reference_source) made
