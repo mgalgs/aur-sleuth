@@ -36,6 +36,21 @@ BRANCH=refs/heads/audit-reports
 needles="$tmp/needles"
 printf 'svc.cluster.local\n' > "$needles"
 
+# Two throwaway signing keys, and the registry as the trusted-contributors
+# branch holds it: octocat's key is on it, the other is on nobody's line.
+ssh-keygen -q -t ed25519 -N '' -C '' -f "$tmp/registered"
+ssh-keygen -q -t ed25519 -N '' -C '' -f "$tmp/stranger"
+SIGNERS="$tmp/allowed_signers"
+{
+    printf '# the registry\n'
+    printf 'octocat@example.org %s # octocat\n' "$(awk '{print $1" "$2}' < "$tmp/registered.pub")"
+} > "$SIGNERS"
+
+# What every fixture commit is signed with, and who it says wrote it. A check
+# that needs a different answer sets these around one mkbranch call.
+SIGN_KEY="$tmp/registered.pub"
+SIGN_EMAIL="octocat@example.org"
+
 # --- fixtures -----------------------------------------------------------------
 
 # A report as aur-sleuth writes one: frontmatter, then a body.
@@ -68,11 +83,20 @@ mkbranch() {
         printf '0 %s\t%s\n' "$(printf '0%.0s' {1..40})" "$gone" \
             | GIT_INDEX_FILE="$idx" git --git-dir="$REPO" update-index --index-info
     done
-    local tree pa=()
+    local tree pa=() cfg=() sign=()
     tree="$(GIT_INDEX_FILE="$idx" git --git-dir="$REPO" write-tree)"
     [[ -n "$parent" ]] && pa=(-p "$parent")
+    # Signed by default: an unsigned submission is refused, so an unsigned
+    # fixture would be testing the signature rule and nothing else. SIGN_KEY=""
+    # is how the checks that DO want that ask for it.
+    if [[ -n "$SIGN_KEY" ]]; then
+        cfg=(-c gpg.format=ssh -c "user.signingkey=$SIGN_KEY")
+        sign=(-S)
+    fi
     git --git-dir="$REPO" update-ref "$ref" \
-        "$(git --git-dir="$REPO" commit-tree "$tree" "${pa[@]}" -m x)"
+        "$(GIT_AUTHOR_EMAIL="$SIGN_EMAIL" GIT_COMMITTER_EMAIL="$SIGN_EMAIL" \
+           git --git-dir="$REPO" "${cfg[@]}" commit-tree "${sign[@]}" \
+               "$tree" "${pa[@]}" -m x)"
 }
 
 # The branch as the pipeline left it: one real audit of one package.
@@ -88,7 +112,8 @@ ingest() {
     local ref="$1" out="$2"; shift 2
     rm -rf "$out"; mkdir -p "$out"
     python3 "$INGEST" --git-dir "$REPO" --reports-ref "$BRANCH" \
-        --submission-ref "$ref" --submitted-by octocat --out "$out" \
+        --submission-ref "$ref" --submitted-by octocat --submission-ring 2 \
+        --allowed-signers "$SIGNERS" --out "$out" \
         --needles-file "$needles" --now 20260828-101112 "$@"
 }
 
@@ -170,7 +195,8 @@ mkbranch "refs/heads/sub$n" "" "$d"
 rc=0
 out="$tmp/out$n"; rm -rf "$out"; mkdir -p "$out"
 python3 "$INGEST" --git-dir "$REPO" --reports-ref "$BRANCH" \
-    --submission-ref "refs/heads/sub$n" --submitted-by octocat --out "$out" \
+    --submission-ref "refs/heads/sub$n" --submitted-by octocat --submission-ring 2 \
+    --allowed-signers "$SIGNERS" --out "$out" \
     --needles-file "$needles" --now 20260828-101112 >/dev/null 2>&1 || rc=$?
 if (( rc != 0 )) && [[ -z "$(find "$out" -type f)" ]]; then
     ok "refused: an orphan branch re-using a path the branch already has"
@@ -269,7 +295,8 @@ got="$(cat "$landed" 2>/dev/null || true)"
 check() { if grep -qxF "$2" <<< "$got"; then ok "$1"; else bad "$1"; fi; }
 check "a forged 'advisory: false' lands as 'advisory: true'" "advisory: true"
 check "the report is stamped source: community"            "source: community"
-check "the submitter's label is recorded"                  "submitted_by: octocat"
+check "the login the signing key maps to is recorded"      "submitted_by: octocat"
+check "the ring the gateway saw is recorded"              "submitted_ring: 2"
 check "the ingest date is recorded"                        "ingested: 2026-08-28T10:11:12Z"
 check "the model claim is kept verbatim"                   "model: OpenAI/GPT-5.4"
 check "the verdict claim is kept verbatim"                 "result: unsafe"
@@ -362,6 +389,76 @@ for p in "vivaldi/20260828-101112-community-openai-gpt-5.4.md" \
          "lib32-rtmpdump/20260828-101112-community-same-model-2.md"; do
     if publish_path_allowed "$p"; then ok "the publish gate accepts $p"; else bad "the publish gate refuses $p"; fi
 done
+
+echo "== the signature: who sent it, verified against the registry =="
+# The rules above are about what a submission contains. These are about who
+# it is from -- the one thing here that is NOT taken on trust. Each check
+# builds the same well-formed report and changes only the signature or the
+# identity the gateway claims.
+sig_dir="$tmp/s-sig"; mkdir -p "$sig_dir/vivaldi"
+report vivaldi signed/model safe > "$sig_dir/vivaldi/report.md"
+
+# sig_refuse <label> <ref> [extra ingest args...]
+sig_refuse() {
+    local label="$1" ref="$2"; shift 2
+    local out="$tmp/out-$ref" rc=0 log
+    log="$(ingest "refs/heads/$ref" "$out" "$@" 2>&1)" || rc=$?
+    if (( rc == 0 )); then
+        bad "should refuse: $label"
+    elif [[ -n "$(find "$out" -type f)" ]]; then
+        bad "refused but wrote files: $label"
+    else
+        ok "refused: $label"
+        $QUIET || printf '        %s\n' "$(printf '%s' "$log" | tail -1)"
+    fi
+}
+
+SIGN_KEY=""
+mkbranch refs/heads/sig-unsigned "$BASE" "$sig_dir"
+SIGN_KEY="$tmp/registered.pub"
+sig_refuse "an unsigned submission" sig-unsigned
+
+SIGN_KEY="$tmp/stranger.pub"
+mkbranch refs/heads/sig-stranger "$BASE" "$sig_dir"
+SIGN_KEY="$tmp/registered.pub"
+sig_refuse "a signature by a key on nobody's line" sig-stranger
+
+SIGN_EMAIL="someone-else@example.org"
+mkbranch refs/heads/sig-author "$BASE" "$sig_dir"
+SIGN_EMAIL="octocat@example.org"
+sig_refuse "a registered key signing for another author's email" sig-author
+
+mkbranch refs/heads/sig-good "$BASE" "$sig_dir"
+sig_refuse "a gateway identity the key does not back" sig-good --submitted-by someone-else
+sig_refuse "a ring outside 1-3" sig-good --submission-ring 4
+sig_refuse "a ring of zero" sig-good --submission-ring 0
+
+SIG_OUT="$tmp/sig-out"
+if ingest refs/heads/sig-good "$SIG_OUT" >/dev/null 2>&1; then
+    ok "a report signed by a registered key is accepted"
+else
+    bad "a signed, registered submission should be accepted"
+fi
+siggot="$(cat "$(find "$SIG_OUT" -type f | head -1)" 2>/dev/null || true)"
+if grep -qx 'submitted_by: octocat' <<< "$siggot" \
+   && grep -qx 'submitted_ring: 2' <<< "$siggot"; then
+    ok "it carries the login the key maps to, and the ring"
+else
+    bad "the accepted report should carry submitted_by and submitted_ring"
+fi
+# The registry, not the gateway, is what names the submitter: same key, same
+# commit, a registry line whose comment says someone else.
+other_signers="$tmp/allowed_signers_other"
+sed 's/# octocat$/# renamed-account/' "$SIGNERS" > "$other_signers"
+REN_OUT="$tmp/ren-out"
+if ingest refs/heads/sig-good "$REN_OUT" --allowed-signers "$other_signers" \
+        --submitted-by renamed-account >/dev/null 2>&1 \
+   && grep -qx 'submitted_by: renamed-account' \
+        "$(find "$REN_OUT" -type f | head -1)"; then
+    ok "submitted_by is the login on the key's line, not the label passed in"
+else
+    bad "submitted_by should come from the registry line the key is on"
+fi
 
 echo "== an orphan submission branch is its whole tree =="
 d="$tmp/s-orphan"; mkdir -p "$d/lone-pkg"
@@ -523,11 +620,21 @@ SRC_DIR="$PWD"
 # shellcheck disable=SC2034
 REPORTS_BRANCH="audit-reports"
 # shellcheck disable=SC2034
+CONTRIB_BRANCH="trusted-contributors"
+# shellcheck disable=SC2034
 FETCH_URL="$REPO"
 # shellcheck disable=SC2034
 INTERNAL_STRINGS="svc.cluster.local"
 GIT_STORE="$tmp/store/.git"
 mkdir -p "$tmp/store" "$DATA_DIR/bulk-audit"
+
+# The registry, on the branch the stage fetches it from. FETCH_URL is $REPO
+# here, standing in for the public repository.
+contrib_blob="$(git --git-dir="$REPO" hash-object -w --stdin < "$SIGNERS")"
+git --git-dir="$REPO" update-ref refs/heads/trusted-contributors \
+    "$(git --git-dir="$REPO" commit-tree \
+        "$(printf '100644 blob %s\ttrusted-contributors\n' "$contrib_blob" \
+           | git --git-dir="$REPO" mktree)" -m registry)"
 git init --quiet "$tmp/store"
 git --git-dir="$GIT_STORE" fetch --quiet "$REPO" \
     "+$BRANCH:refs/heads/audit-reports"
@@ -536,6 +643,7 @@ stage() {
     ( AUR_SLEUTH_SUBMISSION_URL="$REPO" \
       AUR_SLEUTH_SUBMISSION_REF="$1" \
       AUR_SLEUTH_SUBMITTED_BY="${2:-octocat}" \
+      AUR_SLEUTH_SUBMISSION_RING="${3:-3}" \
       do_ingest )
 }
 
@@ -552,7 +660,7 @@ else
     bad "the ingest commit is not a fast-forward of $before"
 fi
 msg="$(git --git-dir="$GIT_STORE" log -1 --format=%s "$after")"
-if [[ "$msg" == "ingest: 1 community report(s) from octocat ("* ]]; then
+if [[ "$msg" == "ingest: 1 community report(s) from octocat, ring 3 ("* ]]; then
     ok "the commit message names the count, the label and the submission"
     $QUIET || printf '        %s\n' "$msg"
 else
@@ -570,6 +678,11 @@ if git --git-dir="$GIT_STORE" show "$after:$landed_path" | grep -qx 'advisory: t
 else
     bad "what landed on the branch is not stamped"
 fi
+if git --git-dir="$GIT_STORE" show "$after:$landed_path" | grep -qx 'submitted_ring: 3'; then
+    ok "the ring the stage was told reaches the archived report"
+else
+    bad "the archived report should carry submitted_ring: 3"
+fi
 
 echo "== a refused submission leaves the store untouched =="
 d="$tmp/s-stage-bad"; mkdir -p "$d/vivaldi"
@@ -586,11 +699,15 @@ else
     bad "a refused submission moved the branch"
 fi
 
-echo "== the stage needs all three inputs, and the writer lock =="
+echo "== the stage needs all four inputs, and the writer lock =="
 rc=0
 ( AUR_SLEUTH_SUBMISSION_URL="$REPO" AUR_SLEUTH_SUBMISSION_REF=refs/heads/good \
-  do_ingest ) >/dev/null 2>&1 || rc=$?
-if (( rc != 0 )); then ok "no AUR_SLEUTH_SUBMITTED_BY: the stage dies"; else bad "the stage ran without a label"; fi
+  AUR_SLEUTH_SUBMISSION_RING=1 do_ingest ) >/dev/null 2>&1 || rc=$?
+if (( rc != 0 )); then ok "no AUR_SLEUTH_SUBMITTED_BY: the stage dies"; else bad "the stage ran without an identity"; fi
+rc=0
+( AUR_SLEUTH_SUBMISSION_URL="$REPO" AUR_SLEUTH_SUBMISSION_REF=refs/heads/good \
+  AUR_SLEUTH_SUBMITTED_BY=octocat do_ingest ) >/dev/null 2>&1 || rc=$?
+if (( rc != 0 )); then ok "no AUR_SLEUTH_SUBMISSION_RING: the stage dies"; else bad "the stage ran without a ring"; fi
 rc=0
 ( exec 8>"$DATA_DIR/bulk-audit/archive.lock"; flock -n 8; stage refs/heads/orphan ) >/dev/null 2>&1 || rc=$?
 if (( rc != 0 )); then

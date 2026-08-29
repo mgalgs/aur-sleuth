@@ -52,6 +52,10 @@ DATA_DIR="${AUR_SLEUTH_DATA_DIR:-/data}"
 SRC_DIR="/opt/aur-sleuth"
 GIT_STORE="$DATA_DIR/git"
 REPORTS_BRANCH="audit-reports"
+# Who may submit an audit report: one line per contributor, on an orphan
+# branch of its own. It is an SSH allowed_signers file, and the ingest hands
+# it to git verify-commit unchanged (bench/trusted-contributors.sh).
+CONTRIB_BRANCH="trusted-contributors"
 # Where the public page lives: the reviewed reports tree plus index.html and
 # _dashboard/*, rebuilt by this image at every publish. A branch of its own,
 # so audit-reports carries only what the audit stage wrote and origin's copy
@@ -1389,6 +1393,15 @@ PY
 #   - bench/ingest-submission.py decides every rule in code -- no model reads
 #     any of it -- and stamps what it accepts `advisory: true` and
 #     `source: community`, which is what the rest of the pipeline keys on.
+#
+# Who sent it is the one thing here that is NOT untrusted, and it is checked
+# twice. The gateway in front of the endpoint identifies the caller by their
+# node and stamps the invitation ring, which arrive as AUR_SLEUTH_SUBMITTED_BY
+# and AUR_SLEUTH_SUBMISSION_RING. The trusted-contributors branch is then
+# fetched from FETCH_URL -- public, no credential, like prepare -- into the
+# same throwaway repository, and the script requires the submission commit to
+# carry a signature by a key on it. The login the KEY maps to is what gets
+# recorded, and a gateway label that disagrees with it refuses the submission.
 #   - The commit is made with plumbing onto the current head, fast-forward
 #     only, under the archive lock: this stage is a writer, like quarantine.
 do_ingest() {
@@ -1400,10 +1413,12 @@ do_ingest() {
     local url="${AUR_SLEUTH_SUBMISSION_URL:-}"
     local ref="${AUR_SLEUTH_SUBMISSION_REF:-}"
     local who="${AUR_SLEUTH_SUBMITTED_BY:-}"
-    [[ -n "$url" && -n "$ref" && -n "$who" ]] || die \
+    local ring="${AUR_SLEUTH_SUBMISSION_RING:-}"
+    [[ -n "$url" && -n "$ref" && -n "$who" && -n "$ring" ]] || die \
         "ingest needs AUR_SLEUTH_SUBMISSION_URL (the spooled bundle, or any" \
-        "git URL), AUR_SLEUTH_SUBMISSION_REF (the branch inside it) and" \
-        "AUR_SLEUTH_SUBMITTED_BY (the identity the gateway verified)"
+        "git URL), AUR_SLEUTH_SUBMISSION_REF (the branch inside it)," \
+        "AUR_SLEUTH_SUBMITTED_BY (the identity the gateway verified) and" \
+        "AUR_SLEUTH_SUBMISSION_RING (the invitation ring it came in on)"
     [[ -d "$GIT_STORE" ]] || die "$GIT_STORE missing; run the prepare stage first"
 
     exec 9>"$DATA_DIR/bulk-audit/archive.lock"
@@ -1425,7 +1440,19 @@ do_ingest() {
         || die "could not fetch $ref from $url"
     local sub
     sub="$(git --git-dir="$repo" rev-parse --verify "refs/submission^{commit}")"
-    log "Submission is at ${sub:0:12}, offered by $who"
+    log "Submission is at ${sub:0:12}, offered by $who on ring $ring"
+
+    # The registry, straight from the public repository. It is fetched rather
+    # than read out of the store because the store holds reports, not this:
+    # the branch is public data the endpoint's own side also mints from.
+    local signers
+    signers="$(mktemp)"
+    git --git-dir="$repo" fetch --quiet --no-tags "$FETCH_URL" \
+        "+refs/heads/$CONTRIB_BRANCH:refs/trusted-contributors" \
+        || die "could not fetch $CONTRIB_BRANCH from $FETCH_URL;" \
+               "without the registry there is no way to say whose submission this is"
+    git --git-dir="$repo" show "refs/trusted-contributors:$CONTRIB_BRANCH" > "$signers" \
+        || die "$CONTRIB_BRANCH branch has no $CONTRIB_BRANCH file"
 
     local out needles
     out="$(mktemp -d)"
@@ -1437,12 +1464,14 @@ do_ingest() {
             --reports-ref "refs/heads/$REPORTS_BRANCH" \
             --submission-ref refs/submission \
             --submitted-by "$who" \
+            --submission-ring "$ring" \
+            --allowed-signers "$signers" \
             --out "$out" \
             --needles-file "$needles"; then
-        rm -rf "$out" "$needles"
+        rm -rf "$out" "$needles" "$signers"
         die "the submission was refused; nothing was written to the store"
     fi
-    rm -f "$needles"
+    rm -f "$needles" "$signers"
 
     # Everything the script accepted, relative to $out. It only ever writes
     # <pkg>/<name>.md, and the publish gate is what that shape is for.
@@ -1478,7 +1507,7 @@ do_ingest() {
 
     local what="${sub:0:12}"
     commit="$("${g[@]}" commit-tree "$tree" -p "$head" \
-        -m "ingest: ${#files[@]} community report(s) from $who ($what)")"
+        -m "ingest: ${#files[@]} community report(s) from $who, ring $ring ($what)")"
     "${g[@]}" update-ref "refs/heads/$REPORTS_BRANCH" "$commit" "$head"
     rm -rf "$out"
 

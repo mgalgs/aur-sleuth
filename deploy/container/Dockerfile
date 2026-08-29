@@ -18,7 +18,8 @@ ARG SLEUTH_GID=1000
 #   uv              aur-sleuth is a PEP 723 script; its shebang is `uv run`
 #   python-openai   bench/judge.sh calls the API from inline python snippets
 #   python-requests that run on the system interpreter, not in uv's environment
-#   openssh         the publish stage pushes over ssh
+#   openssh         the publish stage pushes over ssh, and the ingest stage
+#                   verifies a submission's ssh signature through git
 RUN pacman -Syu --noconfirm --needed \
         git \
         openssh \

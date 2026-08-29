@@ -8,9 +8,22 @@ what the contributor says it was -- and the ingest stamps every accepted file
 with what it actually is: `advisory: true` (counts toward nothing) and
 `source: community` (never read by a model, never in the audited index).
 
-`--submitted-by` is RECORDED, NEVER VERIFIED. It is whatever label the
-operator passed in, usually a GitHub login taken from the pull request. It
-carries no more authority than the rest of the submission.
+Who sent it IS verified, and twice over. A report arrives over the
+maintainer's private network, through a gateway that identifies the caller by
+their node and stamps the invitation ring it came in on, so `--submitted-by`
+and `--submission-ring` are facts the transport established rather than
+labels a submission chose. Neither is re-derived here. But the gateway's
+label is not trusted alone: the submission's commit has to carry a signature
+made by a key on the `trusted-contributors` branch
+(`--allowed-signers`, an SSH allowed_signers file), the signature's principal
+has to be the commit's own author email, and the `# <login>` comment on that
+key's line has to be what `--submitted-by` says. What is recorded is the
+login the KEY maps to. A submission whose signature does not verify, or whose
+key is on nobody's line, is refused whole.
+
+What is verified is WHO, never WHAT. The report's own claims are untouched by
+any of it: a signed report from a registered contributor is still `advisory:
+true`, still `source: community`, still read by no model.
 
 Fail closed: one bad file refuses the whole submission, every reason listed,
 exit 1, nothing written to --out. Half a submission landing would leave the
@@ -18,7 +31,8 @@ contributor guessing which half.
 
 Usage:
   ingest-submission.py --git-dir DIR --reports-ref REF --submission-ref REF
-                       --submitted-by LABEL --out DIR
+                       --submitted-by LOGIN --submission-ring N
+                       --allowed-signers FILE --out DIR
                        [--needles-file FILE] [--max-files N] [--max-bytes N]
 
 --git-dir is a throwaway repository holding both refs. Never the shared
@@ -58,12 +72,25 @@ RESULTS = {"safe", "unsafe", "inconclusive"}
 # them is dropped and replaced, so a forged `advisory: false` cannot survive.
 # `triggered_by` is dropped outright: it is the re-audit bookkeeping's own
 # field, and a submission has no escalation behind it to record.
-OWNED_KEYS = ("advisory", "source", "submitted_by", "submission_ref",
-              "ingested")
+OWNED_KEYS = ("advisory", "source", "submitted_by", "submitted_ring",
+              "submission_ref", "ingested")
 DROPPED_KEYS = ("triggered_by",)
 
 DEFAULT_MAX_FILES = 200
 DEFAULT_MAX_BYTES = 262144
+
+# A GitHub login, as bench/trusted-contributors.sh permits one. Applied to
+# what is read OUT of the registry too: the file is the maintainer's, but a
+# value that lands in YAML is checked where it is used, not where it came
+# from.
+LOGIN_RE = re.compile(r"^[A-Za-z0-9-]{1,39}$")
+
+# What `git verify-commit` says when an ssh signature checks out. The
+# principal it names is the allowed_signers line the key was found on.
+GOOD_SIG_RE = re.compile(r'^Good "[^"]*" signature for (\S+) with ', re.M)
+
+# The invitation rings the gateway may stamp a submission with.
+RINGS = (1, 2, 3)
 
 
 def load_parse_frontmatter():
@@ -130,6 +157,60 @@ def submitted_paths(gitdir, reports_ref, submission_ref):
             refusals.append(f"{path}: modifies a path on the branch "
                             f"(status {status}); a submission may only add files")
     return sorted(added), refusals
+
+
+def signer_login(gitdir, sha, allowed_signers):
+    """(login, refusals): whose registered key signed this commit.
+
+    Three questions, and all three have to answer the same person:
+
+      - Does the signature verify against the registry? `git verify-commit`
+        with the registry as its allowed_signers file is the whole of that
+        check, and the file is used exactly as the branch holds it.
+      - Is the principal the signature was accepted under the commit's own
+        author email? Otherwise a contributor could sign for an author line
+        naming somebody else.
+      - Which line is that key on? The `# <login>` comment on it is the
+        identity the report is recorded under, because that is the identity
+        the key proves. The caller compares it to what the gateway said.
+    """
+    proc = subprocess.run(
+        ["git", "--git-dir", gitdir,
+         "-c", "gpg.format=ssh",
+         "-c", f"gpg.ssh.allowedSignersFile={allowed_signers}",
+         "verify-commit", sha],
+        capture_output=True, timeout=120,
+    )
+    out = (proc.stdout + proc.stderr).decode("utf-8", "replace")
+    if proc.returncode != 0:
+        return "", [f"the submission commit {sha[:12]} is not signed by a key on "
+                    f"the trusted-contributors branch: "
+                    f"{out.strip().splitlines()[-1] if out.strip() else 'no signature'}"]
+    match = GOOD_SIG_RE.search(out)
+    if not match:
+        return "", [f"the submission commit {sha[:12]} verified without naming a "
+                    "principal; refusing rather than guessing whose it is"]
+    principal = match.group(1)
+
+    author = git(gitdir, "log", "-1", "--format=%ae", sha).strip()
+    if principal != author:
+        return "", [f"the signature is {principal}'s but the commit's author is "
+                    f"{author}; a submission is signed by its author"]
+
+    with open(allowed_signers, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            fields = line.split()
+            if len(fields) == 5 and fields[0] == principal and fields[3] == "#":
+                login = fields[4]
+                if not LOGIN_RE.match(login):
+                    return "", [f"the registry line for {principal} has "
+                                f"'{login}' where a GitHub login belongs"]
+                return login, []
+    return "", [f"{principal} verified the signature but is on no line of the "
+                "registry that names a login"]
 
 
 def check_path(path, existing):
@@ -229,6 +310,7 @@ def rewrite(text, stamp):
         "advisory: true",
         "source: community",
         f"submitted_by: {stamp['submitted_by']}",
+        f"submitted_ring: {stamp['submitted_ring']}",
         f"submission_ref: {stamp['submission_ref']}",
         f"ingested: {stamp['ingested']}",
     ]
@@ -241,7 +323,13 @@ def main():
     ap.add_argument("--reports-ref", required=True)
     ap.add_argument("--submission-ref", required=True)
     ap.add_argument("--submitted-by", required=True,
-                    help="a label such as a GitHub login; recorded, never verified")
+                    help="the GitHub login the gateway identified the caller as; "
+                         "checked against the login the signing key maps to")
+    ap.add_argument("--submission-ring", required=True, type=int,
+                    help="the invitation ring the gateway saw the caller on, 1-3")
+    ap.add_argument("--allowed-signers", required=True,
+                    help="the trusted-contributors file, as an SSH "
+                         "allowed_signers file")
     ap.add_argument("--out", required=True)
     ap.add_argument("--needles-file", default="",
                     help="internal strings, one per line; '-' for stdin")
@@ -263,11 +351,12 @@ def main():
               "checked for operator leaks", file=sys.stderr)
 
     label = args.submitted_by.strip()
-    # The label goes into a YAML scalar and a log line. Keep it to something
-    # that cannot break either, rather than quoting it and hoping.
-    label = re.sub(r"[^A-Za-z0-9._@+-]+", "-", label).strip("-")[:64]
-    if not label:
-        sys.exit("--submitted-by must contain at least one usable character")
+    if not LOGIN_RE.match(label):
+        sys.exit(f"--submitted-by must be a GitHub login, not '{label}'")
+    if args.submission_ring not in RINGS:
+        sys.exit(f"--submission-ring must be one of "
+                 + ", ".join(str(r) for r in RINGS)
+                 + f", not {args.submission_ring}")
 
     parse_frontmatter = load_parse_frontmatter()
 
@@ -276,6 +365,22 @@ def main():
         git(gitdir, "rev-parse", "--verify", f"{args.reports_ref}^{{commit}}")
     except RuntimeError as exc:
         sys.exit(f"ingest: {exc}")
+
+    # Who signed it, before anything the submission says is read. A signature
+    # that does not verify refuses the whole submission on its own, without
+    # any file being looked at: there is nobody to attribute it to.
+    login, sig_refusals = signer_login(gitdir, sha, args.allowed_signers)
+    if sig_refusals:
+        print("ingest: refusing the whole submission, "
+              f"{len(sig_refusals)} reason(s):")
+        for r in sig_refusals:
+            print(f"  {r}")
+        return 1
+    if login != label:
+        print("ingest: refusing the whole submission, 1 reason(s):")
+        print(f"  the gateway identified the caller as '{label}' but the key "
+              f"that signed the commit is registered to '{login}'")
+        return 1
 
     existing = {p for p in git(
         gitdir, "ls-tree", "-r", "-z", "--name-only", args.reports_ref
@@ -293,7 +398,8 @@ def main():
     when = args.now.strip() or datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
 
     stamp = {
-        "submitted_by": label,
+        "submitted_by": login,
+        "submitted_ring": args.submission_ring,
         "submission_ref": sha,
         "ingested": datetime.strptime(when, "%Y%m%d-%H%M%S")
                             .replace(tzinfo=timezone.utc)
