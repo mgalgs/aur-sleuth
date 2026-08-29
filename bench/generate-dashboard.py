@@ -480,6 +480,14 @@ def build_index_data(audits, judges, now=None, coverage_inputs=None, escalation_
             # Advisory reports are data, never verdicts: shown, and excluded
             # from every piece of state math below.
             "advisory": fm.get("advisory", "") == "true",
+            # Who said it. "community" is a report someone outside the
+            # pipeline submitted; the ingest stamps it advisory too, so the
+            # state math above already ignores it. This carries the stamp on
+            # to the page and to bench/audited-index.py, where "advisory" is
+            # not enough on its own: an advisory RUN counts as coverage for
+            # the next sweep, and a submission must never do that.
+            "source": fm.get("source", ""),
+            "submitted_by": fm.get("submitted_by", ""),
         })
 
     # Build set of re-audit filenames from judge data for backward compat
@@ -582,7 +590,8 @@ def build_index_data(audits, judges, now=None, coverage_inputs=None, escalation_
                 {"result": a["result"], "model": a["model"],
                  **({"model_alias": a["model_alias"]} if a.get("model_alias") else {}),
                  "reaudit": bool(a.get("triggered_by")),
-                 **({"advisory": True} if a.get("advisory") else {})}
+                 **({"advisory": True} if a.get("advisory") else {}),
+                 **({"source": a["source"]} if a.get("source") else {})}
                 for a in pkg_audits
             ],
             "judges": [{"verdict": j["correct_verdict"], "model": j.get("model", "unknown"),

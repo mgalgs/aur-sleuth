@@ -16,6 +16,12 @@ it: an advisory report is information, not an audit, so the package must
 stay a candidate for the real seats. An advisory run does pass it, so each
 recurring sweep digs deeper into the popular set instead of re-covering the
 same head forever.
+
+A community-submitted report never counts, --include-advisory or not. That
+flag says "this sweep already looked at it, move on", and a submission is
+not something this pipeline looked at. Letting one count would let anyone
+with a GitHub account keep a package off the free sweep and away from the
+paid seats by claiming to have audited it.
 """
 
 import json
@@ -36,6 +42,7 @@ def main():
         # only advisory looks stays a candidate for the real seats.
         covered = any(
             a.get("result") in REAL
+            and a.get("source") != "community"
             and (include_advisory or not a.get("advisory"))
             for a in audits
         )

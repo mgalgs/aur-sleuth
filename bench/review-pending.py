@@ -137,6 +137,8 @@ def summarise(gitdir, head, base):
     verdicts = Counter()
     by_package = defaultdict(list)
     flagged = []
+    # Community submissions in this push, counted per contributor label.
+    community = Counter()
     # Every generated text the push would publish: each audit report and each
     # judge file. The model's read covers all of them, not only the flagged
     # ones -- a package that talked the auditor into SAFE while getting it to
@@ -155,9 +157,17 @@ def summarise(gitdir, head, base):
             "result": result,
             "pkgver": fields.get("pkgver", ""),
             "text": text,
+            # Stamped by bench/ingest-submission.py on a report someone
+            # outside the pipeline submitted. The person about to publish
+            # should see that the sweep carries one before it goes out: it is
+            # the only thing on the branch this deployment did not produce.
+            "source": fields.get("source", ""),
+            "submitted_by": fields.get("submitted_by", ""),
         }
         by_package[entry["package"]].append(entry)
         texts.append(entry)
+        if entry["source"] == "community":
+            community[entry["submitted_by"] or "?"] += 1
         if result in FLAGGED:
             flagged.append(entry)
         elif result in DEGRADED:
@@ -189,6 +199,7 @@ def summarise(gitdir, head, base):
         "flagged": flagged,
         "texts": texts,
         "degraded": degraded,
+        "community": dict(community),
     }
 
 
@@ -544,6 +555,7 @@ def main():
         "verdicts": s["verdicts"],
         "degraded": s["degraded"],
         "flagged": len(s["flagged"]),
+        "community": s["community"],
         "llm": {"status": "skipped"},
     }
 
@@ -567,6 +579,12 @@ def main():
 
     if s["degraded"]:
         print(f"  no findings:    {s['degraded']} report(s) skipped or errored")
+
+    # One line per contributor whose submission is in this push. A submission
+    # is advisory and counts toward nothing, so it changes no number above --
+    # which is exactly why it needs saying out loud before publish.
+    for label, n in sorted(s["community"].items()):
+        print(f"  community:      {n} community report(s) from {label}")
 
     flagged = s["flagged"]
     if flagged:

@@ -126,8 +126,20 @@ find_packages() {
 }
 
 # --- Collect report file paths for a package ---
+#
+# A community-submitted report is never in this list, and so reaches neither
+# the pile the judge reads nor the fingerprint that decides whether a package
+# was already judged. Advisory reports do reach the pile, behind the untrusted
+# fence in the prompt; a submission is different in kind. Its body is text
+# anyone with a GitHub account chose, aimed at a model we pay for, so the
+# fence is defence in depth here and exclusion is the rule. The stamp comes
+# from bench/ingest-submission.py and cannot be talked out of the file.
 collect_reports() {
-    find "$REPORTS_DIR" -name "aur-sleuth-report-${1}.txt" -type f
+    local f
+    while IFS= read -r f; do
+        [[ "$(fm "$f" source)" == "community" ]] && continue
+        printf '%s\n' "$f"
+    done < <(find "$REPORTS_DIR" -name "aur-sleuth-report-${1}.txt" -type f)
 }
 
 # --- Has every one of these reports already been judged? ---

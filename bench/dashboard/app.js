@@ -967,6 +967,12 @@ function renderDetail(name, data) {
                 const summary = (pkg.audits || []).length === audits.length ? pkg.audits[i] : null;
                 const reaudit = summary ? !!summary.reaudit : !!fm.triggered_by;
                 const advisory = fm.advisory === 'true' || !!(summary && summary.advisory);
+                // A community submission is advisory like any other, and it
+                // gets the same glyph: no new readout, no new count. What is
+                // added is who said it, because that is the whole of what a
+                // submission is worth -- the model name in it is the
+                // contributor's claim, not something the pipeline saw.
+                const community = fm.source === 'community' || !!(summary && summary.source === 'community');
                 const cls = advisory ? 'sq-advisory'
                     : squareClass(result, 'audit', pkg) + (reaudit ? ' sq-reaudit' : '');
                 const bodyId = 'report-' + name.replace(/[^a-zA-Z0-9-]/g, '_') + '-' + i;
@@ -987,6 +993,9 @@ function renderDetail(name, data) {
                     + (advisory
                         ? '<span class="verdict dim">' + escapeHtml(result) + '</span><span class="meta">advisory — informational only, not a vote</span>'
                         : '<span class="verdict result-' + escapeAttr(result) + confirmedCls + '">' + escapeHtml(result) + '</span>')
+                    + (community
+                        ? '<span class="meta">community' + (fm.submitted_by ? ', submitted by ' + escapeHtml(fm.submitted_by) : '') + '</span>'
+                        : '')
                     + (reaudit ? '<span class="meta">second audit</span>' : '')
                     + '<span class="meta">' + escapeHtml(meta) + '</span>'
                     + '<button type="button" class="link-btn" data-toggle="' + escapeAttr(bodyId) + '">Full report</button>'
