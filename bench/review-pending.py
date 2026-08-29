@@ -147,8 +147,10 @@ def summarise(gitdir, head, base):
     verdicts = Counter()
     by_package = defaultdict(list)
     flagged = []
-    # Community submissions in this push, counted per contributor label.
+    # Community submissions in this push, counted per contributor label, and
+    # how many of each contributor's carry a flagged result.
     community = Counter()
+    community_flagged = Counter()
     # Every generated text the push would publish: each audit report and each
     # judge file. The model's read covers all of them, not only the flagged
     # ones -- a package that talked the auditor into SAFE while getting it to
@@ -174,40 +176,45 @@ def summarise(gitdir, head, base):
             "submitted_by": fields.get("submitted_by", ""),
         }
         by_package[entry["package"]].append(entry)
+        # A submission IS read here. A registered contributor's report is the
+        # same trust tier as an advisory one, so it goes into `texts` exactly
+        # like the pipeline's own free-model reports do, behind the same
+        # untrusted-data fence in ask_model()'s prompt -- and there is a
+        # reason beyond consistency to want it read: this read looks for the
+        # operator's own secrets in text about to be published, and a
+        # submission is the one thing in the push this deployment did not
+        # write.
+        #
+        # What it still moves nothing of is the RESULT-shaped figures, and
+        # that line is not about trust at all -- it is about who ran what:
+        #
+        #   `audit_reports` counts FILES IN THE PUSH, and a submission is one
+        #   of the things being counted -- same as the page's `results`
+        #   counter, which deliberately stays on all audits.
+        #
+        #   `verdicts`, `flagged` and `degraded` say what THIS DEPLOYMENT'S
+        #   OWN READS came back with. `verdicts` is the word a submission
+        #   must never become. `degraded` is a health figure about runs this
+        #   pipeline made; a submission that errored is not this deployment
+        #   degrading. `flagged`'s length goes into REVIEW_JSON and out to
+        #   the public page, where it is read as this deployment's count of
+        #   its own concerns.
+        #
+        # The arithmetic that follows is deliberate and is why the community
+        # line prints at all:
+        #
+        #   audit_reports == sum(verdicts) + sum(community)
+        #
+        # `flagged` is the one of the three a person could argue either way,
+        # so the human-facing summary does not hide behind it: the community
+        # line names how many of a contributor's reports carry a flagged
+        # result, which is what somebody about to publish actually needs.
+        # The public figure stays this deployment's own.
         if entry["source"] == "community":
-            # Counted for the person publishing, and NOT put in `texts`. A
-            # community report never reaches a model in this pipeline, and
-            # `texts` is exactly what the advisory read below sends to one --
-            # so the exclusion the judge already makes has to be made here
-            # too. Its body is text a contributor chose; the fence around the
-            # prompt is defence in depth, not the rule.
             community[entry["submitted_by"] or "?"] += 1
-            # And it moves none of the three result-shaped figures below.
-            # The line drawn here is the one the whole tier rests on:
-            #
-            #   `audit_reports` counts FILES IN THE PUSH, and a submission is
-            #   one of the things being counted -- same as the page's
-            #   `results` counter, which deliberately stays on all audits.
-            #
-            #   `verdicts`, `flagged` and `degraded` are RESULT-shaped: they
-            #   say what came back, and only this deployment's own reads are
-            #   entitled to say that. `flagged` is the sharpest of the three
-            #   -- it is the "Reports worth a look" list, and its length goes
-            #   into REVIEW_JSON and out to the public page as `flagged`, so
-            #   a community `unsafe` there would be a contributor's claim
-            #   published as this deployment's concern. `verdicts` is the
-            #   word a submission must never become. `degraded` is a health
-            #   figure about runs this pipeline made; a submission that
-            #   errored is not this deployment degrading.
-            #
-            # The arithmetic that follows is deliberate and is why the
-            # community line prints at all:
-            #
-            #   audit_reports == sum(verdicts) + sum(community)
-            #
-            # docs/SUBMITTING-REPORTS.md states the consequence in the
-            # contributor's words ("A community `unsafe` puts nothing on the
-            # flagged list"); this is where that is true.
+            if result in FLAGGED:
+                community_flagged[entry["submitted_by"] or "?"] += 1
+            texts.append(entry)
             continue
         texts.append(entry)
         verdicts[result] += 1
@@ -243,6 +250,7 @@ def summarise(gitdir, head, base):
         "texts": texts,
         "degraded": degraded,
         "community": dict(community),
+        "community_flagged": dict(community_flagged),
     }
 
 
@@ -599,6 +607,7 @@ def main():
         "degraded": s["degraded"],
         "flagged": len(s["flagged"]),
         "community": s["community"],
+        "community_flagged": s["community_flagged"],
         "llm": {"status": "skipped"},
     }
 
@@ -624,13 +633,18 @@ def main():
         print(f"  no findings:    {s['degraded']} report(s) skipped or errored")
 
     # One line per contributor whose submission is in this push. A submission
-    # is advisory and counts toward nothing, so it moves no result-shaped
-    # number above -- not the verdict breakdown, not "no findings", and not
-    # the flagged list below. It is inside `audit reports`, which counts what
-    # the push carries. Being invisible everywhere else is exactly why it
-    # needs saying out loud before publish.
+    # moves no result-shaped number above -- not the verdict breakdown, not
+    # "no findings", and not the flagged list below -- because those say what
+    # this deployment's own reads came back with. It is inside `audit
+    # reports`, which counts what the push carries. Being absent from the
+    # rest is exactly why it needs saying out loud before publish, and why
+    # the line carries its own flagged count: a person about to publish a
+    # contributor's `unsafe` should not have to go looking for it just
+    # because the public figure beside it is this deployment's own.
     for label, n in sorted(s["community"].items()):
-        print(f"  community:      {n} community report(s) from {label}")
+        nf = s["community_flagged"].get(label, 0)
+        note = f", {nf} flagged" if nf else ""
+        print(f"  community:      {n} community report(s) from {label}{note}")
 
     flagged = s["flagged"]
     if flagged:
