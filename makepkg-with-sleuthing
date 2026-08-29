@@ -21,11 +21,14 @@ for arg in "$@"; do
             # build nothing, so a cluster containing either must skip the
             # audit just like the bare flags do.
             rest="${arg#-}"
-            # -p takes an argument that consumes the rest of the cluster
-            # (getopt: -pog is -p with the argument "og", a real build with a
-            # custom script), so only flags before the first p can be o or g.
+            # -p (build script) and -D (directory) take an argument that
+            # consumes the rest of the cluster (getopt: -Dog is -D with the
+            # argument "og", a real build), so only flags before the first
+            # p or D can be o or g. makepkg's OPT_SHORT is
+            # AcCdD:efFghiLmop:rRsSV -- D: and p: are the only two that
+            # take an argument.
             case "$rest" in
-                *p*) rest="${rest%%p*}" ;;
+                *[pD]*) rest="${rest%%[pD]*}" ;;
             esac
             case "$rest" in
                 *o*|*g*) skip=yes ;;
