@@ -152,6 +152,7 @@ Set as environment variables on the container.
 | `AUR_SLEUTH_SUBMISSION_REF` | ingest | — | Required; the branch inside the bundle |
 | `AUR_SLEUTH_SUBMITTED_BY` | ingest | — | Required; the GitHub login the gateway identified the caller as. Checked against the login the signing key maps to, and refused if they disagree |
 | `AUR_SLEUTH_SUBMISSION_RING` | ingest | — | Required; the invitation ring the gateway saw the caller on, 1-3. Recorded as `submitted_ring` |
+| `AUR_SLEUTH_SUBMISSION_RESULT` | ingest | — | Optional; a path the stage writes what it decided to, on every exit. One JSON object -- `accepted`, `reasons`, `paths`, `commit`, `finished` -- written tmp-and-rename. It is the contributor's only feedback channel: they upload to an endpoint that answers at once, and this stage runs later in a Job whose log they never see, so a refusal that left no file would be indistinguishable from a Job that never ran |
 | `AUR_SLEUTH_REVIEW_MODEL` | review | `deepseek/deepseek-v4-flash` | The model for the advisory read |
 | `AUR_SLEUTH_REVIEW_WORKERS` | review | `16` | Read requests in flight; clamped to 1..64 |
 | `AUR_SLEUTH_REVIEW_BATCH` | review | `8` | Reports per read request; clamped to 1..32 |

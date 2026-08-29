@@ -146,6 +146,17 @@ only with a version bump.
   a writer, so it serialises against `prepare`, `audit`, `quarantine`,
   `benchmark` and `screen` like every other writer, and a refused bundle is
   kept with its reasons rather than deleted.
+
+  **Telling the contributor.** The drain also passes
+  `AUR_SLEUTH_SUBMISSION_RESULT`, a path beside the spooled bundle, and the
+  stage writes one JSON object there on every exit -- `accepted`, `reasons`,
+  `paths`, `commit`, `finished` -- refusals included. That file is the whole
+  of the feedback channel: the endpoint answered the upload long before this
+  ran, and the Job's log is the maintainer's, not the contributor's. So the
+  endpoint serves the file back for the bundle it belongs to, and until it
+  exists the honest answer is "not judged yet" rather than a guess. It is
+  written tmp-and-rename, so an endpoint polling the path either finds the
+  whole object or no file at all.
 - The "seen before" mark on a repeated concern lives in the reader, not in
   `bench/review-pending.py`, and it has to: the review Job mounts the volume
   read-only, so the script can neither keep its own last answer nor reach the

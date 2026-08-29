@@ -102,7 +102,10 @@ REVIEW_JSON_IN="${AUR_SLEUTH_REVIEW_JSON:-}"
 AUR_METADATA_URL="https://aur.archlinux.org/packages-meta-v1.json.gz"
 
 log() { echo "[$(date -u '+%H:%M:%S')] [$MODE] $*"; }
-die() { echo "[$MODE] ERROR: $*" >&2; exit 1; }
+# The message is kept as well as printed. A stage log is this deployment's;
+# DIE_REASON is what a stage can hand to somebody outside it -- today, the
+# ingest's result file, which is a contributor's only way to hear why.
+die() { DIE_REASON="$*"; echo "[$MODE] ERROR: $*" >&2; exit 1; }
 
 # The object store is created by this image but lives on a shared volume, so its
 # owner is not guaranteed to match the running UID. Declare it safe through the
@@ -1391,6 +1394,80 @@ PY
 
 # --- ingest -------------------------------------------------------------------
 
+# The contributor's only feedback channel.
+#
+# A submission is uploaded to an endpoint that spools it and answers at once;
+# the stage that judges it runs later, in a Job the contributor never sees and
+# whose log they cannot read. So when AUR_SLEUTH_SUBMISSION_RESULT names a
+# path, the ingest writes what it decided there, and the endpoint serves that
+# file back. One JSON object: whether it was accepted, why not if it was not,
+# what landed, the commit it landed as, and when the stage finished.
+#
+# It is written on EVERY exit, refusals included. A refusal that leaves no
+# file is indistinguishable from a Job that never ran, and the contributor
+# would be left with a report they cannot fix and no reason to.
+#
+# Which is why the trap is armed at the very top of do_ingest, before the
+# input check and before the archive lock: those are the two die() paths a
+# trap armed any later would miss, and "another run holds the lock" is exactly
+# the outcome a contributor should be told to send again after.
+#
+# tmp-and-rename, because the endpoint may be polling the path: a reader sees
+# the whole object or no file at all, never half of one.
+INGEST_RESULT_PATH=""
+INGEST_RESULT_PATHS=()
+INGEST_RESULT_REASONS=()
+INGEST_RESULT_COMMIT=""
+
+write_ingest_result() {
+    local status="$1"
+    [[ -n "$INGEST_RESULT_PATH" ]] || return 0
+
+    local accepted=true
+    (( status == 0 )) || accepted=false
+    local reasons=()
+    if [[ "$accepted" == false ]]; then
+        # The refusal reasons the script printed, if it got that far; else the
+        # message die() was given. Never an empty list on a refusal: a
+        # contributor reading `"reasons": []` learns nothing at all.
+        if (( ${#INGEST_RESULT_REASONS[@]} > 0 )); then
+            reasons=("${INGEST_RESULT_REASONS[@]}")
+        elif [[ -n "${DIE_REASON:-}" ]]; then
+            reasons=("$DIE_REASON")
+        else
+            reasons=("the ingest stage failed before it could say why (exit $status)")
+        fi
+    fi
+
+    # json.dumps rather than printf: every value here is either untrusted or a
+    # path, and a hand-built object is one quote away from unparseable.
+    python3 - "$INGEST_RESULT_PATH" "$accepted" "$INGEST_RESULT_COMMIT" \
+        "${#reasons[@]}" \
+        ${reasons[@]+"${reasons[@]}"} \
+        ${INGEST_RESULT_PATHS[@]+"${INGEST_RESULT_PATHS[@]}"} <<'PYEOF' \
+        || echo "[$MODE] WARNING: could not write $INGEST_RESULT_PATH" >&2
+import datetime, json, os, sys
+
+path, accepted, commit, n = sys.argv[1], sys.argv[2], sys.argv[3], int(sys.argv[4])
+rest = sys.argv[5:]
+# dict(), not a literal: bench/test-ingest.sh lifts a function out of this
+# file with `sed -n '/^name()/,/^}/p'`, and a `}` in the first column here
+# would end the lift in the middle of the heredoc.
+obj = dict(
+    accepted=(accepted == "true"),
+    reasons=rest[:n],
+    paths=rest[n:],
+    commit=(commit or None),
+    finished=datetime.datetime.now(datetime.timezone.utc)
+                     .strftime("%Y-%m-%dT%H:%M:%SZ"),
+)
+tmp = "%s.tmp.%d" % (path, os.getpid())
+with open(tmp, "w", encoding="utf-8") as f:
+    f.write(json.dumps(obj) + "\n")
+os.replace(tmp, path)
+PYEOF
+}
+
 # Take a community-submitted report onto the reports branch, as an advisory
 # report: the same tier one of the pipeline's own untrusted free models writes
 # into, so a judge and the review stage's advisory read both see it, and
@@ -1423,6 +1500,14 @@ PY
 #   - The commit is made with plumbing onto the current head, fast-forward
 #     only, under the archive lock: this stage is a writer, like quarantine.
 do_ingest() {
+    # Armed first, before anything that can die: the input check below and the
+    # archive lock after it are both refusals a contributor has to hear about,
+    # and a trap set later would miss exactly those two.
+    INGEST_RESULT_PATH="${AUR_SLEUTH_SUBMISSION_RESULT:-}"
+    if [[ -n "$INGEST_RESULT_PATH" ]]; then
+        trap 'write_ingest_result "$?"' EXIT
+    fi
+
     # The submission arrives over the maintainer's private network: the
     # endpoint behind the gateway spools each accepted upload as a git bundle
     # on the volume, and a bundle path is a URL git fetches like any other. So
@@ -1480,6 +1565,12 @@ do_ingest() {
     needles="$(mktemp)"
     internal_string_needles > "$needles"
 
+    # Through tee, so the reasons reach the stage log as they always have AND
+    # the result file the contributor reads. They are the script's own words:
+    # a reason invented here would be a second implementation of the rules,
+    # and it would drift from the one that decided.
+    local said
+    said="$(mktemp)"
     if ! python3 "$SRC_DIR/bench/ingest-submission.py" \
             --git-dir "$repo" \
             --reports-ref "refs/heads/$REPORTS_BRANCH" \
@@ -1488,11 +1579,14 @@ do_ingest() {
             --submission-ring "$ring" \
             --allowed-signers "$signers" \
             --out "$out" \
-            --needles-file "$needles"; then
-        rm -rf "$out" "$needles" "$signers"
+            --needles-file "$needles" | tee "$said"; then
+        while IFS= read -r line; do
+            INGEST_RESULT_REASONS+=("$line")
+        done < <(sed -n 's/^  //p' "$said")
+        rm -rf "$out" "$needles" "$signers" "$said"
         die "the submission was refused; nothing was written to the store"
     fi
-    rm -f "$needles" "$signers"
+    rm -f "$needles" "$signers" "$said"
 
     # Everything the script accepted, relative to $out. It only ever writes
     # <pkg>/<name>.md, and the publish gate is what that shape is for.
@@ -1500,6 +1594,7 @@ do_ingest() {
     while IFS= read -r -d '' f; do
         files+=("${f#"$out"/}")
     done < <(find "$out" -type f -print0)
+    INGEST_RESULT_PATHS=(${files[@]+"${files[@]}"})
     if (( ${#files[@]} == 0 )); then
         rm -rf "$out"
         log "Nothing to ingest"
@@ -1530,6 +1625,7 @@ do_ingest() {
     commit="$("${g[@]}" commit-tree "$tree" -p "$head" \
         -m "ingest: ${#files[@]} community report(s) from $who, ring $ring ($what)")"
     "${g[@]}" update-ref "refs/heads/$REPORTS_BRANCH" "$commit" "$head"
+    INGEST_RESULT_COMMIT="$commit"
     rm -rf "$out"
 
     log "Ingested ${#files[@]} community report(s) from $who at ${commit:0:12}:"

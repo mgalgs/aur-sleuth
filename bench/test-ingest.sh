@@ -861,7 +861,12 @@ fi
 
 echo "== the ingest stage commits onto the store, fast-forward only =="
 log() { $QUIET || echo "        [stage] $*"; }
-die() { echo "        [stage] ERROR: $*" >&2; exit 1; }
+# die() is LIFTED rather than stubbed: it is what records DIE_REASON, and the
+# result-file checks below are about what a contributor is told when a stage
+# dies. A stub here would be the test writing the answer it then asserts.
+eval "$(sed -n '/^die()/p' "$ENTRYPOINT")"
+eval "$(sed -n '/^INGEST_RESULT_PATH=""/,/^INGEST_RESULT_COMMIT=""/p' "$ENTRYPOINT")"
+eval "$(sed -n '/^write_ingest_result()/,/^}/p' "$ENTRYPOINT")"
 eval "$(sed -n '/^sanitize_store()/,/^}/p' "$ENTRYPOINT")"
 eval "$(sed -n '/^internal_string_needles()/,/^}/p' "$ENTRYPOINT")"
 eval "$(sed -n '/^stage_reports_repo()/,/^}/p' "$ENTRYPOINT")"
@@ -922,8 +927,14 @@ stage() {
       AUR_SLEUTH_SUBMISSION_REF="$1" \
       AUR_SLEUTH_SUBMITTED_BY="${2:-octocat}" \
       AUR_SLEUTH_SUBMISSION_RING="${3:-3}" \
+      AUR_SLEUTH_SUBMISSION_RESULT="${RESULT_PATH:-}" \
       do_ingest )
 }
+RESULT_PATH=""
+
+# jq is not a dependency of this repository, so the result file is read with
+# python3, which the stage itself already needs.
+res() { python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1]))[sys.argv[2]]))' "$1" "$2"; }
 
 before="$(git --git-dir="$GIT_STORE" rev-parse refs/heads/audit-reports)"
 if stage refs/heads/good > "$tmp/stage.log" 2>&1; then
@@ -992,6 +1003,116 @@ if (( rc != 0 )); then
     ok "the stage refuses to write under a held archive lock"
 else
     bad "the stage wrote under a held archive lock"
+fi
+
+# --- the result file ----------------------------------------------------------
+
+# AUR_SLEUTH_SUBMISSION_RESULT is a contributor's only feedback channel: they
+# upload to an endpoint that answers at once, and the stage that judges the
+# submission runs later in a Job whose log they never see. So the three checks
+# here are the three ways the stage can end -- accepted, refused by the rules,
+# and dead before it read anything -- and all three have to leave a file.
+echo "== the stage writes what it decided, on every exit =="
+
+d="$tmp/s-result-good"; mkdir -p "$d/firefox"
+report firefox openai/gpt-5.4 safe > "$d/firefox/mine.md"
+mkbranch refs/heads/result-good "$BASE" "$d"
+
+RESULT_PATH="$tmp/result-accepted.json"
+rm -f "$RESULT_PATH"
+if stage refs/heads/result-good > "$tmp/stage-res.log" 2>&1 && [[ -f "$RESULT_PATH" ]]; then
+    ok "an accepted submission leaves a result file"
+    head_now="$(git --git-dir="$GIT_STORE" rev-parse refs/heads/audit-reports)"
+    if [[ "$(res "$RESULT_PATH" accepted)" == "true" ]]; then
+        ok "  accepted: true"
+    else
+        bad "an accepted submission should say accepted: true"
+    fi
+    if [[ "$(res "$RESULT_PATH" commit)" == "\"$head_now\"" ]]; then
+        ok "  commit: the commit the report landed as"
+    else
+        bad "the result's commit is not the head the stage wrote: $(res "$RESULT_PATH" commit) vs $head_now"
+    fi
+    if [[ "$(res "$RESULT_PATH" paths)" == *firefox/*-community-openai-gpt-5.4.md* ]]; then
+        ok "  paths: the name the ingest archived it under"
+    else
+        bad "the result's paths are not the archived path: $(res "$RESULT_PATH" paths)"
+    fi
+    if [[ "$(res "$RESULT_PATH" reasons)" == "[]" ]]; then
+        ok "  reasons: empty, because there were none"
+    else
+        bad "an accepted submission should carry no reasons"
+    fi
+    if [[ "$(res "$RESULT_PATH" finished)" =~ ^\"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z\"$ ]]; then
+        ok "  finished: an ISO timestamp"
+    else
+        bad "the result's finished is not an ISO timestamp: $(res "$RESULT_PATH" finished)"
+    fi
+else
+    bad "the stage should accept and leave a result file: $(cat "$tmp/stage-res.log")"
+fi
+
+# The refusal reasons are the ingest script's own words, not a sentence this
+# stage made up: one implementation of the rules, one wording for them.
+d="$tmp/s-result-bad"; mkdir -p "$d/vivaldi"
+printf '{"correct_verdict":"safe"}\n' > "$d/vivaldi/20260828-9-judge.json"
+mkbranch refs/heads/result-bad "$BASE" "$d"
+RESULT_PATH="$tmp/result-refused.json"
+rm -f "$RESULT_PATH"
+before_ref="$(git --git-dir="$GIT_STORE" rev-parse refs/heads/audit-reports)"
+if ! stage refs/heads/result-bad > "$tmp/stage-res2.log" 2>&1 && [[ -f "$RESULT_PATH" ]]; then
+    ok "a refused submission leaves a result file"
+    if [[ "$(res "$RESULT_PATH" accepted)" == "false" ]]; then
+        ok "  accepted: false"
+    else
+        bad "a refused submission should say accepted: false"
+    fi
+    if [[ "$(res "$RESULT_PATH" reasons)" == *20260828-9-judge.json* ]]; then
+        ok "  reasons: the script's own words, naming the file it refused"
+    else
+        bad "the refusal reasons should name the refused path: $(res "$RESULT_PATH" reasons)"
+    fi
+    if [[ "$(res "$RESULT_PATH" commit)" == "null" && "$(res "$RESULT_PATH" paths)" == "[]" ]]; then
+        ok "  commit: null, paths: empty -- nothing landed"
+    else
+        bad "a refusal should record no commit and no paths"
+    fi
+else
+    bad "the stage should refuse and leave a result file: $(cat "$tmp/stage-res2.log")"
+fi
+if [[ "$(git --git-dir="$GIT_STORE" rev-parse refs/heads/audit-reports)" == "$before_ref" ]]; then
+    ok "  and the branch did not move"
+else
+    bad "a refused submission moved the branch"
+fi
+
+# The one the trap has to be armed before: this die runs before the stage has
+# fetched anything, so a trap set any later in do_ingest would leave the
+# contributor with silence for the one outcome that means "send it again".
+RESULT_PATH="$tmp/result-locked.json"
+rm -f "$RESULT_PATH"
+rc=0
+( exec 8>"$DATA_DIR/bulk-audit/archive.lock"; flock -n 8; stage refs/heads/result-good ) \
+    >/dev/null 2>&1 || rc=$?
+if (( rc != 0 )) && [[ -f "$RESULT_PATH" ]] \
+   && [[ "$(res "$RESULT_PATH" accepted)" == "false" ]] \
+   && [[ "$(res "$RESULT_PATH" reasons)" == *"archive lock"* ]]; then
+    ok "the lock-held die path writes a refusal naming the lock"
+else
+    bad "a die under the held archive lock left no readable result"
+fi
+
+# Unset, nothing is written: the endpoint is optional and a plain operator run
+# should not have to name a path it will never read.
+RESULT_PATH=""
+d="$tmp/s-result-none"; mkdir -p "$d/curl"
+report curl openai/gpt-5.4 safe > "$d/curl/mine.md"
+mkbranch refs/heads/result-none "$BASE" "$d"
+if stage refs/heads/result-none >/dev/null 2>&1 \
+   && [[ ! -e "$tmp/result-accepted.json.tmp" ]]; then
+    ok "with AUR_SLEUTH_SUBMISSION_RESULT unset the stage writes no result file"
+else
+    bad "the stage should run normally with no result path set"
 fi
 
 echo
