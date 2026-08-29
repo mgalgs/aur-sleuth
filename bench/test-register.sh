@@ -373,6 +373,17 @@ if awk '/^permissions:/{p=1;next} p&&/^[^ ]/{p=0} p' "$WF" \
 else
     ok "the workflow's permissions grant no contents: write"
 fi
+# And it must grant contents: READ. Naming any scope in a permissions block
+# sets every unnamed scope to none, so a block that says only
+# `pull-requests: write` denies the checkout of master and the compare and
+# contents API calls the collect step makes -- every registration then dies
+# red before a single rule runs, and the previous check reads as a pass.
+if awk '/^permissions:/{p=1;next} p&&/^[^ ]/{p=0} p' "$WF" \
+        | grep -q 'contents: *read'; then
+    ok "and it grants contents: read, which the checkout and the API calls need"
+else
+    bad "the workflow must grant contents: read, or its own checkout is denied"
+fi
 if grep -q 'ref: master' "$WF"; then
     ok "the checkout is master, never the pull request's head"
 else
