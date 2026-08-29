@@ -870,6 +870,9 @@ eval "$(sed -n '/^write_ingest_result()/,/^}/p' "$ENTRYPOINT")"
 eval "$(sed -n '/^sanitize_store()/,/^}/p' "$ENTRYPOINT")"
 eval "$(sed -n '/^internal_string_needles()/,/^}/p' "$ENTRYPOINT")"
 eval "$(sed -n '/^INGEST_FETCH_TIMEOUT=/p' "$ENTRYPOINT")"
+eval "$(sed -n '/^INGEST_MAX_BUNDLE_BYTES=/p' "$ENTRYPOINT")"
+eval "$(sed -n '/^INGEST_MAX_FILES=/p' "$ENTRYPOINT")"
+eval "$(sed -n '/^INGEST_MAX_FILE_BYTES=/p' "$ENTRYPOINT")"
 eval "$(sed -n '/^fetch_failure_note()/,/^}/p' "$ENTRYPOINT")"
 eval "$(sed -n '/^new_stage_repo()/,/^}/p' "$ENTRYPOINT")"
 eval "$(sed -n '/^borrow_store()/,/^}/p' "$ENTRYPOINT")"
@@ -1117,6 +1120,87 @@ else
 fi
 kill "$stall_pid" 2>/dev/null || true
 wait "$stall_pid" 2>/dev/null || true
+
+echo "== an oversized spooled bundle is refused before it is fetched =="
+# The per-file caps below (--max-files, --max-bytes) are applied to blobs the
+# script reads AFTER the fetch has finished, so on their own a 2 GB bundle is
+# unpacked in full first -- into the container's own writable layer, since
+# nothing sets TMPDIR -- and only then refused for being over 256 KiB a file.
+# One stat() before the fetch is what turns that into a refusal line.
+if [[ "$(env -u AUR_SLEUTH_SUBMISSION_MAX_BYTES bash -c \
+            "$(grep '^INGEST_MAX_BUNDLE_BYTES=' "$ENTRYPOINT"); echo \"\$INGEST_MAX_BUNDLE_BYTES\"")" \
+      == "4194304" ]]; then
+    ok "the bundle cap defaults to 4 MiB, and AUR_SLEUTH_SUBMISSION_MAX_BYTES sets it"
+else
+    bad "INGEST_MAX_BUNDLE_BYTES should default to 4194304"
+fi
+
+# A real bundle, well under the cap: the normal case the endpoint spools, and
+# the thing the cap must not break.
+d="$tmp/s-bundle"; mkdir -p "$d/chromium"
+report chromium openai/gpt-5.4 safe > "$d/chromium/from-a-bundle.md"
+mkbranch refs/heads/bundled "$BASE" "$d"
+git --git-dir="$REPO" bundle create "$tmp/ok.bundle" refs/heads/bundled >/dev/null 2>&1
+head_before="$(git --git-dir="$GIT_STORE" rev-parse refs/heads/audit-reports)"
+rc=0
+( AUR_SLEUTH_SUBMISSION_URL="$tmp/ok.bundle" \
+  AUR_SLEUTH_SUBMISSION_REF=refs/heads/bundled \
+  AUR_SLEUTH_SUBMITTED_BY=octocat \
+  AUR_SLEUTH_SUBMISSION_RING=3 do_ingest ) > "$tmp/bundle-ok.log" 2>&1 || rc=$?
+if (( rc == 0 )) && [[ "$(git --git-dir="$GIT_STORE" rev-parse refs/heads/audit-reports)" != "$head_before" ]]; then
+    ok "a bundle under the cap is fetched and ingested as before"
+else
+    bad "the cap should not touch an ordinary bundle: $(cat "$tmp/bundle-ok.log")"
+fi
+
+# The same bundle, padded past the cap. The refusal has to name the size
+# rather than the fetch: "could not fetch" here would mean the stat never ran
+# and git had already unpacked whatever was in the file.
+head_before="$(git --git-dir="$GIT_STORE" rev-parse refs/heads/audit-reports)"
+cp "$tmp/ok.bundle" "$tmp/big.bundle"
+head -c 200000 /dev/zero >> "$tmp/big.bundle"
+rc=0
+( INGEST_MAX_BUNDLE_BYTES=1024 \
+  AUR_SLEUTH_SUBMISSION_URL="$tmp/big.bundle" \
+  AUR_SLEUTH_SUBMISSION_REF=refs/heads/bundled \
+  AUR_SLEUTH_SUBMITTED_BY=octocat \
+  AUR_SLEUTH_SUBMISSION_RING=3 do_ingest ) > "$tmp/bundle-big.log" 2>&1 || rc=$?
+if (( rc != 0 )) && grep -q 'over the 1024-byte cap' "$tmp/bundle-big.log" \
+   && ! grep -q 'could not fetch' "$tmp/bundle-big.log"; then
+    ok "  and one over it is refused by size, not by a failed fetch"
+else
+    bad "an oversized bundle should be refused unfetched: $(cat "$tmp/bundle-big.log")"
+fi
+if [[ "$(git --git-dir="$GIT_STORE" rev-parse refs/heads/audit-reports)" == "$head_before" ]]; then
+    ok "  and the branch did not move"
+else
+    bad "an oversized bundle moved the branch"
+fi
+
+# The caps the script applies to what it reads. They were compiled-in
+# defaults the stage passed neither of, which left 200 files x 256 KiB true
+# but unsayable for a deployment that has to host the branch.
+if [[ "$INGEST_MAX_FILES" == "200" && "$INGEST_MAX_FILE_BYTES" == "262144" ]]; then
+    ok "the per-file caps keep the script's own numbers as their defaults"
+else
+    bad "the per-file caps should default to 200 / 262144, got $INGEST_MAX_FILES / $INGEST_MAX_FILE_BYTES"
+fi
+head_before="$(git --git-dir="$GIT_STORE" rev-parse refs/heads/audit-reports)"
+d="$tmp/s-toobig"; mkdir -p "$d/firefox"
+report firefox openai/gpt-5.4 safe > "$d/firefox/over-the-file-cap.md"
+mkbranch refs/heads/toobig "$BASE" "$d"
+rc=0
+( INGEST_MAX_FILE_BYTES=10 stage refs/heads/toobig ) > "$tmp/filecap.log" 2>&1 || rc=$?
+if (( rc != 0 )) && grep -q 'over the 10-byte limit' "$tmp/filecap.log"; then
+    ok "  and the stage passes them through: the script refuses at the number it was given"
+else
+    bad "AUR_SLEUTH_SUBMISSION_MAX_FILE_BYTES should reach the script: $(cat "$tmp/filecap.log")"
+fi
+if [[ "$(git --git-dir="$GIT_STORE" rev-parse refs/heads/audit-reports)" == "$head_before" ]]; then
+    ok "  and the branch did not move"
+else
+    bad "a submission over the per-file cap moved the branch"
+fi
 
 # --- the result file ----------------------------------------------------------
 

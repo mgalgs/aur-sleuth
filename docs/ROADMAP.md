@@ -114,9 +114,21 @@ only with a version bump.
   **The endpoint.** Behind a gateway that authenticates the caller by their
   node: it takes the identity and the invitation ring from the gateway's
   headers, accepts a POSTed git bundle, and spools it on the volume the
-  container reads, one file per upload. It never merges anything itself. A
-  per-user rate limit, and -- the part the client is already written for -- a
-  **global cap on concurrent clients**, so the maintainer's home network stays
+  container reads, one file per upload. It never merges anything itself.
+
+  It refuses a request body over N bytes -- 4 MiB is ample, a submission is
+  one report -- with `413`, **before writing anything to the spool**, and
+  refuses a body whose first bytes are not a git bundle signature. It never
+  runs git on an upload: deciding whether the bytes are a real bundle is the
+  `ingest` stage's job, behind the writer lock, in a throwaway repository.
+  The stage caps the spooled file too
+  (`AUR_SLEUTH_SUBMISSION_MAX_BYTES`, and the per-file caps behind it), but
+  that cap runs when the bytes are already on the volume; this is the only
+  one that keeps them off it. Size the two together, and size the spool
+  volume for N times the concurrency cap below.
+
+  A per-user rate limit, and -- the part the client is already written for --
+  a **global cap on concurrent clients**, so the maintainer's home network stays
   usable: over the cap it either queues the client or answers `429`/`503` with
   a `Retry-After`, and never simply drops the connection. That header must be
   **delta-seconds**, not the HTTP-date form: the client reads only the numeric

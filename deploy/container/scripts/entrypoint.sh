@@ -1540,6 +1540,36 @@ PYEOF
 # worth waiting on.
 INGEST_FETCH_TIMEOUT="${AUR_SLEUTH_FETCH_TIMEOUT:-60}"
 
+# The largest spooled bundle the stage will even open. Four MiB is three
+# orders of magnitude above the one ~8 KiB report a real submission carries.
+#
+# This is the cheap half of a two-part cap, and it is the half that arrives
+# late. `bench/ingest-submission.py` applies --max-bytes and --max-files to
+# blobs it reads AFTER the fetch has finished, so a 2 GB bundle is unpacked in
+# full -- into the container's own writable layer, since nothing sets TMPDIR
+# -- and only then refused for being over 256 KiB a file. On a plain docker
+# host that fills /var/lib/docker and takes the neighbours with it; under
+# Kubernetes the kubelet evicts the pod, which at least leaves the store
+# untouched, but the stage log ends mid-fetch because the kill is not its own.
+# One stat() turns that whole night into one refusal line.
+#
+# It only applies when the URL is a path that exists, which is the normal
+# case: the endpoint spools each upload as a file on the volume. A remote URL
+# has no size to read without fetching it, and the fetch is what we are trying
+# to avoid -- so the real cap for that case is the endpoint's own 413, in
+# docs/ROADMAP.md, which is the only one that keeps the bytes off the volume.
+INGEST_MAX_BUNDLE_BYTES="${AUR_SLEUTH_SUBMISSION_MAX_BYTES:-4194304}"
+
+# The other half of the cap, applied by bench/ingest-submission.py to the
+# blobs it reads: how many files one submission may carry and how large each
+# may be. The script has had these as compiled-in defaults since it was
+# written and the stage passed neither, which left the numbers true but
+# unsayable -- 200 files at 256 KiB is 51 MB from a single bundle, onto a
+# branch every `prepare` clones forever. Passed explicitly so the deployment
+# that has to live with that arithmetic can change it.
+INGEST_MAX_FILES="${AUR_SLEUTH_SUBMISSION_MAX_FILES:-200}"
+INGEST_MAX_FILE_BYTES="${AUR_SLEUTH_SUBMISSION_MAX_FILE_BYTES:-262144}"
+
 # `timeout` exits 124 when it fired, and "the peer went silent" is a different
 # problem with a different fix from "that URL is wrong". Say which.
 fetch_failure_note() {
@@ -1590,6 +1620,15 @@ do_ingest() {
     # read-compare-update of the branch ref. Both are local and cheap, which
     # leaves the ingest holding the lock for about as long as `quarantine`
     # does -- the stage this one says it is modelled on.
+    # Before the fetch, because after it the bytes are already on disk.
+    if [[ -f "$url" ]]; then
+        local bytes
+        bytes="$(stat -c %s -- "$url")"
+        (( bytes <= INGEST_MAX_BUNDLE_BYTES )) || die \
+            "the bundle at $url is $bytes bytes, over the" \
+            "$INGEST_MAX_BUNDLE_BYTES-byte cap; refusing to fetch it"
+    fi
+
     local repo
     repo="$(new_stage_repo)"
     log "Fetching $ref from $url"
@@ -1657,7 +1696,9 @@ do_ingest() {
             --submission-ring "$ring" \
             --allowed-signers "$signers" \
             --out "$out" \
-            --needles-file "$needles" | tee "$said"; then
+            --needles-file "$needles" \
+            --max-files "$INGEST_MAX_FILES" \
+            --max-bytes "$INGEST_MAX_FILE_BYTES" | tee "$said"; then
         while IFS= read -r line; do
             INGEST_RESULT_REASONS+=("$line")
         done < <(sed -n 's/^  //p' "$said")
