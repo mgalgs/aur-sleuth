@@ -293,13 +293,38 @@ def check_content(path, raw, needles, parse_frontmatter, max_bytes, ingested):
         bad.append(f"{path}: frontmatter has no model")
     # The date is the contributor's claim about when they ran it, and it is
     # kept as one -- but not a claim to have run it after sending it. The
-    # dashboard's per-package `latest` is whichever report has the newest
-    # date, so a report dated 2099 takes over the package's displayed version
-    # and date. Same format, so a lexical compare is the whole check.
+    # dashboard sorts a package's reports by this string and takes the newest
+    # as `latest`, so a report dated 2099 takes over the displayed version and
+    # date of any package this pipeline has not audited itself.
+    #
+    # The shape is checked before the value, and that order is the point. An
+    # earlier version matched `^\d{4}-\d{2}-\d{2}T` and compared only when it
+    # matched, which made the guard OPT-IN: `date: 2099-01-01` skipped it by
+    # leaving out one character, and still sorted newest, because the sort is
+    # a plain string compare that does not care about the `T`. A guard the
+    # attacker turns off by deleting a character is not a guard. So a `date`
+    # that is present must parse, and anything present and unparseable is
+    # refused rather than waved through.
+    #
+    # Two shapes are accepted: the `%Y-%m-%dT%H:%M:%SZ` the tool itself writes,
+    # and the bare `%Y-%m-%d` a hand-written report plausibly carries. The
+    # compare is on the date part alone, against the date part of `ingested`.
+    # A report timestamped a few hours ahead inside the same UTC day is clock
+    # skew, not an attack, and refusing it would be a false refusal; the thing
+    # being defended is which report a reader sees as the package's newest,
+    # and a day is the granularity that shows.
+    #
+    # An ABSENT date stays allowed. It sorts as the empty string, which is
+    # oldest, so a report with no date is the last thing `latest` would pick
+    # -- the conservative direction, and the opposite of the failure above.
     date = fm.get("date", "")
-    if re.match(r"^\d{4}-\d{2}-\d{2}T", date) and date > ingested:
-        bad.append(f"{path}: dated {date}, which is after it was submitted "
-                   f"({ingested})")
+    if date:
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}Z)?", date):
+            bad.append(f"{path}: date '{date}' is not YYYY-MM-DD or "
+                       f"YYYY-MM-DDTHH:MM:SSZ")
+        elif date[:10] > ingested[:10]:
+            bad.append(f"{path}: dated {date}, which is after it was submitted "
+                       f"({ingested})")
     result = fm.get("result", "")
     if not result:
         bad.append(f"{path}: frontmatter has no result")

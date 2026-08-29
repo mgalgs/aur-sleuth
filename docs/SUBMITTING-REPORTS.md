@@ -192,9 +192,13 @@ archive has always applied:
   files.
 - The frontmatter parses, `package:` matches, and `model:` and `result:` are
   present with `result` one of the three above.
-- `date:`, if the report has one, is not after the moment you send it. The page
-  shows a package's newest report as its current state, and a report dated next
-  century would take that over.
+- `date:`, if the report has one, is `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM:SSZ`,
+  and its day is not after the day you send it. The page shows a package's
+  newest report as its current state, and a report dated next century would
+  take that over. A `date:` that is present but in neither shape is refused
+  rather than ignored — otherwise a shape nobody listed would be a way around
+  the check. Leaving `date:` out entirely is fine: a report with no date sorts
+  oldest, so it is the last thing the page would call a package's newest.
 - LF line endings, valid UTF-8, at most 256 KiB per file and 200 files.
 
 One file that fails any of these refuses the whole submission, with every

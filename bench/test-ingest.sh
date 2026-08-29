@@ -233,6 +233,45 @@ printf -- '---\npackage: vivaldi\nmodel: m/x\nresult: safe\ndate: 2099-01-01T00:
     > "$d/vivaldi/report.md"
 refuse "a report dated after it was submitted" "$d"
 
+# The same claim with the `T` deleted. The guard used to match
+# `^\d{4}-\d{2}-\d{2}T` and only compare when it matched, so this shape
+# skipped it entirely -- while sorting exactly as newest, because the
+# dashboard's sort is a plain string compare that never wanted the `T`. One
+# character turned the guard off.
+d="$tmp/s-future-noT"; mkdir -p "$d/vivaldi"
+printf -- '---\npackage: vivaldi\nmodel: m/x\nresult: safe\ndate: 2099-01-01\ncost: 0\n---\nbody\n' \
+    > "$d/vivaldi/report.md"
+refuse "a report dated 2099 with no time part" "$d"
+
+# Present but unparseable is refused rather than waved through, which is what
+# stops the next shape nobody thought of from being another way out.
+d="$tmp/s-date-junk"; mkdir -p "$d/vivaldi"
+printf -- '---\npackage: vivaldi\nmodel: m/x\nresult: safe\ndate: whenever\ncost: 0\n---\nbody\n' \
+    > "$d/vivaldi/report.md"
+refuse "a report whose date does not parse" "$d"
+
+# ...and the door does not get narrower than that. A bare YYYY-MM-DD in the
+# past is a shape a hand-written report plausibly carries, and an absent date
+# is allowed on purpose: it sorts as the empty string, which is oldest, so it
+# is the last thing the page would call a package's newest report.
+accept_date() {
+    local label="$1" line="$2"
+    n=$(( n + 1 ))
+    local ref="refs/heads/sub$n" out="$tmp/out$n" dd="$tmp/date$n"
+    mkdir -p "$dd/vivaldi"
+    printf -- '---\npackage: vivaldi\nmodel: m/x\nresult: safe\n%bcost: 0\n---\nbody\n' \
+        "$line" > "$dd/vivaldi/report.md"
+    mkbranch "$ref" "$BASE" "$dd"
+    if ingest "$ref" "$out" >/dev/null 2>&1 && [[ -n "$(find "$out" -type f)" ]]; then
+        ok "accepted: $label"
+    else
+        bad "should accept: $label"
+    fi
+}
+accept_date "a date-only report from the past" 'date: 2026-08-01\n'
+accept_date "a date-only report from the day it was submitted" 'date: 2026-08-28\n'
+accept_date "a report with no date at all" ''
+
 d="$tmp/s-cost"; mkdir -p "$d/vivaldi"
 {
     printf -- '---\npackage: vivaldi\nmodel: m/x\nresult: safe\ndate: 2026-08-01T00:00:00Z\n'
