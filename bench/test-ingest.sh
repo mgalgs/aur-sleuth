@@ -1005,6 +1005,32 @@ else
     bad "the stage wrote under a held archive lock"
 fi
 
+echo "== the submission URL is a repository, never an option =="
+# git parses options up to the first non-option argument, so a URL beginning
+# with '-' is not a URL: --upload-pack=<cmd> makes git RUN <cmd>, inside the
+# one stage that holds the archive write lock and before ingest-submission.py
+# decides anything. The endpoint mints the spooled path today, so this is
+# defence in depth -- but that invariant lives in a component this repository
+# does not contain, and `--` makes the stage safe without it.
+pwned="$tmp/PWNED"
+rc=0
+( AUR_SLEUTH_SUBMISSION_URL="--upload-pack=touch $pwned" \
+  AUR_SLEUTH_SUBMISSION_REF=refs/heads/good \
+  AUR_SLEUTH_SUBMITTED_BY=octocat \
+  AUR_SLEUTH_SUBMISSION_RING=3 do_ingest ) >/dev/null 2>&1 || rc=$?
+if (( rc != 0 )) && [[ ! -e "$pwned" ]]; then
+    ok "an option-shaped AUR_SLEUTH_SUBMISSION_URL executes nothing"
+elif [[ -e "$pwned" ]]; then
+    bad "an option-shaped AUR_SLEUTH_SUBMISSION_URL ran a command"
+else
+    bad "the stage should die on an option-shaped URL"
+fi
+if [[ "$(git --git-dir="$GIT_STORE" rev-parse refs/heads/audit-reports)" == "$after" ]]; then
+    ok "the branch did not move"
+else
+    bad "an option-shaped URL moved the branch"
+fi
+
 # --- the result file ----------------------------------------------------------
 
 # AUR_SLEUTH_SUBMISSION_RESULT is a contributor's only feedback channel: they

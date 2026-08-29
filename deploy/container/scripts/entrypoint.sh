@@ -984,7 +984,7 @@ check_expected_head() {
 # Fetches over FETCH_URL, which needs no credential.
 fetch_origin_branch() {
     local repo="$1" branch="$2" err
-    err="$(git --git-dir="$repo" fetch --quiet "$FETCH_URL" \
+    err="$(git --git-dir="$repo" fetch --quiet -- "$FETCH_URL" \
         "+refs/heads/$branch:refs/remotes/origin/$branch" 2>&1)" && return 0
     # A missing branch is "couldn't find remote ref"; anything else is the
     # network, and the caller decides what that means.
@@ -1358,7 +1358,7 @@ print(new)
 PY
 )"
     git --git-dir="$work" update-ref "refs/heads/$REPORTS_BRANCH" "$rewritten"
-    "${g[@]}" fetch --quiet "$work" "+refs/heads/$REPORTS_BRANCH:refs/heads/$REPORTS_BRANCH"
+    "${g[@]}" fetch --quiet -- "$work" "+refs/heads/$REPORTS_BRANCH:refs/heads/$REPORTS_BRANCH"
     rm -rf "$(dirname "$work")"
 
     local new
@@ -1480,7 +1480,11 @@ PYEOF
 #   - The ref is fetched into a THROWAWAY repository, never into the shared
 #     store, for the same reason publish stages one: a repository's config and
 #     hooks are executable input. A fetch runs no remote code, and the accepted
-#     bytes are inert markdown the publish gate already permits.
+#     bytes are inert markdown the publish gate already permits. The URL is
+#     passed after a `--`, because the ARGUMENT VECTOR is executable input one
+#     position over: git parses options up to the first non-option argument,
+#     so a URL beginning with `-` is not a URL, and `--upload-pack=<cmd>` runs
+#     <cmd> here, under the archive lock, before any rule below is reached.
 #   - bench/ingest-submission.py decides every rule in code -- the RULES are a
 #     model-free gate, whatever happens to the report downstream -- and stamps
 #     what it accepts `advisory: true` and `source: community`, which is what
@@ -1538,7 +1542,7 @@ do_ingest() {
     local repo
     repo="$(stage_reports_repo)"
     log "Fetching $ref from $url"
-    git --git-dir="$repo" fetch --quiet --no-tags "$url" \
+    git --git-dir="$repo" fetch --quiet --no-tags -- "$url" \
         "+${ref}:refs/submission" \
         || die "could not fetch $ref from $url"
     local sub
@@ -1553,7 +1557,7 @@ do_ingest() {
     # submission.
     local signers
     signers="$(mktemp)"
-    git --git-dir="$repo" fetch --quiet --no-tags "$FETCH_URL" \
+    git --git-dir="$repo" fetch --quiet --no-tags -- "$FETCH_URL" \
         "+refs/heads/$CONTRIB_REF:refs/contrib" \
         || die "could not fetch $CONTRIB_REF from $FETCH_URL;" \
                "without the registry there is no way to say whose submission this is"
