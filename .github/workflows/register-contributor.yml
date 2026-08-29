@@ -1,6 +1,6 @@
 ---
-# Merge a registration pull request when every rule passes, close it when one
-# does not.
+# Say whether a registration pull request passes every rule. A maintainer
+# merges it; this job never does.
 #
 # Registering is how someone becomes able to submit an audit report: one pull
 # request against `master`, one signed commit, one line added to the
@@ -9,26 +9,29 @@
 # script reads and acts on its exit code. `docs/SUBMITTING-REPORTS.md` is the
 # contributor's side.
 #
-# The registry used to live on an orphan branch, and the branch was the reason
-# an automatic merge was tolerable: a bug in the check could only touch one
-# data file and nothing that builds. It merges into `master` now, so that
-# reason is gone and something has to replace it. Rule 2 does: the diff must be
-# exactly `1 0 trusted-contributors` AND the file the head commit carries must
-# be the file on `master` with that one line appended, byte for byte. A
-# registration that touches a second file, or that touches this workflow, or
-# that changes any byte of the base, fails rule 2 and is closed. That pair is
-# what bounds a pull request from a stranger to one line of one data file.
+# A pass gets a comment saying so and the `registration-ready` label. A
+# failure gets a comment listing every reason and the pull request closed.
+# Neither writes to the repository, which is why the permissions below are
+# `pull-requests: write` and nothing else: this workflow has no write access
+# to the tree at all, so no bug in it can put a byte on `master`.
 #
-# `pull_request_target` rather than `pull_request`: merging and commenting
+# What the maintainer is asked to merge is bounded by rule 2, and that is the
+# reason the label means something. The diff must be exactly
+# `1 0 trusted-contributors` AND the file the head commit carries must be the
+# file on `master` with that one line appended, byte for byte. A registration
+# that touches a second file, or that touches this workflow, or that changes
+# any byte of the base, fails rule 2 and is closed. So `registration-ready`
+# says: this is one line added to one data file, by the person who signed it.
+# The maintainer still looks before merging -- the label is a summary of the
+# checks, not a substitute for the merge being a human act.
+#
+# `pull_request_target` rather than `pull_request`: commenting and labelling
 # need a write token, and a `pull_request` job from a fork gets a read-only
 # one. That token makes what is checked out matter, so the checkout is pinned
 # to `master` and is never the pull request's head. Nothing from the pull
 # request is executed: the untrusted values are API responses written to
 # files and passed to the script as paths, and the author's login, which is
 # passed through the environment rather than interpolated into a command.
-#
-# Merging with `--merge` is deliberate. A rebase or a squash would rewrite the
-# contributor's commit, and the whole point of the commit is its signature.
 name: register-contributor
 
 "on":
@@ -37,7 +40,6 @@ name: register-contributor
     branches: [master]
 
 permissions:
-  contents: write
   pull-requests: write
 
 concurrency:
@@ -156,26 +158,31 @@ jobs:
           cat inputs/reasons.txt
           echo "rc=$rc" >> "$GITHUB_OUTPUT"
 
-      - name: Merge and say the invitation is coming
+      - name: Say every rule holds, and mark it ready
         if: steps.decide.outputs.rc == '0'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          # --match-head-commit, because the rules were checked against
-          # HEAD_SHA and a push can land between that check and this merge.
-          # Without it a contributor could pass the checks and then merge
-          # something else into the file that decides who may submit.
-          gh pr merge "$PR" --merge --match-head-commit "$HEAD_SHA"
+          # The label is created on first use. `gh label create` fails when it
+          # already exists, which is the ordinary case, so the failure is
+          # ignored -- and only here, where the next line does not depend on
+          # it: an unlabelled pull request that passed still has the comment.
+          gh label create registration-ready \
+            --color 0e8a16 \
+            --description "every registration rule passes; ready to merge" \
+            || true
+          gh pr edit "$PR" --add-label registration-ready
           doc="https://github.com/$GH_REPO/blob/master/docs/SUBMITTING-REPORTS.md"
-          gh pr comment "$PR" --body "Every check passed and this is merged.
+          gh pr comment "$PR" --body "Every check passed. A maintainer merges
+          registrations by hand, so this is now waiting on that; nothing else
+          is needed from you.
 
-          An invitation to the network reports are submitted over will be
-          emailed to the address on the line you added. Joining is a client
-          install and following the link in that email.
+          Once it is merged, an invitation to the network reports are
+          submitted over will be emailed to the address on the line you added.
+          Joining is a client install and following the link in that email.
 
           When you are on, submit with \`aur-sleuth-submit <report> <package>\`.
           See [docs/SUBMITTING-REPORTS.md]($doc)."
@@ -190,7 +197,7 @@ jobs:
           set -euo pipefail
           doc="https://github.com/$GH_REPO/blob/master/docs/SUBMITTING-REPORTS.md"
           {
-            echo "This registration was not merged:"
+            echo "This registration cannot be merged:"
             echo
             echo '```'
             cat inputs/reasons.txt

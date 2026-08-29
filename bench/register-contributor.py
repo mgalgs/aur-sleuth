@@ -2,11 +2,13 @@
 """Decide whether a registration pull request may be merged.
 
 Registering is how someone becomes able to submit an audit report: one pull
-request against the `trusted-contributors` branch, carrying exactly one signed
-commit that appends exactly one line -- their email and their SSH signing
-public key -- to the `trusted-contributors` file. If every rule below passes,
-the pull request is merged and the private side mints an invitation to the
-maintainer's network and emails it. `docs/SUBMITTING-REPORTS.md` is the
+request against `master`, carrying exactly one signed commit that appends
+exactly one line -- their email and their SSH signing public key -- to the
+`trusted-contributors` file at the root of the tree. If every rule below
+passes, the workflow says so and labels the pull request; a MAINTAINER merges
+it, and the private side then mints an invitation to the maintainer's network
+and emails it. Nothing here merges anything, and the workflow that runs it has
+no write access to the repository. `docs/SUBMITTING-REPORTS.md` is the
 contributor's side; `bench/trusted-contributors.sh` owns the file's format.
 
 Every rule is decidable in code, and nothing here calls the network: the
@@ -18,7 +20,7 @@ The rules:
   1. Exactly one commit.
   2. Exactly one file changed -- `trusted-contributors`, one line added, none
      removed -- AND the file as the head commit has it is byte-for-byte the
-     file on the branch with that line appended and terminated.
+     file on `master` with that line appended and terminated.
   3. The added line is well formed, its email is the commit's author email,
      and its `# <login>` is the pull request author's login.
   4. GitHub verified the signature: `verified` is true and `reason` is
@@ -46,7 +48,8 @@ Usage:
                           --head-file head-trusted-contributors
                           [--public-events N] [--now ISO8601]
 
-Exit 0 means merge. Exit 1 prints every reason it may not, one per line.
+Exit 0 means every rule passes and it is the maintainer's to merge. Exit 1
+prints every reason it may not be, one per line.
 """
 
 import argparse

@@ -250,9 +250,10 @@ SAFE verdicts, and do not let it run without the malicious fixtures in the gate.
   rules over one pull request that adds one signed line to
   `trusted-contributors` at the root of `master`, every input a file so the
   whole set runs offline (`bench/test-register.sh`);
-  `.github/workflows/register-contributor.yml` merges on a pass and closes
-  with reasons on a failure, and `bench/trusted-contributors.sh` owns the
-  file's format. The registry is a file in the tree, not a data branch: what
+  `.github/workflows/register-contributor.yml` labels the pull request
+  `registration-ready` on a pass and closes it with reasons on a failure — a
+  MAINTAINER merges, so the workflow holds no write access to the repository
+  — and `bench/trusted-contributors.sh` owns the file's format. The registry is a file in the tree, not a data branch: what
   bounds a registration to one line of one file is rule 2, not the branch it
   lands on. The activity floor is a spam cost, not a security control.
 - `aur-sleuth-submit` — the contributor's client. Signs one commit adding

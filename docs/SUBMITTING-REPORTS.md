@@ -33,9 +33,10 @@ It does not raise what a submission counts for, and it is not meant to.
 
 To submit, you open one pull request against `master`, containing exactly one
 signed commit that adds exactly one line — your email and your SSH signing
-public key — to the `trusted-contributors` file at the root of the tree. When
-every check passes, an invitation to the private network reports are submitted
-over is emailed to you.
+public key — to the `trusted-contributors` file at the root of the tree. An
+automated check says whether every rule passes; a maintainer reads that and
+merges by hand, and the invitation to the private network reports are
+submitted over follows the merge.
 
 That is deliberately more work than opening a pull request, and the extra work
 is the point. A signed commit, a signing key GitHub already attributes to your
@@ -135,9 +136,16 @@ of them has to pass:
 Rule 8 is a spam cost, not a judgement about you. An account that clears it is
 not thereby trustworthy — it is merely not free to produce in bulk.
 
-**If every rule passes, the pull request is merged** and your invitation
-follows. **If any rule fails, a comment lists every reason and the pull request
-is closed.** Fix what it names and reopen it; the checks run again.
+**If every rule passes, the check says so**, labels the pull request
+`registration-ready`, and a maintainer merges it; your invitation follows the
+merge. Nothing more is needed from you at that point. **If any rule fails, a
+comment lists every reason and the pull request is closed.** Fix what it names
+and reopen it; the checks run again.
+
+The merge is a human act on purpose. The workflow that runs these rules is
+triggered by a pull request from a stranger, so it is given no write access to
+the repository at all — it can comment and label, and that is the whole of it.
+A bug in it cannot put a byte on `master`.
 
 ## The invitation
 

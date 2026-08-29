@@ -130,11 +130,14 @@ escalation, which exists to force a ruling.
 but sending the report takes an invitation. A would-be contributor registers
 once -- one signed commit adding one line, their email and their SSH signing
 public key, to the `trusted-contributors` file at the root of `master` --
-and `.github/workflows/register-contributor.yml` says so when every rule in
-`bench/register-contributor.py` passes, or closes it with the reasons.
+and `.github/workflows/register-contributor.yml` labels it
+`registration-ready` when every rule in `bench/register-contributor.py`
+passes, or closes it with the reasons. **The maintainer merges it by hand**;
+the workflow is triggered by a stranger's pull request and holds no write
+access to the repository, only the right to comment and label.
 `docs/SUBMITTING-REPORTS.md` is the contributor's side, and says why the bar
 is where it is. The private side then mints an invitation to the maintainer's
-network and emails it.
+network and emails it once the registration is on `master`.
 
 Reports arrive over that network only. A gateway identifies the caller by
 their node and stamps the invitation ring; the endpoint behind it spools each

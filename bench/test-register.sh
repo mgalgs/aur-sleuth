@@ -352,18 +352,26 @@ else
     bad "the docstring should say the floor is a spam cost"
 fi
 
-echo "== the workflow merges the commit the rules were checked against =="
-# Actions cannot run here, so this is the one property of the workflow worth
-# pinning by reading it: without --match-head-commit, a push landing between
-# the check and the merge would put unchecked content on the branch that
-# decides who may submit.
+echo "== the workflow says the verdict and a human does the merging =="
+# Actions cannot run here, so these are the properties of the workflow worth
+# pinning by reading it. A registration is merged by the maintainer, never by
+# this job: the job's whole output is a comment, a label, and -- on a failure
+# -- a close. Two things follow, and both are asserted rather than described,
+# because either one silently coming back would restore an automatic write to
+# `master` by a workflow a stranger's pull request triggers.
 WF=".github/workflows/register-contributor.yml"
-# The literal line from the workflow; the $-signs are the workflow's own.
-# shellcheck disable=SC2016
-if grep -q 'gh pr merge "$PR" --merge --match-head-commit "$HEAD_SHA"' "$WF"; then
-    ok "the merge is pinned to the head the rules read"
+if grep -q 'gh pr merge' "$WF"; then
+    bad "the workflow must not merge; a maintainer does that by hand"
 else
-    bad "gh pr merge must pass --match-head-commit \"\$HEAD_SHA\""
+    ok "the workflow contains no gh pr merge"
+fi
+# Read only the permissions block: `contents: write` anywhere in it would give
+# the job push access to the tree, which is exactly what not merging buys.
+if awk '/^permissions:/{p=1;next} p&&/^[^ ]/{p=0} p' "$WF" \
+        | grep -q 'contents: *write'; then
+    bad "the workflow must not grant contents: write"
+else
+    ok "the workflow's permissions grant no contents: write"
 fi
 if grep -q 'ref: master' "$WF"; then
     ok "the checkout is master, never the pull request's head"
