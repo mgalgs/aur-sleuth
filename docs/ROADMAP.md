@@ -118,8 +118,13 @@ only with a version bump.
   per-user rate limit, and -- the part the client is already written for -- a
   **global cap on concurrent clients**, so the maintainer's home network stays
   usable: over the cap it either queues the client or answers `429`/`503` with
-  a `Retry-After`, and never simply drops the connection. The gateway keeps its
-  own host allowlist; the endpoint is reachable from nowhere else.
+  a `Retry-After`, and never simply drops the connection. That header must be
+  **delta-seconds**, not the HTTP-date form: the client reads only the numeric
+  one, because parsing a date would need `date -d` (GNU-only) and a clock it
+  trusts as much as the server's. The client obeys the number as given rather
+  than clipping it to its own backoff ceiling, so an over-long hint costs a
+  contributor the whole run — send the interval you actually mean. The gateway
+  keeps its own host allowlist; the endpoint is reachable from nowhere else.
 
   **The invitation watcher.** Watches the `trusted-contributors` branch for a
   new line, mints an invitation to the network for it, and emails the invite to

@@ -23,9 +23,14 @@
 # The endpoint admits a limited number of clients at once, so that a home
 # network stays usable while it serves them. It answers 429 or 503 when it is
 # full, with a Retry-After when it can say one, and this waits: the retry hint
-# first, otherwise an exponential backoff with jitter from 5s, doubling, never
-# more than five minutes in one wait, and giving up after
-# AUR_SLEUTH_SUBMIT_MAX_WAIT seconds in total (default 1800). Nothing else is
+# first, obeyed as given however long it is, otherwise an exponential backoff
+# with jitter from 5s, doubling, never more than five minutes in one wait. The
+# five-minute cap is on the backoff only -- it bounds this client's guess, and
+# a Retry-After is the endpoint replacing that guess with an answer. Either
+# way the total is bounded: when the next wait would take it past
+# AUR_SLEUTH_SUBMIT_MAX_WAIT seconds (default 1800) this gives up and says the
+# endpoint is at capacity, which is the honest outcome when the endpoint has
+# just asked for longer than you were willing to wait. Nothing else is
 # ever retried -- a 4xx that is not 429 will not become a 2xx by being sent
 # again.
 set -euo pipefail
@@ -131,9 +136,17 @@ post() {
         -D "$HEADERS" -o "$BODY" -w '%{http_code}' "$URL"
 }
 
+# The endpoint's Retry-After, in delta-seconds, or nothing. Only the numeric
+# form is read: the endpoint contract in docs/ROADMAP.md requires delta-seconds
+# and says so, because the HTTP-date form would need `date -d` (GNU-only) and
+# a clock this client trusts as much as the server's. At most nine digits --
+# about thirty years, already far past any MAX_WAIT anyone would set. A longer
+# run of digits is not a wait, it is a number that would wrap bash's
+# arithmetic into something negative, so it is treated as no hint at all and
+# the client falls back to its own backoff.
 retry_after() {
     sed -n 's/^[Rr]etry-[Aa]fter:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$HEADERS" \
-        | tail -1
+        | tail -1 | grep -E '^[0-9]{1,9}$' || true
 }
 
 waited=0
@@ -149,18 +162,28 @@ while :; do
         429|503)
             hint="$(retry_after)"
             if [[ -n "$hint" ]]; then
-                nap="$hint"
+                # The endpoint's own instruction, obeyed as given. MAX_BACKOFF
+                # is NOT applied here, and that is the whole point: it bounds
+                # this client's GUESS about when to come back, and a guess is
+                # exactly what a Retry-After replaces. Capping the hint at 300
+                # meant an endpoint saying "600s" got knocked on again at 300
+                # -- the client hammering a server that had just told it, in
+                # the one field designed to say so, that it was full.
+                # Base 10 forced: `Retry-After: 008` is a perfectly legal
+                # header, and bare `$(( 008 ))` is a bash octal error.
+                nap=$(( 10#$hint ))
             else
+                # No hint, so this is the guess, and MAX_BACKOFF bounds it.
                 # Jitter, so a queue of clients released together does not
                 # come back together.
                 nap=$(( backoff + RANDOM % (backoff / 2 + 1) ))
                 backoff=$(( backoff * 2 ))
                 if (( backoff > MAX_BACKOFF )); then backoff="$MAX_BACKOFF"; fi
+                if (( nap > MAX_BACKOFF )); then nap="$MAX_BACKOFF"; fi
             fi
-            if (( nap > MAX_BACKOFF )); then nap="$MAX_BACKOFF"; fi
-            # A hint of 0 -- or one this rounds to 0 -- would mean retrying
-            # with no delay and never adding to `waited`, which is a spin
-            # against an endpoint that has just said it is full, forever.
+            # A hint of 0 would mean retrying with no delay and never adding
+            # to `waited`, which is a spin against an endpoint that has just
+            # said it is full, forever.
             if (( nap < 1 )); then nap=1; fi
             if (( waited + nap > MAX_WAIT )); then
                 cat "$BODY" >&2

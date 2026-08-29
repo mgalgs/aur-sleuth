@@ -229,6 +229,52 @@ else
     bad "Retry-After: 0 should not spin (rc=$rc, ${elapsed}s, $(requests_seen) requests)"
 fi
 
+echo "== the endpoint's Retry-After is obeyed, not clipped to the client's cap =="
+# MAX_BACKOFF bounds the client's GUESS at when to come back. A Retry-After is
+# the endpoint replacing that guess with an answer, so clipping the hint to
+# MAX_BACKOFF meant an endpoint asking for 600s was knocked on again at 300 --
+# the client hammering a server that had just said, in the one field designed
+# to say it, that it was full.
+#
+# Both checks are wrapped in `timeout` because the failure they describe is a
+# LONG WAIT, and a suite that catches it by waiting it out is a suite nobody
+# runs. Correct behaviour finishes in well under the bound either way, so the
+# bound only ever fires on the bug.
+submit_bounded() {
+    local secs="$1" cfg="$2"; shift 2
+    local rc=0
+    OUT="$(cd "$tmp" && timeout "$secs" env HOME="$tmp" GIT_CONFIG_GLOBAL="$cfg" \
+        GIT_CONFIG_SYSTEM=/dev/null AUR_SLEUTH_SUBMIT_URL="$URL" "$@" \
+        bash "$SUBMIT" "$tmp/aur-sleuth-report-vivaldi.txt" vivaldi 2>&1)" || rc=$?
+    return $rc
+}
+
+# 400s is over MAX_BACKOFF and under the default MAX_WAIT, so the client
+# should say it is waiting 400 seconds and then do it.
+start_endpoint 99 429 400
+rc=0
+submit_bounded 15 "$SIGNED_CONFIG" AUR_SLEUTH_SUBMIT_MAX_WAIT=1800 || rc=$?
+if grep -q 'waiting 400s' <<< "$OUT" && [[ "$(requests_seen)" == "1" ]]; then
+    ok "a 400s Retry-After is waited as 400s, not clipped to 300s"
+else
+    bad "the hint was not obeyed as given (rc=$rc, $(requests_seen) requests): $OUT"
+fi
+
+# ...and when the hint is longer than the contributor is willing to wait, the
+# honest answer is to stop, on the first refusal, rather than to come back
+# early. This is the same give-up message as the total cap, because it is the
+# same fact: the endpoint asked for longer than MAX_WAIT allows.
+start_endpoint 99 429 600
+started=$SECONDS
+rc=0
+submit_bounded 20 "$SIGNED_CONFIG" AUR_SLEUTH_SUBMIT_MAX_WAIT=300 || rc=$?
+if (( rc == 1 )) && grep -q 'at capacity' <<< "$OUT" \
+   && [[ "$(requests_seen)" == "1" ]] && (( SECONDS - started < 20 )); then
+    ok "a hint past MAX_WAIT gives up at once instead of retrying early"
+else
+    bad "expected one request and an immediate give-up (rc=$rc, $(requests_seen) requests): $OUT"
+fi
+
 echo "== no Retry-After at all falls back to the backoff =="
 start_endpoint 1 429 ""
 started=$SECONDS

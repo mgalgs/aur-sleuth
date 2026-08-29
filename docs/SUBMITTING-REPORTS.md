@@ -214,11 +214,17 @@ it is serving submissions.
 So the endpoint may make you wait, or turn you away with a retry hint, and
 **that is not a judgement about your report**. `aur-sleuth-submit` handles it
 for you: on a `429` or a `503` it waits for the `Retry-After` the endpoint
-sends, or backs off exponentially with jitter if there is none, and gives up
-after `AUR_SLEUTH_SUBMIT_MAX_WAIT` seconds in total (30 minutes by default)
-with a message saying the endpoint is full. Nothing else is ever retried. If
-you are turned away, try again later, or raise that number and leave it
-running.
+sends, **for as long as the endpoint asked** — the client's own five-minute
+ceiling bounds the exponential backoff it falls back on when there is no hint,
+and a hint is the endpoint replacing that guess with an answer. Coming back
+early would be knocking again on a door that just told you when it opens.
+
+The one bound that does apply to a hint is your total: when the next wait
+would take the run past `AUR_SLEUTH_SUBMIT_MAX_WAIT` seconds (30 minutes by
+default), the client stops and says the endpoint is full. So an endpoint that
+asks for an hour ends the run immediately rather than in an hour — which is
+the same fact stated sooner. Nothing else is ever retried. If you are turned
+away, try again later, or raise that number and leave it running.
 
 ## What your report carries
 
