@@ -257,7 +257,14 @@ advisory means in practice:
   maintainer pays for, and a fence is a weaker thing to rely on than not
   sending the text at all.
 - It never counts toward agreement, a majority, a verdict, or a package's
-  state. A community `unsafe` puts nothing on the flagged list.
+  state. A community `unsafe` puts nothing on the flagged list — not on the
+  operator's "Reports worth a look" before a publish, and not in the `flagged`
+  number the published page carries. Nor does it appear in that summary's
+  verdict breakdown, or in its "no findings" count of runs that errored: those
+  say what this deployment's own reads came back with. The one line your report
+  does move is `audit reports`, which counts what the push carries, and the
+  summary prints a `community:` line beside it naming you and your count, so
+  the person publishing can see the difference.
 - It never marks a package as already audited, so it cannot keep a package away
   from the pipeline's own reads.
 - It is in no figure that says what this deployment spent or which models it

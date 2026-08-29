@@ -709,6 +709,48 @@ else
     bad "REVIEW_JSON should carry the community count"
 fi
 
+# The three community reports on this branch are an `unsafe`, an
+# `inconclusive` and one more -- every shape that would put a line on
+# "Reports worth a look" if it were the pipeline's own. The only report here
+# this deployment produced is sweep-pkg's advisory `safe`.
+#
+# docs/SUBMITTING-REPORTS.md promises "A community `unsafe` puts nothing on
+# the flagged list", and the `flagged` number goes out to the public page via
+# REVIEW_JSON, so this is the check that keeps the doc and the page agreeing.
+if grep -q '"flagged":0' <<< "$rev" && grep -q 'Nothing flagged' <<< "$rev"; then
+    ok "a community 'unsafe' is on no flagged list, and the published count is 0"
+else
+    bad "a community report reached the flagged list: $rev"
+fi
+if grep -qE '^ *verdicts: ' <<< "$rev" \
+   && ! grep -E '^ *verdicts: ' <<< "$rev" | grep -qE 'unsafe|inconclusive' \
+   && ! grep -q 'no findings:' <<< "$rev"; then
+    ok "the verdict breakdown and the 'no findings' count are the pipeline's own"
+else
+    bad "a community result reached the verdict breakdown: $rev"
+fi
+# ...and it is still inside `audit reports`, which counts what the push
+# carries rather than what came back. That is the whole line: one figure
+# counts the submission, and no result-shaped figure does. If this arithmetic
+# stops holding, one of the two halves moved without the other.
+if REV="$rev" python3 - <<'PY'
+import json, os, re, sys
+rev = os.environ["REV"]
+j = json.loads(rev.rsplit("REVIEW_JSON ", 1)[1].strip())
+want = sum(j["verdicts"].values()) + sum(j["community"].values())
+if j["audit_reports"] != want:
+    sys.exit(f"audit_reports={j['audit_reports']} but verdicts+community={want}: {j}")
+if not j["community"]:
+    sys.exit(f"no community report in the push; the check proves nothing: {j}")
+if not j["verdicts"]:
+    sys.exit(f"no pipeline report in the push; the check proves nothing: {j}")
+PY
+then
+    ok "audit reports == the verdict breakdown plus the community line"
+else
+    bad "the push's report count and its verdict breakdown do not add up"
+fi
+
 # ...and the review stage's own advisory read never sees one. `texts` is
 # exactly what ask_model() batches and sends, so a community report in it
 # would be a submission's body reaching a model the maintainer pays for --
