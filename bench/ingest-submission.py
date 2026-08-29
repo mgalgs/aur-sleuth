@@ -70,11 +70,19 @@ RESULTS = {"safe", "unsafe", "inconclusive"}
 
 # Frontmatter keys the ingest owns. Whatever the submission said about any of
 # them is dropped and replaced, so a forged `advisory: false` cannot survive.
-# `triggered_by` is dropped outright: it is the re-audit bookkeeping's own
-# field, and a submission has no escalation behind it to record.
 OWNED_KEYS = ("advisory", "source", "submitted_by", "submitted_ring",
               "submission_ref", "ingested")
-DROPPED_KEYS = ("triggered_by",)
+
+# Keys dropped outright, because a submission has nothing true to say in them.
+# `triggered_by` is the re-audit bookkeeping's own field, and a submission has
+# no escalation behind it. The rest are this pipeline's ACCOUNTING: the
+# dashboard sums cost and tokens across every report on the branch with no
+# advisory guard, so a submitted `cost: 999999` would steer the public spend
+# figure and the per-model table. A submission spent none of this deployment's
+# money, and the honest value is therefore no value at all rather than a zero
+# it did not measure.
+DROPPED_KEYS = ("triggered_by", "cost", "prompt_tokens", "completion_tokens",
+                "total_tokens", "execution_time")
 
 DEFAULT_MAX_FILES = 200
 DEFAULT_MAX_BYTES = 262144
@@ -237,10 +245,17 @@ def check_path(path, existing):
         bad.append(f"{path}: '{pkg}' is not a valid pkgbase")
     if path in existing:
         bad.append(f"{path}: already on the branch; a submission never overwrites")
+    if pkg in existing:
+        # `index.html` is a valid pkgbase by the regex above and a blob on the
+        # branch. Writing under it would need the same name to be a file and a
+        # directory, which git refuses -- as an error in the middle of the
+        # stage, after the refusal list was printed. Refused here instead, on
+        # the same footing as every other rule.
+        bad.append(f"{path}: '{pkg}' is a file on the branch, not a package")
     return bad
 
 
-def check_content(path, raw, needles, parse_frontmatter, max_bytes):
+def check_content(path, raw, needles, parse_frontmatter, max_bytes, ingested):
     """Every reason this file's bytes may not be archived, as a list."""
     bad = []
     if len(raw) > max_bytes:
@@ -269,6 +284,15 @@ def check_content(path, raw, needles, parse_frontmatter, max_bytes):
                    f" is not the directory '{pkg}'")
     if not fm.get("model"):
         bad.append(f"{path}: frontmatter has no model")
+    # The date is the contributor's claim about when they ran it, and it is
+    # kept as one -- but not a claim to have run it after sending it. The
+    # dashboard's per-package `latest` is whichever report has the newest
+    # date, so a report dated 2099 takes over the package's displayed version
+    # and date. Same format, so a lexical compare is the whole check.
+    date = fm.get("date", "")
+    if re.match(r"^\d{4}-\d{2}-\d{2}T", date) and date > ingested:
+        bad.append(f"{path}: dated {date}, which is after it was submitted "
+                   f"({ingested})")
     result = fm.get("result", "")
     if not result:
         bad.append(f"{path}: frontmatter has no result")
@@ -303,7 +327,11 @@ def rewrite(text, stamp):
     end = text.find("\n---\n", 4)
     fm_text, rest = text[4:end], text[end + 5:]
 
-    drop = re.compile(r"^(" + "|".join(OWNED_KEYS + DROPPED_KEYS) + r")\s*:")
+    # Leading whitespace is allowed for, deliberately. A `source:` indented
+    # under `file_verdicts:` is not a top-level key to the dashboard's parser
+    # -- but a simpler reader elsewhere may take it for one, and no report has
+    # a legitimate nested key by any of these names.
+    drop = re.compile(r"^\s*(" + "|".join(OWNED_KEYS + DROPPED_KEYS) + r")\s*:")
     kept = [line for line in fm_text.split("\n") if not drop.match(line)]
 
     head = [
@@ -414,7 +442,8 @@ def main():
             refusals.extend(bad)
             continue
         raw = git(gitdir, "show", f"{args.submission_ref}:{path}", binary=True)
-        bad = check_content(path, raw, needles, parse_frontmatter, args.max_bytes)
+        bad = check_content(path, raw, needles, parse_frontmatter,
+                            args.max_bytes, stamp["ingested"])
         if bad:
             refusals.extend(bad)
             continue

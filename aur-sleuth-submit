@@ -158,6 +158,10 @@ while :; do
                 if (( backoff > MAX_BACKOFF )); then backoff="$MAX_BACKOFF"; fi
             fi
             if (( nap > MAX_BACKOFF )); then nap="$MAX_BACKOFF"; fi
+            # A hint of 0 -- or one this rounds to 0 -- would mean retrying
+            # with no delay and never adding to `waited`, which is a spin
+            # against an endpoint that has just said it is full, forever.
+            if (( nap < 1 )); then nap=1; fi
             if (( waited + nap > MAX_WAIT )); then
                 cat "$BODY" >&2
                 die "the endpoint is at capacity and has been for ${waited}s.

@@ -183,6 +183,9 @@ archive has always applied:
   files.
 - The frontmatter parses, `package:` matches, and `model:` and `result:` are
   present with `result` one of the three above.
+- `date:`, if the report has one, is not after the moment you send it. The page
+  shows a package's newest report as its current state, and a report dated next
+  century would take that over.
 - LF line endings, valid UTF-8, at most 256 KiB per file and 200 files.
 
 One file that fails any of these refuses the whole submission, with every
@@ -216,6 +219,10 @@ report from one written by whoever poisoned the package it clears. So:
   (which invitation ring the endpoint saw you on), the submission's commit sha,
   and the date it was ingested. Your `model:` and `result:` lines are kept
   exactly as you wrote them: the claim is preserved as a claim.
+- The accounting lines are dropped: `cost`, the token counts and
+  `execution_time`. Those are what *this* pipeline spent, and the dashboard
+  sums them across the branch — your run cost it nothing, so it records
+  nothing rather than a number it did not measure.
 - `submitted_by` is **not** a label anyone typed. The ingest verifies the
   commit's signature against the `trusted-contributors` branch, requires the
   signature's principal to be the commit's own author, and records the login on

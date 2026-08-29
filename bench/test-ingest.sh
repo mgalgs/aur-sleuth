@@ -226,6 +226,81 @@ d="$tmp/s-badresult"; mkdir -p "$d/vivaldi"
 report vivaldi m/x definitely-fine > "$d/vivaldi/report.md"
 refuse "a result outside safe/unsafe/inconclusive" "$d"
 
+echo "== rule 5: what a submission may not assert about the pipeline =="
+
+d="$tmp/s-future"; mkdir -p "$d/vivaldi"
+printf -- '---\npackage: vivaldi\nmodel: m/x\nresult: safe\ndate: 2099-01-01T00:00:00Z\ncost: 0\n---\nbody\n' \
+    > "$d/vivaldi/report.md"
+refuse "a report dated after it was submitted" "$d"
+
+d="$tmp/s-cost"; mkdir -p "$d/vivaldi"
+{
+    printf -- '---\npackage: vivaldi\nmodel: m/x\nresult: safe\ndate: 2026-08-01T00:00:00Z\n'
+    printf 'cost: 999999\nprompt_tokens: 88888\ncompletion_tokens: 77777\n'
+    printf 'total_tokens: 166665\nexecution_time: 4242\n'
+    printf -- '---\nbody\n'
+} > "$d/vivaldi/report.md"
+mkbranch refs/heads/costly "$BASE" "$d"
+COST_OUT="$tmp/cost-out"
+ingest refs/heads/costly "$COST_OUT" >/dev/null 2>&1 || true
+costgot="$(cat "$(find "$COST_OUT" -type f | head -1)" 2>/dev/null || true)"
+missing=()
+for key in cost prompt_tokens completion_tokens total_tokens execution_time; do
+    grep -q "^$key:" <<< "$costgot" && missing+=("$key")
+done
+if (( ${#missing[@]} == 0 )); then
+    ok "the pipeline's accounting keys are dropped: a submission spent none of it"
+else
+    bad "a submission's own ${missing[*]} survived into the dashboard's sums"
+fi
+
+d="$tmp/s-indent"; mkdir -p "$d/vivaldi"
+{
+    printf -- '---\npackage: vivaldi\nmodel: m/x\nresult: safe\ndate: 2026-08-01T00:00:00Z\n'
+    printf 'file_verdicts:\n  - file: PKGBUILD\n    status: safe\n    summary: fine\n'
+    printf '  source: pipeline\n  advisory: false\n  cost: 999999\n'
+    printf -- '---\nbody\n'
+} > "$d/vivaldi/report.md"
+mkbranch refs/heads/indented "$BASE" "$d"
+IND_OUT="$tmp/ind-out"
+ingest refs/heads/indented "$IND_OUT" >/dev/null 2>&1 || true
+indgot="$(cat "$(find "$IND_OUT" -type f | head -1)" 2>/dev/null || true)"
+if ! grep -q 'source: pipeline' <<< "$indgot" \
+   && ! grep -q 'advisory: false' <<< "$indgot" \
+   && ! grep -q 'cost: 999999' <<< "$indgot"; then
+    ok "an owned key indented under file_verdicts is dropped like any other"
+else
+    bad "an indented owned key survived the rewrite"
+fi
+
+# A branch that carries a top-level file, as the reports branch does once the
+# page has been built onto it. `index.html` is a valid pkgbase by the regex,
+# so without this rule the submission passes every check and then git refuses
+# to write a tree where one name is both a file and a directory -- an error in
+# the middle of the stage rather than a refusal with the others.
+blob_dir="$tmp/blob-base"; mkdir -p "$blob_dir/vivaldi"
+report vivaldi openai/gpt-5.4 safe > "$blob_dir/vivaldi/20260801-120000-openai-gpt-5.4.md"
+printf '<html></html>\n' > "$blob_dir/index.html"
+mkbranch refs/heads/with-blob "" "$blob_dir"
+
+d="$tmp/s-blobpkg"; mkdir -p "$d/index.html"
+report index.html m/x safe > "$d/index.html/report.md"
+# An orphan, because a branch built on with-blob would hit the same
+# file-and-directory clash while the fixture was being built.
+mkbranch refs/heads/blobpkg "" "$d"
+rc=0
+blob_out="$tmp/blob-out"; rm -rf "$blob_out"; mkdir -p "$blob_out"
+log="$(python3 "$INGEST" --git-dir "$REPO" --reports-ref refs/heads/with-blob \
+    --submission-ref refs/heads/blobpkg --submitted-by octocat --submission-ring 2 \
+    --allowed-signers "$SIGNERS" --out "$blob_out" \
+    --needles-file "$needles" --now 20260828-101112 2>&1)" || rc=$?
+if (( rc != 0 )) && grep -q 'is a file on the branch' <<< "$log"; then
+    ok "refused: a package name that is a file on the branch"
+    $QUIET || printf '        %s\n' "$(printf '%s' "$log" | tail -1)"
+else
+    bad "a package name colliding with a blob should be refused: $log"
+fi
+
 echo "== rule 5: the operator's own internal strings =="
 
 d="$tmp/s-needle"; mkdir -p "$d/vivaldi"
@@ -602,6 +677,51 @@ if grep -q '"community":{"octocat":2}' <<< "$rev"; then
     ok "REVIEW_JSON carries the same count"
 else
     bad "REVIEW_JSON should carry the community count"
+fi
+
+# ...and the review stage's own advisory read never sees one. `texts` is
+# exactly what ask_model() batches and sends, so a community report in it
+# would be a submission's body reaching a model the maintainer pays for --
+# the one thing the tier below advisory means.
+if REPO="$REPO" DOWN="$DOWN" BASE="$BASE" python3 - <<'PY'
+import importlib.util, os, sys
+spec = importlib.util.spec_from_file_location("rp", "bench/review-pending.py")
+rp = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(rp)
+s = rp.summarise(os.environ["REPO"], os.environ["DOWN"], os.environ["BASE"])
+sent = [t["path"] for t in s["texts"]]
+community = [p for p in sent if "community" in p]
+if community:
+    print(f"the advisory read would send {community}")
+    sys.exit(1)
+if not any(p.endswith(".md") for p in sent):
+    print(f"nothing at all reached the read; the check proves nothing: {sent}")
+    sys.exit(1)
+PY
+then
+    ok "the review stage's advisory read is sent the ordinary reports and not the submission"
+else
+    bad "a community report reached the review stage's model"
+fi
+
+# A submission that hides its stamp on an indented line is still counted:
+# the summary reads top-level keys only, like the dashboard's parser.
+hide="$tmp/hide"; mkdir -p "$hide/hidden-pkg"
+{
+    printf -- '---\nadvisory: true\nsource: community\nsubmitted_by: sneaky\n'
+    printf 'package: hidden-pkg\nmodel: m/x\nresult: unsafe\n'
+    printf 'file_verdicts:\n  - file: PKGBUILD\n    status: unsafe\n    summary: x\n'
+    printf '  source: pipeline\n'
+    printf -- '---\nbody\n'
+} > "$hide/hidden-pkg/20260828-101112-community-m-x.md"
+mkbranch refs/heads/hidden "$DOWN" "$hide"
+HID="$(git --git-dir="$REPO" rev-parse refs/heads/hidden)"
+hidrev="$(python3 bench/review-pending.py --git-dir "$REPO" --head "$HID" \
+        --base "$DOWN" --no-llm 2>&1)"
+if grep -q 'community report(s) from sneaky' <<< "$hidrev"; then
+    ok "an indented 'source: pipeline' does not hide a submission from the summary"
+else
+    bad "a submission hid its stamp from the review summary: $hidrev"
 fi
 
 # --- the ingest stage ---------------------------------------------------------

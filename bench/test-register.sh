@@ -266,6 +266,25 @@ else
     bad "the docstring should say the floor is a spam cost"
 fi
 
+echo "== the workflow merges the commit the rules were checked against =="
+# Actions cannot run here, so this is the one property of the workflow worth
+# pinning by reading it: without --match-head-commit, a push landing between
+# the check and the merge would put unchecked content on the branch that
+# decides who may submit.
+WF=".github/workflows/register-contributor.yml"
+# The literal line from the workflow; the $-signs are the workflow's own.
+# shellcheck disable=SC2016
+if grep -q 'gh pr merge "$PR" --merge --match-head-commit "$HEAD_SHA"' "$WF"; then
+    ok "the merge is pinned to the head the rules read"
+else
+    bad "gh pr merge must pass --match-head-commit \"\$HEAD_SHA\""
+fi
+if grep -q 'ref: master' "$WF"; then
+    ok "the checkout is master, never the pull request's head"
+else
+    bad "the workflow must check out master explicitly"
+fi
+
 echo "== a refusal lists every reason, not the first =="
 reset
 F_VERIFIED=false

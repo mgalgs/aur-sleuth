@@ -86,13 +86,23 @@ def git(gitdir, *args, check=True):
 
 
 def parse_frontmatter(text):
-    """Read the leading `---` block. Returns {} when there is not one."""
+    """Read the leading `---` block's TOP-LEVEL keys. {} when there is not one.
+
+    Indented lines are skipped, which is not cosmetic: `file_verdicts:` nests
+    a list under it, and a report can carry an indented `source: pipeline`
+    there. Reading that as a top-level key would let a submission hide the
+    stamp the ingest put on it, and the community line below is what tells
+    the person about to publish that the push carries one. The dashboard's own
+    parser has always read it this way; this one had not.
+    """
     if not text.startswith("---"):
         return {}
     fields = {}
     for line in text.split("\n")[1:]:
         if line.strip() == "---":
             break
+        if line[:1].isspace():
+            continue
         key, sep, value = line.partition(":")
         if sep:
             fields[key.strip()] = value.strip()
@@ -165,9 +175,16 @@ def summarise(gitdir, head, base):
             "submitted_by": fields.get("submitted_by", ""),
         }
         by_package[entry["package"]].append(entry)
-        texts.append(entry)
         if entry["source"] == "community":
+            # Counted for the person publishing, and NOT put in `texts`. A
+            # community report never reaches a model in this pipeline, and
+            # `texts` is exactly what the advisory read below sends to one --
+            # so the exclusion the judge already makes has to be made here
+            # too. Its body is text a contributor chose; the fence around the
+            # prompt is defence in depth, not the rule.
             community[entry["submitted_by"] or "?"] += 1
+        else:
+            texts.append(entry)
         if result in FLAGGED:
             flagged.append(entry)
         elif result in DEGRADED:

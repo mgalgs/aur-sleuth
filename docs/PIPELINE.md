@@ -168,8 +168,10 @@ Its frontmatter says which model ran and what it decided, and nothing can check
 either, so the ingest keeps the claim as a claim and stamps what it actually
 is: `advisory: true`, which is why a submission counts toward nothing above,
 plus `source: community`, which says who said it. The stamp is forced whatever
-the file claimed, `triggered_by` is stripped, the submission's commit sha is
-recorded, and the ingest names the file -- a forger controls their own
+the file claimed, `triggered_by` and the pipeline's own accounting (`cost`, the
+token counts, `execution_time`) are stripped -- the dashboard sums those across
+the branch, and a submission spent none of this deployment's money -- the
+submission's commit sha is recorded, and the ingest names the file -- a forger controls their own
 filename, and the archive does not let them pick where it lands. A `.json` is
 refused outright, because a `-judge.json` is a ruling the page counts; so is
 any path the branch already has, which is the overwrite attack.

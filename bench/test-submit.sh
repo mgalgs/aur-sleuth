@@ -38,10 +38,12 @@ cat > "$tmp/endpoint.py" <<'PY'
 """An endpoint that is full for the first N requests, then answers.
 
 argv: <state-dir> <how many times to say it is full> <the code to say it with>
+      [<the Retry-After to send, or "" for none">]
 """
 import http.server, os, sys, threading
 
 state, full_for, full_code = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
+retry_after = sys.argv[4] if len(sys.argv) > 4 else "1"
 lock = threading.Lock()
 seen = [0]
 
@@ -59,7 +61,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if n <= full_for:
             payload = b"at capacity; try again shortly\n"
             self.send_response(full_code)
-            self.send_header("Retry-After", "1")
+            if retry_after:
+                self.send_header("Retry-After", retry_after)
         else:
             with open(os.path.join(state, "last-bundle"), "wb") as f:
                 f.write(body)
@@ -80,7 +83,7 @@ with open(os.path.join(state, "port"), "w") as f:
 server.serve_forever()
 PY
 
-# start_endpoint <full-for> <code-while-full>
+# start_endpoint <full-for> <code-while-full> [retry-after]
 URL=""
 start_endpoint() {
     if [[ -n "$SERVER_PID" ]]; then
@@ -88,7 +91,7 @@ start_endpoint() {
         wait "$SERVER_PID" 2>/dev/null || true
     fi
     rm -rf "$tmp/state"; mkdir -p "$tmp/state"
-    python3 "$tmp/endpoint.py" "$tmp/state" "$1" "$2" &
+    python3 "$tmp/endpoint.py" "$tmp/state" "$1" "$2" "${3-1}" &
     SERVER_PID=$!
     local tries=0
     while (( tries < 100 )) && [[ ! -s "$tmp/state/port" ]]; do
@@ -208,6 +211,31 @@ if (( SECONDS - started < 20 )); then
     ok "it gave up promptly rather than waiting out the default"
 else
     bad "giving up took $(( SECONDS - started ))s"
+fi
+
+echo "== a Retry-After of zero is still a wait =="
+# An endpoint that says "come back in 0 seconds" is still full. Taking the
+# hint literally would retry with no delay and never add to the total, so the
+# give-up cap would never be reached and the client would spin against an
+# endpoint that has just said it cannot serve it.
+start_endpoint 99 429 0
+started=$SECONDS
+rc=0
+submit "$SIGNED_CONFIG" AUR_SLEUTH_SUBMIT_MAX_WAIT=3 || rc=$?
+elapsed=$(( SECONDS - started ))
+if (( rc == 1 )) && (( elapsed < 30 )) && (( $(requests_seen) <= 6 )); then
+    ok "Retry-After: 0 still ends at the cap, in ${elapsed}s and $(requests_seen) requests"
+else
+    bad "Retry-After: 0 should not spin (rc=$rc, ${elapsed}s, $(requests_seen) requests)"
+fi
+
+echo "== no Retry-After at all falls back to the backoff =="
+start_endpoint 1 429 ""
+started=$SECONDS
+if submit "$SIGNED_CONFIG" && (( SECONDS - started >= 5 )); then
+    ok "with no hint it waits its own first backoff of at least 5s"
+else
+    bad "the fallback backoff did not happen: $OUT"
 fi
 
 echo "== 503 is the same contract as 429 =="
