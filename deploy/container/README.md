@@ -23,13 +23,16 @@ The pipeline runs untrusted code by design. `makepkg --nobuild` sources arbitrar
 | `publish` | git deploy key | **read-only** | no | every run (dry run), or on demand |
 | `review` | LLM route (advisory read) | **read-only** | no | on demand, before a publish |
 | `quarantine` | none | read-write | no | on demand, when review finds a leak |
+| `ingest` | none | read-write | no | on demand, when a community report is offered |
 | `bundle` | none | **read-only** | no | on demand, instead of `publish` |
 | `benchmark` | LLM API key | read-write | **yes** | on demand |
 | `screen` | LLM API key | read-write | **yes** | on demand |
 
 `prepare` creates or refreshes the git object store on the volume and prunes old state. `audit` runs the whole pipeline with `--no-push`, so every commit stays local.
 
-`review` answers "is this branch publishable, and what is in it?" without publishing: the path gate and the internal-string check (`AUR_SLEUTH_INTERNAL_STRINGS`) decide its exit status, `bench/review-pending.py` summarises the pending sweep, and a model (`AUR_SLEUTH_REVIEW_MODEL`) reads every generated text for one thing only, a leak of the operator's own details. That read is advice for a person, never a gate. `quarantine` is the remedy review names: it rewrites the unpushed commits without the leaky reports, keeps the old head under `refs/backup/`, and is the one trusted stage that writes to the store.
+`review` answers "is this branch publishable, and what is in it?" without publishing: the path gate and the internal-string check (`AUR_SLEUTH_INTERNAL_STRINGS`) decide its exit status, `bench/review-pending.py` summarises the pending sweep, and a model (`AUR_SLEUTH_REVIEW_MODEL`) reads every generated text for one thing only, a leak of the operator's own details. That read is advice for a person, never a gate. `quarantine` is the remedy review names: it rewrites the unpushed commits without the leaky reports, and keeps the old head under `refs/backup/`.
+
+`ingest` takes a community-submitted report onto the reports branch as advisory information. `AUR_SLEUTH_SUBMISSION_URL` is a public git URL, `AUR_SLEUTH_SUBMISSION_REF` the branch the contributor pushed, `AUR_SLEUTH_SUBMITTED_BY` a label such as a GitHub login — recorded, never verified. All three are required. The ref is fetched into a throwaway bare repository, never into the shared store, and the stage executes nothing from it: a fetch runs no remote code, and the accepted bytes are inert markdown that `publish_path_allowed` already permits. `bench/ingest-submission.py` decides every rule in code, with no model reading any of it — the path shape, the pkgbase form, no overwrite of a path the branch already has, the frontmatter fields, the operator's internal strings, and size and count caps — and one bad file refuses the whole submission. What it accepts is rewritten to carry `advisory: true` and `source: community` whatever the submission claimed, and renamed by the ingest rather than the contributor. The stage then commits the accepted files onto `audit-reports` with plumbing, fast-forward only, under the archive lock: it is a writer, like `quarantine`, and must not overlap one. `docs/SUBMITTING-REPORTS.md` is the contributor's side of it.
 
 `publish` runs both checks again itself, dry run included, and then pushes two branches: the reviewed commit of `audit-reports`, exactly as the audit stage wrote it, and the public page on `site` (`AUR_SLEUTH_SITE_BRANCH`), which is that commit's tree plus `index.html` and `_dashboard/*` rebuilt by this image. Point GitHub Pages at `site`. The page is never committed to `audit-reports`, so `origin`'s copy of it is always an ancestor of the store's, and nothing ever has to be rebased.
 
@@ -121,8 +124,8 @@ Whatever runs it must provide:
 
 - **UID 1000, non-root.** `makepkg` refuses to run as root.
 - **One persistent volume mounted at `/data` on every stage**, writable by UID 1000, and mounted **read-only** on `publish` and `bundle`. That read-only mount is load-bearing, not decoration; see [The stages, and why](#the-stages-and-why). Keep the volume even when the job is removed: the spend ledger on it is the one piece of state that is not derivable from git, and losing it mid-day resets the budget to zero.
-- **Writers never overlap.** `prepare`, `audit`, `quarantine`, `benchmark` and `screen` write the store, so only one of them runs at a time. `review`, `publish` and `bundle` read a snapshot and may run beside a writer.
-- **Secrets only where needed.** Only `audit`, `benchmark` and `screen` get the LLM key; only `publish` gets the git key; `review` gets the LLM route for its advisory read and nothing else; `prepare`, `quarantine` and `bundle` get none. Create the git key as a deploy key with write access scoped to the one repository that holds the `audit-reports` branch, rather than a broad personal access token.
+- **Writers never overlap.** `prepare`, `audit`, `quarantine`, `ingest`, `benchmark` and `screen` write the store, so only one of them runs at a time. `review`, `publish` and `bundle` read a snapshot and may run beside a writer.
+- **Secrets only where needed.** Only `audit`, `benchmark` and `screen` get the LLM key; only `publish` gets the git key; `review` gets the LLM route for its advisory read and nothing else; `prepare`, `quarantine`, `ingest` and `bundle` get none. Create the git key as a deploy key with write access scoped to the one repository that holds the `audit-reports` branch, rather than a broad personal access token.
 - **Restricted egress for the audit stage.** Legitimate AUR sources use http, https and the git protocol, so allow DNS plus outbound TCP on 80, 443 and 9418 to the internet and deny every private range, including link-local. A hostile `PKGBUILD` should reach nothing on your network. If the audit stage talks to a self-hosted model on a private address, add one narrow rule for that host and port rather than widening the exclusions.
 - **Enough disk.** `aur-sleuth` extracts each package's sources under `$DATA_DIR/bulk-reports/`, so a run with `--jobs 4` and two models can hold eight package trees at once. `prepare` removes any tree left behind by a run that died.
 
@@ -143,7 +146,10 @@ Set as environment variables on the container.
 | `AUR_SLEUTH_EXPECT_HEAD` | publish | — | The commit a review approved; publish pushes exactly that commit, and refuses if the branch no longer contains it |
 | `AUR_SLEUTH_SITE_BRANCH` | publish | `site` | The branch the public page is pushed to; point GitHub Pages at it |
 | `AUR_SLEUTH_REVIEW_JSON` | publish | — | The review's `REVIEW_JSON` object, written to the branch as `_dashboard/review.json` |
-| `AUR_SLEUTH_INTERNAL_STRINGS` | review, quarantine, publish | `svc.cluster.local` | Fixed strings that name your own infrastructure; a report carrying one is never published |
+| `AUR_SLEUTH_INTERNAL_STRINGS` | review, quarantine, ingest, publish | `svc.cluster.local` | Fixed strings that name your own infrastructure; a report carrying one is never published, and a submission carrying one is refused |
+| `AUR_SLEUTH_SUBMISSION_URL` | ingest | — | Required; the public git URL the submission is fetched from |
+| `AUR_SLEUTH_SUBMISSION_REF` | ingest | — | Required; the branch the contributor pushed |
+| `AUR_SLEUTH_SUBMITTED_BY` | ingest | — | Required; a label such as a GitHub login. Recorded on every accepted report, never verified |
 | `AUR_SLEUTH_REVIEW_MODEL` | review | `deepseek/deepseek-v4-flash` | The model for the advisory read |
 | `AUR_SLEUTH_REVIEW_WORKERS` | review | `16` | Read requests in flight; clamped to 1..64 |
 | `AUR_SLEUTH_REVIEW_BATCH` | review | `8` | Reports per read request; clamped to 1..32 |

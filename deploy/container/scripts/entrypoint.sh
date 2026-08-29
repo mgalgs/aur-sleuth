@@ -16,6 +16,12 @@
 #             infrastructure, which review reports as the reason it failed.
 #             Rewrites only the unpushed commits, keeps a backup ref, and
 #             needs the volume read-write. No credential.
+#   ingest    Take a community-submitted report from a public git ref onto the
+#             audit-reports branch, as advisory information: the rules are
+#             decided in code, no model reads the submission, and every
+#             accepted file is stamped advisory and community-sourced whatever
+#             its frontmatter claimed. Needs no credential (a public fetch),
+#             needs the volume read-write, and executes nothing it fetched.
 #   publish   Push the reviewed commit of the audit-reports branch, and the
 #             public page built from it to the site branch. Needs the git write
 #             credential. Refuses to push a branch carrying anything but inert
@@ -1366,6 +1372,116 @@ PY
         "$REPORTS_BRANCH is at ${new:0:12}, clean"
 }
 
+# --- ingest -------------------------------------------------------------------
+
+# Take a community-submitted report onto the reports branch, as advisory
+# information and nothing else.
+#
+# Everything here is untrusted. The submission is a public git ref that anyone
+# may push to; its frontmatter is a claim, its filename is a claim, and its
+# body is text a person chose. So:
+#
+#   - The ref is fetched into a THROWAWAY repository, never into the shared
+#     store, for the same reason publish stages one: a repository's config and
+#     hooks are executable input. A fetch runs no remote code, and the accepted
+#     bytes are inert markdown the publish gate already permits.
+#   - bench/ingest-submission.py decides every rule in code -- no model reads
+#     any of it -- and stamps what it accepts `advisory: true` and
+#     `source: community`, which is what the rest of the pipeline keys on.
+#   - The commit is made with plumbing onto the current head, fast-forward
+#     only, under the archive lock: this stage is a writer, like quarantine.
+do_ingest() {
+    local url="${AUR_SLEUTH_SUBMISSION_URL:-}"
+    local ref="${AUR_SLEUTH_SUBMISSION_REF:-}"
+    local who="${AUR_SLEUTH_SUBMITTED_BY:-}"
+    [[ -n "$url" && -n "$ref" && -n "$who" ]] || die \
+        "ingest needs AUR_SLEUTH_SUBMISSION_URL (a public git URL)," \
+        "AUR_SLEUTH_SUBMISSION_REF (the branch the contributor pushed)" \
+        "and AUR_SLEUTH_SUBMITTED_BY (a label, recorded and never verified)"
+    [[ -d "$GIT_STORE" ]] || die "$GIT_STORE missing; run the prepare stage first"
+
+    exec 9>"$DATA_DIR/bulk-audit/archive.lock"
+    flock -n 9 || die "another run holds the archive lock; refusing to ingest under it"
+
+    sanitize_store
+    local g=(git --git-dir="$GIT_STORE")
+
+    local head
+    head="$("${g[@]}" rev-parse --verify --quiet "refs/heads/$REPORTS_BRANCH" || true)"
+    [[ -n "$head" ]] || die "no $REPORTS_BRANCH ref to ingest onto"
+    log "$REPORTS_BRANCH is at ${head:0:12}"
+
+    local repo
+    repo="$(stage_reports_repo)"
+    log "Fetching $ref from $url"
+    git --git-dir="$repo" fetch --quiet --no-tags "$url" \
+        "+${ref}:refs/submission" \
+        || die "could not fetch $ref from $url"
+    local sub
+    sub="$(git --git-dir="$repo" rev-parse --verify "refs/submission^{commit}")"
+    log "Submission is at ${sub:0:12}, offered by $who"
+
+    local out needles
+    out="$(mktemp -d)"
+    needles="$(mktemp)"
+    internal_string_needles > "$needles"
+
+    if ! python3 "$SRC_DIR/bench/ingest-submission.py" \
+            --git-dir "$repo" \
+            --reports-ref "refs/heads/$REPORTS_BRANCH" \
+            --submission-ref refs/submission \
+            --submitted-by "$who" \
+            --out "$out" \
+            --needles-file "$needles"; then
+        rm -rf "$out" "$needles"
+        die "the submission was refused; nothing was written to the store"
+    fi
+    rm -f "$needles"
+
+    # Everything the script accepted, relative to $out. It only ever writes
+    # <pkg>/<name>.md, and the publish gate is what that shape is for.
+    local files=()
+    while IFS= read -r -d '' f; do
+        files+=("${f#"$out"/}")
+    done < <(find "$out" -type f -print0)
+    if (( ${#files[@]} == 0 )); then
+        rm -rf "$out"
+        log "Nothing to ingest"
+        return 0
+    fi
+
+    # Commit with plumbing onto the head read above, which the lock has held
+    # since. Fast-forward by construction: the parent is the current head, and
+    # it is re-read and compared before the ref moves.
+    local idx blob tree commit path
+    idx="$(mktemp)"
+    rm -f "$idx"
+    GIT_INDEX_FILE="$idx" "${g[@]}" read-tree "$head"
+    for path in "${files[@]}"; do
+        blob="$("${g[@]}" hash-object -w --stdin < "$out/$path")"
+        GIT_INDEX_FILE="$idx" "${g[@]}" update-index --add \
+            --cacheinfo "100644,${blob},${path}"
+    done
+    tree="$(GIT_INDEX_FILE="$idx" "${g[@]}" write-tree)"
+    rm -f "$idx"
+
+    local now
+    now="$("${g[@]}" rev-parse --verify --quiet "refs/heads/$REPORTS_BRANCH" || true)"
+    [[ "$now" == "$head" ]] || die \
+        "$REPORTS_BRANCH moved from ${head:0:12} to ${now:0:12} under the lock; refusing"
+
+    commit="$("${g[@]}" commit-tree "$tree" -p "$head" \
+        -m "ingest: ${#files[@]} community report(s) from $who (${sub:0:12})")"
+    "${g[@]}" update-ref "refs/heads/$REPORTS_BRANCH" "$commit" "$head"
+    rm -rf "$out"
+
+    log "Ingested ${#files[@]} community report(s) from $who at ${commit:0:12}:"
+    for path in "${files[@]}"; do
+        log "  $path"
+    done
+    log "They are advisory: informational only, never a vote, never read by a model."
+}
+
 # --- bundle -------------------------------------------------------------------
 
 # Write unpublished report commits to a git bundle: one file that can be copied
@@ -1430,11 +1546,12 @@ case "$MODE" in
     audit)   do_audit "$@" ;;
     review)     do_review "$@" ;;
     quarantine) do_quarantine ;;
+    ingest)     do_ingest ;;
     publish)    do_publish ;;
     bundle)     do_bundle ;;
     benchmark)  do_benchmark ;;
     screen)     do_screen "$@" ;;
     *)          die "unknown stage '$MODE'" \
-                    "(want prepare, audit, review, quarantine," \
+                    "(want prepare, audit, review, quarantine, ingest," \
                     "publish, bundle, benchmark or screen)" ;;
 esac
