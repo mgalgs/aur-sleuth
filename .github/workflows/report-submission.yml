@@ -1,0 +1,78 @@
+# Acknowledge a community report submission and close its pull request.
+#
+# A submission is a pull request against `audit-reports` carrying one or more
+# `<package>/<name>.md` reports (docs/SUBMITTING-REPORTS.md). It is never
+# merged: a GitHub merge would put a commit on origin that the maintainer's
+# object store has never seen, and publishing requires origin to stay an
+# ancestor of the store. The container's `ingest` stage takes the PR head
+# instead -- GitHub publishes it at `refs/pull/<N>/head`, readable with no
+# credential -- rewrites what it accepts, and commits that.
+#
+# So this workflow does the two things that have to happen at once, in
+# public, on every submission: say what will become of it, and close it, so
+# the open-PR list never fills with submissions waiting on an operator. A
+# closed PR here is the normal outcome, not a rejection.
+#
+# It deliberately does NOT run the ingest, and could not: the object store it
+# writes lives on the maintainer's volume, not in Actions. Picking up closed
+# but not-yet-ingested submissions is the ops controller's job, in its own
+# repository (docs/ROADMAP.md).
+#
+# `pull_request_target` rather than `pull_request`: this needs write access to
+# issues, and a `pull_request` job from a fork gets a read-only token. Nothing
+# from the pull request is checked out or executed here -- the job runs no
+# repository code at all, and the only untrusted value it touches is the
+# author's login, which is passed to `gh` as an argument and never
+# interpolated into a shell command.
+---
+name: report-submission
+
+"on":
+  pull_request_target:
+    types: [opened, reopened]
+    branches: [audit-reports]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: report-submission-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  acknowledge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Comment and close
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: |
+          set -euo pipefail
+          body="$(cat <<'EOF'
+          this is queued for ingest.
+
+          Closing the pull request is how a submission is handled here, not a
+          rejection. Your commit is fetched straight from `refs/pull/<N>/head`
+          by the `ingest` stage and committed to `audit-reports` from there;
+          merging it would move `origin` ahead of the maintainer's own copy of
+          the branch, which publishing does not allow.
+
+          What lands is your report with two markers added: `advisory: true`
+          and `source: community`. Your `model:` and `result:` lines are kept
+          exactly as you wrote them. A community report is a tier below an
+          advisory one — it is information for people reading the dashboard,
+          never a vote, and never read by any model in the pipeline. See
+          [docs/SUBMITTING-REPORTS.md](https://github.com/mgalgs/aur-sleuth/blob/master/docs/SUBMITTING-REPORTS.md).
+
+          If anything in the submission fails the ingest's checks, the whole
+          thing is refused and someone will say so here.
+          EOF
+          )"
+          # The login is a GitHub username, and it is passed as one argument
+          # to gh -- never interpolated into a command line the shell parses.
+          gh pr comment "$PR" --body "Thanks, @${AUTHOR} — ${body}"
+          gh pr close "$PR"
