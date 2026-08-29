@@ -574,7 +574,15 @@ def build_index_data(audits, judges, now=None, coverage_inputs=None, escalation_
     pkg_summaries = {}
     for pkg_name, pkg_data in sorted(packages.items()):
         pkg_audits = sorted(pkg_data["audits"], key=lambda a: a["date"], reverse=True)
-        latest = pkg_audits[0] if pkg_audits else {}
+        # The report the row describes the package by: its version, its date,
+        # its file count, and its place in a table sorted by that date. A
+        # community submission dated today would otherwise be it, and a
+        # submission's pkgver is the contributor's claim, not a version this
+        # pipeline saw. So the newest report THIS pipeline ran comes first,
+        # and a submission describes only a package nothing here has audited.
+        pipeline_latest = next(
+            (a for a in pkg_audits if a.get("source") != "community"), None)
+        latest = pipeline_latest or (pkg_audits[0] if pkg_audits else {})
         # This deployment's spend on the package, so a submission's claim is
         # not in it -- the same rule the summary's audit_cost follows.
         total_cost = sum(a["cost"] for a in pkg_audits if a.get("source") != "community")

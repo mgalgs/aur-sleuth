@@ -169,6 +169,37 @@ check("the submissions are still there, and still attributed",
       and d["packages"]["c0"]["audits"][0]["source"] == "community"
       and d["packages"]["c0"]["audits"][0]["submitted_by"] == "octocat")
 
+# The row describes a package by the newest report THIS pipeline ran. A
+# submission dated after that audit, claiming another version, is on the
+# branch and attributed like any other -- but it is not the row's version,
+# date or file count, and it does not float the package up a table sorted by
+# date. A package nothing here has audited is described by its submission,
+# because that is all there is.
+audited = report("q", {"model": "openai/gpt-5.4", "date": old, "result": "safe",
+                       "cost": "0.05", "files_reviewed": "9",
+                       "pkgver": "1.0", "pkgrel": "1"})
+claimed = report("q", {"model": "openai/gpt-5.4", "date": recent, "result": "safe",
+                       "files_reviewed": "1", "pkgver": "99.0", "pkgrel": "7",
+                       "advisory": "true", "source": "community",
+                       "submitted_by": "octocat", "submitted_ring": "2"})
+only = report("r", {"model": "openai/gpt-5.4", "date": recent, "result": "safe",
+                    "files_reviewed": "2", "pkgver": "3.1", "pkgrel": "1",
+                    "advisory": "true", "source": "community",
+                    "submitted_by": "octocat", "submitted_ring": "2"})
+d = gd.build_index_data([audited, claimed, only], [], now,
+                        {"updates_per_day": 100, "daily_budget": None})
+q = d["packages"]["q"]
+check("the row's version and file count are the ones this pipeline saw",
+      q["pkgver"] == "1.0" and q["pkgrel"] == "1" and int(q["files_reviewed"]) == 9)
+check("and its date is the audit's, so a submission cannot float it up the table",
+      q["latest_date"] == old and q["latest_measured_date"] == old)
+check("the submission is still on the row, newest first",
+      len(q["audits"]) == 2 and q["audits"][0]["source"] == "community")
+r = d["packages"]["r"]
+check("a package only a submission describes is described by it",
+      r["pkgver"] == "3.1" and r["latest_date"] == recent
+      and r["latest_measured_date"] == "")
+
 if fails:
     print(f"FAILED: {fails} check(s)")
     sys.exit(1)
