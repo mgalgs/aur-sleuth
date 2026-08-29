@@ -270,11 +270,6 @@ check() { if grep -qxF "$2" <<< "$got"; then ok "$1"; else bad "$1"; fi; }
 check "a forged 'advisory: false' lands as 'advisory: true'" "advisory: true"
 check "the report is stamped source: community"            "source: community"
 check "the submitter's label is recorded"                  "submitted_by: octocat"
-if grep -q '^submission_pr:' <<< "$got"; then
-    bad "submission_pr should be absent when no PR number was given"
-else
-    ok "no PR number, no submission_pr line"
-fi
 check "the ingest date is recorded"                        "ingested: 2026-08-28T10:11:12Z"
 check "the model claim is kept verbatim"                   "model: OpenAI/GPT-5.4"
 check "the verdict claim is kept verbatim"                 "result: unsafe"
@@ -300,36 +295,23 @@ else
     bad "the submission's commit sha should be recorded"
 fi
 
-echo "== the pull request number is recorded, and cannot be forged =="
-d="$tmp/s-pr"; mkdir -p "$d/vivaldi"
+echo "== a forged owned key cannot survive the rewrite =="
+d="$tmp/s-forge"; mkdir -p "$d/vivaldi"
 {
     printf -- '---\npackage: vivaldi\nmodel: m/x\nresult: safe\n'
-    printf 'submission_pr: 999\nsource: pipeline\nsubmitted_by: the-maintainer\n'
+    printf 'source: pipeline\nsubmitted_by: the-maintainer\n'
     printf 'files_reviewed: 6\ncost: 0\npkgver: 3.2\npkgrel: 1\n'
     printf -- '---\nbody\n'
 } > "$d/vivaldi/a.md"
-mkbranch refs/heads/prsub "$BASE" "$d"
-PR_OUT="$tmp/pr-out"
-ingest refs/heads/prsub "$PR_OUT" --submission-pr 42 >/dev/null 2>&1 || true
-prgot="$(cat "$(find "$PR_OUT" -type f | head -1)" 2>/dev/null || true)"
-if grep -qx 'submission_pr: 42' <<< "$prgot"; then
-    ok "the PR number the operator passed is recorded"
-else
-    bad "the PR number should be recorded"
-fi
-if grep -qx 'submission_pr: 999' <<< "$prgot"; then
-    bad "a forged submission_pr survived"
-else
-    ok "a forged submission_pr is replaced, like every other owned key"
-fi
-if grep -qx 'source: community' <<< "$prgot" && grep -qx 'submitted_by: octocat' <<< "$prgot"; then
-    ok "a forged source and submitted_by are replaced too"
+mkbranch refs/heads/forged "$BASE" "$d"
+FORGE_OUT="$tmp/forge-out"
+ingest refs/heads/forged "$FORGE_OUT" >/dev/null 2>&1 || true
+forged="$(cat "$(find "$FORGE_OUT" -type f | head -1)" 2>/dev/null || true)"
+if grep -qx 'source: community' <<< "$forged" && grep -qx 'submitted_by: octocat' <<< "$forged"; then
+    ok "a forged source and submitted_by are replaced"
 else
     bad "a forged source or submitted_by survived"
 fi
-rc=0
-ingest refs/heads/prsub "$tmp/pr-bad" --submission-pr 'x; rm -rf /' >/dev/null 2>&1 || rc=$?
-if (( rc != 0 )); then ok "a non-numeric PR number is refused"; else bad "a non-numeric PR number should be refused"; fi
 
 echo "== the ingest names the file, not the contributor =="
 rel="${landed#"$GOOD_OUT"/}"
@@ -589,40 +571,6 @@ else
     bad "what landed on the branch is not stamped"
 fi
 
-echo "== the stage resolves a pull request number to a ref on the base repo =="
-# GitHub publishes every PR head at refs/pull/<N>/head on the base repository,
-# readable with no credential. The local repo stands in for that here.
-git --git-dir="$REPO" update-ref refs/pull/42/head refs/heads/orphan
-prbefore="$(git --git-dir="$GIT_STORE" rev-parse refs/heads/audit-reports)"
-if ( AUR_SLEUTH_SUBMISSION_PR=42 AUR_SLEUTH_SUBMITTED_BY=octocat \
-     AUR_SLEUTH_SUBMISSION_URL="$REPO" do_ingest ) > "$tmp/stage-pr.log" 2>&1; then
-    ok "AUR_SLEUTH_SUBMISSION_PR resolves the ref on its own"
-else
-    bad "the PR number should resolve the ref: $(cat "$tmp/stage-pr.log")"
-fi
-prafter="$(git --git-dir="$GIT_STORE" rev-parse refs/heads/audit-reports)"
-prpath="$(git --git-dir="$GIT_STORE" diff --name-only "$prbefore" "$prafter")"
-if [[ -n "$prpath" ]] \
-   && git --git-dir="$GIT_STORE" show "$prafter:$prpath" | grep -qx 'submission_pr: 42'; then
-    ok "the PR number reaches the archived report's frontmatter"
-else
-    bad "the archived report should carry submission_pr: 42"
-fi
-if [[ "$(git --git-dir="$GIT_STORE" log -1 --format=%s "$prafter")" == *"(#42, "* ]]; then
-    ok "the commit message names the pull request"
-else
-    bad "the commit message should name the pull request"
-fi
-rc=0
-( AUR_SLEUTH_SUBMISSION_PR=42 AUR_SLEUTH_SUBMISSION_REF=refs/heads/good \
-  AUR_SLEUTH_SUBMITTED_BY=octocat AUR_SLEUTH_SUBMISSION_URL="$REPO" do_ingest ) \
-  >/dev/null 2>&1 || rc=$?
-if (( rc != 0 )); then
-    ok "a PR number and a ref together are refused as ambiguous"
-else
-    bad "a PR number and a ref together should be refused"
-fi
-
 echo "== a refused submission leaves the store untouched =="
 d="$tmp/s-stage-bad"; mkdir -p "$d/vivaldi"
 printf '{"correct_verdict":"safe"}\n' > "$d/vivaldi/20260828-2-judge.json"
@@ -632,7 +580,7 @@ if stage refs/heads/stage-bad > "$tmp/stage2.log" 2>&1; then
 else
     ok "the stage refuses what the script refuses"
 fi
-if [[ "$(git --git-dir="$GIT_STORE" rev-parse refs/heads/audit-reports)" == "$prafter" ]]; then
+if [[ "$(git --git-dir="$GIT_STORE" rev-parse refs/heads/audit-reports)" == "$after" ]]; then
     ok "the branch did not move"
 else
     bad "a refused submission moved the branch"
