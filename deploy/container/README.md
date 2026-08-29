@@ -138,7 +138,7 @@ Set as environment variables on the container.
 | Variable | Stage | Default | Purpose |
 |---|---|---|---|
 | `AUR_SLEUTH_DATA_DIR` | all | `/data` | Must point at the volume, not `$HOME` |
-| `AUR_SLEUTH_FETCH_URL` | prepare | the public GitHub repo | Where the object store is cloned from |
+| `AUR_SLEUTH_FETCH_URL` | prepare, ingest | the public GitHub repo | Where the object store is cloned from, and where `ingest` reads the `trusted-contributors` registry from |
 | `AUR_SLEUTH_PUSH_URL` | publish | — | ssh URL the reports branch is pushed to |
 | `AUR_SLEUTH_SSH_KEY` | publish | `/secrets/git/ssh-privatekey` | Mounted deploy key |
 | `AUR_SLEUTH_KNOWN_HOSTS` | publish | `/etc/ssh/ssh_known_hosts` | Baked in at build time |

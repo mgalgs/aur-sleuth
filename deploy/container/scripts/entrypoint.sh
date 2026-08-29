@@ -17,12 +17,15 @@
 #             Rewrites only the unpushed commits, keeps a backup ref, and
 #             needs the volume read-write. No credential.
 #   ingest    Take a community-submitted report onto the audit-reports branch
-#             as advisory information: a pull request number, or any public
-#             git URL and ref. The rules are decided in code, no model reads
-#             the submission, and every accepted file is stamped advisory and
-#             community-sourced whatever its frontmatter claimed. Needs no
-#             credential (a public fetch), needs the volume read-write, and
-#             executes nothing it fetched.
+#             as an advisory report: a git URL and a ref, normally the bundle
+#             the submission endpoint spooled. Which rules it must clear is
+#             decided in code and no model has a say in that, and every
+#             accepted file is stamped advisory and community-sourced whatever
+#             its frontmatter claimed -- so a judge and the review stage read
+#             it as context, exactly as they read one of the pipeline's own
+#             advisory reports, and nothing votes on it. Needs no credential
+#             (a public fetch), needs the volume read-write, and executes
+#             nothing it fetched.
 #   publish   Push the reviewed commit of the audit-reports branch, and the
 #             public page built from it to the site branch. Needs the git write
 #             credential. Refuses to push a branch carrying anything but inert

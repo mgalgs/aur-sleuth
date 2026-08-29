@@ -134,7 +134,15 @@ only with a version bump.
   **The drain.** Runs the `ingest` container stage once per spooled bundle,
   passing `AUR_SLEUTH_SUBMISSION_URL` (the bundle path),
   `AUR_SLEUTH_SUBMISSION_REF`, `AUR_SLEUTH_SUBMITTED_BY` and
-  `AUR_SLEUTH_SUBMISSION_RING` from what the endpoint recorded beside it. It is
+  `AUR_SLEUTH_SUBMISSION_RING`. The last two are what the gateway told the
+  endpoint and the endpoint recorded beside the bundle; the ref is not, and
+  the endpoint must not take it from the client either. `aur-sleuth-submit`
+  bundles exactly one branch and calls it `submission`, so the drain passes
+  the literal string `submission` -- a name the endpoint knows because this
+  repository fixes it, not because an upload declared it. A bundle whose only
+  ref is called something else is not one this client built, and the fetch
+  fails rather than the drain guessing. `AUR_SLEUTH_REGISTRY_REF` goes with
+  them when the registry is not on `master`. It is
   a writer, so it serialises against `prepare`, `audit`, `quarantine`,
   `benchmark` and `screen` like every other writer, and a refused bundle is
   kept with its reasons rather than deleted.
