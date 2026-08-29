@@ -302,6 +302,87 @@ else
     bad "the workflow must check out master explicitly"
 fi
 
+echo "== the base file the rules are judged against arrives, or the job stops =="
+# Rule 7 -- not already registered -- is decided against the file on the
+# branch, and NOTHING downstream can tell "the file is empty because nobody
+# has registered yet" from "the fetch failed". An empty base passes rule 7 for
+# every duplicate, so a transient API failure would merge a line whose email
+# or key is already there; `trusted-contributors.sh check` then fails on the
+# base for every registration afterwards, and the only door into the feature
+# is shut until someone hand-edits the branch. A `gh` that writes its error
+# body instead is as bad the other way: the base parses as JSON, and every
+# registration is refused for a malformation that is not the submitter's.
+#
+# So the fragment is lifted out of the workflow and RUN here, against a stub
+# `gh`, rather than described. The indentation is the YAML block scalar's.
+reset
+mkdir -p "$tmp/bin"
+frag="$tmp/fetch-base.sh"
+python3 - "$WF" > "$frag" <<'PY'
+import sys
+# Everything from the fetch to the end of that step's `run:` block, dedented
+# out of the YAML block scalar. Whatever shape the fetch has, this runs it.
+lines = open(sys.argv[1], encoding="utf-8").read().split("\n")
+out, on = [], False
+for ln in lines:
+    if 'gh api "repos/$GH_REPO/contents/trusted-contributors' in ln:
+        on = True
+    if not on:
+        continue
+    if ln.strip() and not ln.startswith(" " * 10):
+        break
+    out.append(ln[10:])
+print("set -euo pipefail")
+print("mkdir -p inputs")
+print("\n".join(out))
+PY
+
+if ! grep -q 'gh api' "$frag"; then
+    bad "the base-file fetch could not be found in $WF"
+else
+    cat > "$tmp/bin/gh" <<'STUB'
+#!/usr/bin/env bash
+# Stands in for `gh api`. Real gh writes the response body -- including an
+# error body -- to stdout, and its own message to stderr.
+case "${GH_STUB:-ok}" in
+    ok)      printf '%s' "$GH_STUB_BODY"; exit 0 ;;
+    404)     echo "gh: Not Found (HTTP 404)" >&2; exit 1 ;;
+    500)     echo '{"message":"Server Error"}'
+             echo "gh: Internal Server Error (HTTP 500)" >&2; exit 1 ;;
+    network) echo "dial tcp: lookup api.github.com: no such host" >&2; exit 1 ;;
+esac
+STUB
+    chmod +x "$tmp/bin/gh"
+
+    fetch() {  # $1 = stub mode; echoes the exit code, leaves inputs/ behind
+        local d="$tmp/fetch.$1"
+        rm -rf "$d"; mkdir -p "$d"
+        local rc=0
+        ( cd "$d" && PATH="$tmp/bin:$PATH" GH_REPO=o/r GH_STUB="$1" \
+          GH_STUB_BODY="$F_BASE" bash "$frag" >/dev/null 2>&1 ) || rc=$?
+        echo "$rc"
+    }
+
+    if [[ "$(fetch ok)" == 0 && "$(cat "$tmp/fetch.ok/inputs/base")" == "$F_BASE" ]]; then
+        ok "the file on the branch is what the rules read"
+    else
+        bad "a successful fetch did not land in inputs/base"
+    fi
+    if [[ "$(fetch 404)" == 0 && -f "$tmp/fetch.404/inputs/base" \
+          && ! -s "$tmp/fetch.404/inputs/base" ]]; then
+        ok "no file yet -> an empty base, which is the honest one"
+    else
+        bad "a 404 must leave an empty base: the first registration creates the file"
+    fi
+    for mode in 500 network; do
+        if [[ "$(fetch "$mode")" != 0 && ! -e "$tmp/fetch.$mode/inputs/base" ]]; then
+            ok "a $mode failure stops the job instead of guessing at the base"
+        else
+            bad "a $mode failure left the job running with a base it did not read"
+        fi
+    done
+fi
+
 echo "== a refusal lists every reason, not the first =="
 reset
 F_VERIFIED=false

@@ -379,11 +379,18 @@ def build_coverage(pkg_summaries, by_date, now, updates_per_day=None,
     window (audits, judges, re-audits) over the packages it audited in that
     window, so it is the marginal cost of one more package under the current
     models, not an all-time mean that remembers a retired judge.
+
+    Both sides of that division are this deployment's own work, which is why
+    the denominator reads `latest_measured_date` and not `latest_date`: a
+    community submission carries a date the contributor wrote and no spend
+    this pipeline made, so counting it would put a package in the denominator
+    that contributed nothing to the numerator, and every submission would
+    understate what coverage costs.
     """
     window_start = (now - timedelta(days=COST_WINDOW_DAYS)).strftime("%Y-%m-%d")
     cost = sum(v["cost"] for d, v in by_date.items() if d >= window_start)
     packages = sum(1 for ps in pkg_summaries.values()
-                   if (ps["latest_date"] or "")[:10] >= window_start)
+                   if (ps.get("latest_measured_date") or "")[:10] >= window_start)
     if not packages or cost <= 0 or not updates_per_day:
         return None
     per_package = cost / packages
@@ -568,7 +575,9 @@ def build_index_data(audits, judges, now=None, coverage_inputs=None, escalation_
     for pkg_name, pkg_data in sorted(packages.items()):
         pkg_audits = sorted(pkg_data["audits"], key=lambda a: a["date"], reverse=True)
         latest = pkg_audits[0] if pkg_audits else {}
-        total_cost = sum(a["cost"] for a in pkg_audits)
+        # This deployment's spend on the package, so a submission's claim is
+        # not in it -- the same rule the summary's audit_cost follows.
+        total_cost = sum(a["cost"] for a in pkg_audits if a.get("source") != "community")
         total_cost += sum(j["cost"] for j in pkg_data["judges"])
 
         # Re-audits count double in majority calculation. Advisory reports
@@ -597,7 +606,18 @@ def build_index_data(audits, judges, now=None, coverage_inputs=None, escalation_
             "pkgver": latest.get("pkgver", ""),
             "pkgrel": latest.get("pkgrel", ""),
             "latest_date": latest.get("date", ""),
+            # The last time THIS deployment audited the package. `latest_date`
+            # can be a submission's date, because a submission sorts by the
+            # date on it like any other report; this one cannot. build_coverage
+            # divides this pipeline's spend by the packages it audited, so a
+            # date it did not measure must not reach that denominator.
+            "latest_measured_date": next(
+                (a["date"] for a in pkg_audits if a.get("source") != "community"), ""),
             "first_date": pkg_audits[-1]["date"] if pkg_audits else "",
+            # The same distinction at the other end, for "N of them new".
+            "first_measured_date": next(
+                (a["date"] for a in reversed(pkg_audits)
+                 if a.get("source") != "community"), ""),
             "total_cost": round(total_cost, 6),
             "audit_count": len(pkg_audits),
             "files_reviewed": latest.get("files_reviewed", 0),
@@ -657,17 +677,34 @@ def build_index_data(audits, judges, now=None, coverage_inputs=None, escalation_
         pkg_summaries[name]["queue_position"] = i
 
     # Aggregate stats
-    audit_cost = sum(safe_float(a["frontmatter"].get("cost")) for a in audits)
+    #
+    # The reports THIS deployment ran. A community submission is on the
+    # branch, and it is in its package's own row, but it is not a run of this
+    # pipeline: it spent none of this deployment's money, and the `model` and
+    # `date` on it are the contributor's claim, not something this pipeline
+    # dispatched and timed. bench/ingest-submission.py drops `cost` and the
+    # token counts for exactly that reason -- but stripping them only empties
+    # the numerators. The two fields it CANNOT strip, because a report is
+    # meaningless without them, still move any aggregate that counts reports:
+    # the per-model tables below, and (through the package's latest_date) the
+    # coverage denominator. So every figure that says what the pipeline SPENT,
+    # or WHICH MODEL ran, is computed from this list. The counts that describe
+    # what is on the branch -- total_reports, results -- stay on `audits`,
+    # because there a submission is one of the things being counted.
+    pipeline_audits = [a for a in audits
+                       if a["frontmatter"].get("source") != "community"]
+
+    audit_cost = sum(safe_float(a["frontmatter"].get("cost")) for a in pipeline_audits)
     judge_cost = sum((j["data"].get("_judge_usage", {}).get("cost") or 0) for j in judges)
-    total_pt = sum(safe_int(a["frontmatter"].get("prompt_tokens")) for a in audits)
-    total_ct = sum(safe_int(a["frontmatter"].get("completion_tokens")) for a in audits)
+    total_pt = sum(safe_int(a["frontmatter"].get("prompt_tokens")) for a in pipeline_audits)
+    total_ct = sum(safe_int(a["frontmatter"].get("completion_tokens")) for a in pipeline_audits)
 
     results = defaultdict(int)
     for a in audits:
         results[a["frontmatter"].get("result", "unknown")] += 1
 
     by_model = defaultdict(lambda: {"count": 0, "cost": 0.0, "tokens": 0})
-    for a in audits:
+    for a in pipeline_audits:
         fm = a["frontmatter"]
         m = by_model[fm.get("model", "unknown")]
         m["count"] += 1
@@ -682,7 +719,7 @@ def build_index_data(audits, judges, now=None, coverage_inputs=None, escalation_
         m["tokens"] += (usage.get("prompt_tokens", 0) or 0) + (usage.get("completion_tokens", 0) or 0)
 
     by_date = defaultdict(lambda: {"audits": 0, "judges": 0, "cost": 0.0})
-    for a in audits:
+    for a in pipeline_audits:
         d = a["frontmatter"].get("date", "")[:10] or "unknown"
         by_date[d]["audits"] += 1
         by_date[d]["cost"] += safe_float(a["frontmatter"].get("cost"))
@@ -700,12 +737,16 @@ def build_index_data(audits, judges, now=None, coverage_inputs=None, escalation_
     # audit set is drawn from recently-updated and top-popular packages.
     week_start = (now - timedelta(days=7)).strftime("%Y-%m-%d")
 
+    # "Packages read" is packages THIS pipeline read, on the measured dates,
+    # for the same reason the per-model counts below are: a submission would
+    # otherwise add a package to the count of what was read, over an audit
+    # total that does not include it -- the same sentence saying two things.
     wk_updated = wk_new = wk_confirmed = wk_look = wk_disputed = wk_green = wk_unknown = 0
     for ps in pkg_summaries.values():
-        if (ps["latest_date"] or "")[:10] < week_start:
+        if (ps["latest_measured_date"] or "")[:10] < week_start:
             continue
         wk_updated += 1
-        if (ps["first_date"] or "")[:10] >= week_start:
+        if (ps["first_measured_date"] or "")[:10] >= week_start:
             wk_new += 1
         state = package_state(ps)
         if state == "confirmed":
@@ -721,7 +762,7 @@ def build_index_data(audits, judges, now=None, coverage_inputs=None, escalation_
 
     wk_by_model = defaultdict(int)
     wk_audits_total = 0
-    for a in audits:
+    for a in pipeline_audits:
         if a["frontmatter"].get("date", "")[:10] >= week_start:
             wk_audits_total += 1
             wk_by_model[a["frontmatter"].get("model", "unknown")] += 1

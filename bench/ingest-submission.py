@@ -75,12 +75,19 @@ OWNED_KEYS = ("advisory", "source", "submitted_by", "submitted_ring",
 
 # Keys dropped outright, because a submission has nothing true to say in them.
 # `triggered_by` is the re-audit bookkeeping's own field, and a submission has
-# no escalation behind it. The rest are this pipeline's ACCOUNTING: the
-# dashboard sums cost and tokens across every report on the branch with no
-# advisory guard, so a submitted `cost: 999999` would steer the public spend
-# figure and the per-model table. A submission spent none of this deployment's
-# money, and the honest value is therefore no value at all rather than a zero
+# no escalation behind it. The rest are this pipeline's ACCOUNTING: a submitted
+# `cost: 999999` has no run behind it, and a submission spent none of this
+# deployment's money, so the honest value is no value at all rather than a zero
 # it did not measure.
+#
+# Dropping them is not by itself what keeps a submission out of the public
+# spend figure, and it must not be read as if it were: `model` and `date` stay,
+# because a report without them says nothing, and any aggregate that COUNTS
+# reports still moves when one lands. What keeps those honest is the other
+# half, in bench/generate-dashboard.py: every figure that says what this
+# pipeline spent or which model ran is computed over the non-community reports
+# (`pipeline_audits`, and `latest_measured_date` for the coverage
+# denominator). Neither half is sufficient alone.
 DROPPED_KEYS = ("triggered_by", "cost", "prompt_tokens", "completion_tokens",
                 "total_tokens", "execution_time")
 

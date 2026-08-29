@@ -229,9 +229,9 @@ report from one written by whoever poisoned the package it clears. So:
   and the date it was ingested. Your `model:` and `result:` lines are kept
   exactly as you wrote them: the claim is preserved as a claim.
 - The accounting lines are dropped: `cost`, the token counts and
-  `execution_time`. Those are what *this* pipeline spent, and the dashboard
-  sums them across the branch — your run cost it nothing, so it records
-  nothing rather than a number it did not measure.
+  `execution_time`. Those are what *this* pipeline spent; your run cost it
+  nothing, so the archive records nothing rather than a number it did not
+  measure.
 - `submitted_by` is **not** a label anyone typed. The ingest verifies the
   commit's signature against the `trusted-contributors` branch, requires the
   signature's principal to be the commit's own author, and records the login on
@@ -260,6 +260,13 @@ advisory means in practice:
   state. A community `unsafe` puts nothing on the flagged list.
 - It never marks a package as already audited, so it cannot keep a package away
   from the pipeline's own reads.
+- It is in no figure that says what this deployment spent or which models it
+  ran: not the spend total, not the per-model tables, not the week's "packages
+  read" and audit counts, and not the cost-per-package the coverage line
+  divides. Dropping your
+  `cost` line is not what does that — your `model:` and `date:` are kept, and
+  anything that *counts reports* would move if it counted yours. The dashboard
+  computes those figures over the pipeline's own reports instead.
 
 If you think a package deserves a real verdict, saying so is more use than the
 report's own `result:` line — the maintainer can queue an escalation, which is

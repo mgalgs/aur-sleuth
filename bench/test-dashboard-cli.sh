@@ -193,6 +193,8 @@ JS
     else
         bad "a community report was given a measurement it does not carry: $metas"
     fi
+    # `$0.0000` is the literal the page prints, not an expansion.
+    # shellcheck disable=SC2016
     if [[ "$(sed -n 2p <<< "$metas")" == *'$0.0000'*'0s'* ]]; then
         ok "a real audit that measured zero still says zero"
     else
@@ -202,6 +204,38 @@ JS
         ok "the file count, which the ingest does not strip, survives"
     else
         bad "the submitted file count was dropped: $metas"
+    fi
+
+    # --- which models the diagram gives a seat to ---------------------------
+    #
+    # auditRow() sorts a model into the seat row or the advisory row by
+    # whether its advisory reports outnumber its votes. A submission names
+    # whichever model the contributor ran, so counting submissions there let
+    # five of them naming the paid model push that model out of the seat row
+    # -- the deployment's own picture of itself, rewritten from outside it.
+    # The generator's half of this is proved in bench/test-coverage.sh.
+    row="$( { lift auditRow
+              cat <<'JS'
+const vote = {model: 'openai/gpt-5.4', result: 'safe'};
+const sent = {model: 'openai/gpt-5.4', result: 'safe', advisory: true, source: 'community'};
+const free = {model: 'openrouter/free', result: 'safe', advisory: true};
+globalThis.DATA = {
+    summary: {week: {by_model: {'openai/gpt-5.4': 1, 'openrouter/free': 1}}},
+    packages: {
+        p1: {audits: [vote, free]},
+        c1: {audits: [sent]}, c2: {audits: [sent]}, c3: {audits: [sent]},
+        c4: {audits: [sent]}, c5: {audits: [sent]},
+    },
+};
+const r = auditRow();
+process.stdout.write(JSON.stringify({seat: r.seat.map(b => b.model),
+                                     advisory: r.advisory.map(b => b.model)}));
+JS
+            } | node )"
+    if [[ "$row" == '{"seat":["openai/gpt-5.4"],"advisory":["openrouter/free"]}' ]]; then
+        ok "submissions naming the seat model do not unseat it"
+    else
+        bad "the seat row was moved by community reports: $row"
     fi
 else
     # Nothing else in this repository needs node, so a machine without it is

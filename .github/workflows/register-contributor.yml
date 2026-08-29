@@ -68,10 +68,34 @@ jobs:
             inputs/compare.json \
             | grep '^+' | grep -v '^+++' | sed 's/^+//' > inputs/line.txt || true
 
-          gh api "repos/$GH_REPO/contents/trusted-contributors?ref=trusted-contributors" \
-            -H "Accept: application/vnd.github.raw" > inputs/base || true
-          # An empty file is the right base before the first contributor
-          # lands, and the redirect above has already created one.
+          # The base file every rule is judged against. Its absence and its
+          # failure to arrive look identical in a shell, and they are opposite
+          # things: an empty base is correct before the first contributor
+          # lands, but an empty base on a transient API failure silently
+          # disables rule 7 -- register-contributor.py's duplicate loop reads
+          # this file, and over an empty one it finds no duplicates, so a
+          # second registration of an email or key already on the branch
+          # merges. That is the copy-paste artifact the added-line comment in
+          # register-contributor.py warns about, arriving by a different door:
+          # the branch then fails its own format check for every registration
+          # afterwards. A `gh` failure that writes its JSON error body here is
+          # as bad the other way -- every registration is refused as "the
+          # trusted-contributors file on the branch is itself malformed",
+          # which is a lie about the submitter's work.
+          #
+          # So only a 404 -- the file or the branch does not exist yet -- may
+          # become an empty base. Every other outcome fails the job.
+          if gh api "repos/$GH_REPO/contents/trusted-contributors?ref=trusted-contributors" \
+               -H "Accept: application/vnd.github.raw" \
+               > inputs/base.raw 2> inputs/base.err; then
+            mv inputs/base.raw inputs/base
+          elif grep -q 'HTTP 404' inputs/base.err; then
+            : > inputs/base
+          else
+            echo "could not read the trusted-contributors file:" >&2
+            cat inputs/base.err >&2
+            exit 1
+          fi
 
       - name: Decide
         id: decide

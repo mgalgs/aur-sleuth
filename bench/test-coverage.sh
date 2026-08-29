@@ -78,10 +78,14 @@ check("effective.json missing -> None", gd.read_daily_budget(os.path.join(tmp, "
 recent = (now - timedelta(days=3)).strftime("%Y-%m-%dT%H:%M:%S")
 old = (now - timedelta(days=40)).strftime("%Y-%m-%dT%H:%M:%S")
 pkgs = {
-    "p1": {"latest_date": recent},
-    "p2": {"latest_date": recent},
-    "p3": {"latest_date": old},         # outside the window: not counted
-    "p4": {"latest_date": ""},
+    "p1": {"latest_date": recent, "latest_measured_date": recent},
+    "p2": {"latest_date": recent, "latest_measured_date": recent},
+    "p3": {"latest_date": old, "latest_measured_date": old},   # outside: not counted
+    "p4": {"latest_date": "", "latest_measured_date": ""},
+    # Audited long ago, submitted about this week: the package's latest_date
+    # is inside the window and nothing this pipeline spent is. It belongs in
+    # neither side of the division.
+    "p5": {"latest_date": recent, "latest_measured_date": old},
 }
 by_date = {
     recent[:10]: {"cost": 0.03},
@@ -95,6 +99,16 @@ check("needed = updates x cost", f and f["needed_per_day"] == 12.0)
 check("covered = budget / needed", f and f["covered"] == round(1.0 / 12.0, 4))
 check("budget carried", f and f["daily_budget"] == 1.0)
 check("nothing solicits: no url field", f and "url" not in f)
+# The denominator is what THIS pipeline audited. A submission carries a date
+# the contributor wrote and no spend, so counting its package would divide the
+# same money by a bigger number: the published cost_per_package would fall
+# with every submission, and needed_per_day with it.
+check("a submitted date alone does not enter the denominator",
+      f and f["cost_window_packages"] == 2 and f["cost_per_package"] == 0.015)
+audited_here = dict(pkgs, p5={"latest_date": recent, "latest_measured_date": recent})
+f5 = gd.build_coverage(audited_here, by_date, now, updates_per_day=800, daily_budget=1.0)
+check("the same package audited here does",
+      f5 and f5["cost_window_packages"] == 3)
 
 f = gd.build_coverage(pkgs, by_date, now, updates_per_day=800)
 check("no budget -> no coverage", f and f["daily_budget"] is None and f["covered"] is None)
@@ -104,7 +118,8 @@ check("coverage capped at 1", f and f["covered"] == 1.0)
 check("no updates count -> no line", gd.build_coverage(pkgs, by_date, now, updates_per_day=None) is None)
 check("zero updates -> no line", gd.build_coverage(pkgs, by_date, now, updates_per_day=0) is None)
 check("nothing audited in the window -> no line",
-      gd.build_coverage({"p3": {"latest_date": old}}, by_date, now, updates_per_day=800) is None)
+      gd.build_coverage({"p3": {"latest_date": old, "latest_measured_date": old}},
+                        by_date, now, updates_per_day=800) is None)
 check("no spend in the window -> no line",
       gd.build_coverage(pkgs, {recent[:10]: {"cost": 0.0}}, now, updates_per_day=800) is None)
 
@@ -112,6 +127,47 @@ check("no spend in the window -> no line",
 data = gd.build_index_data([], [], now, {"updates_per_day": 800, "daily_budget": None})
 check("summary.coverage present (None with no reports)",
       "coverage" in data["summary"] and data["summary"]["coverage"] is None)
+
+# --- what a community submission does NOT move -------------------------------
+#
+# The scenario the accounting has to survive: one paid audit this week, and
+# five submissions naming the model that ran it. bench/ingest-submission.py
+# strips a submission's cost and token counts, but `model` and `date` stay --
+# a report without them says nothing -- so anything that COUNTS reports is
+# still steerable from outside unless it is filtered here. Each figure below
+# is one a reader takes as a statement about this deployment's own spending.
+def report(pkg, fm):
+    return {"package": pkg, "filename": pkg + ".md", "frontmatter": fm, "body": ""}
+
+paid = report("p1", {"model": "openai/gpt-5.4", "date": recent, "result": "safe",
+                     "cost": "0.05", "files_reviewed": "9", "total_tokens": "1000",
+                     "prompt_tokens": "900", "completion_tokens": "100"})
+sent = [report("c%d" % i,
+               {"model": "openai/gpt-5.4", "date": recent, "result": "safe",
+                "files_reviewed": "3", "advisory": "true", "source": "community",
+                "submitted_by": "octocat", "submitted_ring": "2"})
+        for i in range(5)]
+d = gd.build_index_data([paid] + sent, [], now,
+                        {"updates_per_day": 100, "daily_budget": None})
+s = d["summary"]
+check("the week's per-model count is what this pipeline ran",
+      s["week"]["by_model"] == {"openai/gpt-5.4": 1} and s["week"]["audits_total"] == 1)
+check("and the week's packages-read count agrees with it",
+      s["week"]["packages"]["updated"] == 1 and s["week"]["packages"]["new"] == 1)
+check("the all-time per-model table too",
+      list(s["by_model"]) == ["openai/gpt-5.4"] and s["by_model"]["openai/gpt-5.4"]["count"] == 1)
+check("the spend figure is the money that was spent",
+      s["audit_cost"] == 0.05 and s["total_tokens"] == 1000)
+check("cost per package is not divided by packages nobody audited here",
+      s["coverage"]["cost_window_packages"] == 1
+      and s["coverage"]["cost_per_package"] == 0.05
+      and s["coverage"]["needed_per_day"] == 5.0)
+# The other half of the claim: nothing was hidden. A submission is on the
+# branch, it is counted as a report, and its package has its row.
+check("the submissions are still there, and still attributed",
+      s["total_reports"] == 6 and s["results"]["safe"] == 6 and len(d["packages"]) == 6
+      and d["packages"]["c0"]["audits"][0]["source"] == "community"
+      and d["packages"]["c0"]["audits"][0]["submitted_by"] == "octocat")
 
 if fails:
     print(f"FAILED: {fails} check(s)")

@@ -438,6 +438,15 @@ function auditRow() {
     const kinds = {};
     for (const pkg of Object.values(DATA.packages || {})) {
         for (const a of pkg.audits || []) {
+            // A community submission names whichever model the contributor
+            // ran, and this diagram is about which models THIS pipeline
+            // gives a seat to. Counting one here counted it as advisory, so
+            // enough submissions naming the paid seat model would push that
+            // model out of the seat row -- the page's own picture of the
+            // deployment, rewritten from outside it. summary.by_model and
+            // summary.week.by_model already exclude submissions, in
+            // bench/generate-dashboard.py; `kinds` is the other half.
+            if (a.source === 'community') continue;
             const k = kinds[a.model] || (kinds[a.model] = {vote: 0, advisory: 0, reaudit: 0});
             k[a.advisory ? 'advisory' : a.reaudit ? 'reaudit' : 'vote']++;
         }

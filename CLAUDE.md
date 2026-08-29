@@ -241,7 +241,11 @@ SAFE verdicts, and do not let it run without the malicious fixtures in the gate.
   as an SSH `allowed_signers` file, and `submitted_by` is the login on the
   line the signing key is on, not the label the caller was given. The
   container's `ingest` stage runs it; `docs/SUBMITTING-REPORTS.md` is the
-  contributor's side.
+  contributor's side. Stripping a submission's `cost` and token counts there is
+  only half of keeping it out of this deployment's accounting: `model` and
+  `date` have to stay, so anything that COUNTS reports still moves. The other
+  half is in `bench/generate-dashboard.py` — `pipeline_audits` and
+  `latest_measured_date` — and neither half works alone.
 - `bench/register-contributor.py` — the gate on who may submit at all. Eight
   rules over one pull request that adds one signed line to
   `trusted-contributors`, every input a file so the whole set runs offline

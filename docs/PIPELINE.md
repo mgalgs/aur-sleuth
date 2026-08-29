@@ -169,10 +169,10 @@ either, so the ingest keeps the claim as a claim and stamps what it actually
 is: `advisory: true`, which is why a submission counts toward nothing above,
 plus `source: community`, which says who said it. The stamp is forced whatever
 the file claimed, `triggered_by` and the pipeline's own accounting (`cost`, the
-token counts, `execution_time`) are stripped -- the dashboard sums those across
-the branch, and a submission spent none of this deployment's money -- the
-submission's commit sha is recorded, and the ingest names the file -- a forger controls their own
-filename, and the archive does not let them pick where it lands. A `.json` is
+token counts, `execution_time`) are stripped -- a submission spent none of this
+deployment's money -- the submission's commit sha is recorded, and the ingest
+names the file -- a forger controls their own filename, and the archive does
+not let them pick where it lands. A `.json` is
 refused outright, because a `-judge.json` is a ruling the page counts; so is
 any path the branch already has, which is the overwrite attack.
 
@@ -182,9 +182,17 @@ submission cannot keep a package away from the free sweep or the paid seats.
 And it is not in the pile the judge reads, where ordinary advisory reports
 are: a submission's body is text a person chose, aimed at a model the pipeline
 pays for. The untrusted-data fence around the judge's reports stays as defence
-in depth; exclusion is the rule. What is left is the page, which shows it with
-the advisory glyph, labelled community, attributed to the submitter and the
-ring on the square's hover.
+in depth; exclusion is the rule. And it is in none of the page's accounting:
+every figure that says what this deployment spent or which models it ran --
+the spend total, the per-model tables, the week's "packages read" and audit
+counts, the cost-per-package the coverage line divides, and which models get a
+seat in the diagram -- is computed over the pipeline's own reports
+(`pipeline_audits` and `latest_measured_date` in `bench/generate-dashboard.py`,
+`kinds` in `auditRow()`). Stripping the accounting keys at the ingest is not
+what does that: `model` and `date` have to survive, so anything that counts
+reports would move if it counted a submission. What is left is the page, which
+shows it with the advisory glyph, labelled community, attributed to the
+submitter and the ring on the square's hover.
 
 ## Model aliases
 
