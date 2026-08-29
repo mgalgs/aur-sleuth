@@ -1,0 +1,178 @@
+#!/usr/bin/env bash
+# aur-sleuth-submit - send an audit report to the maintainer's submission
+# endpoint.
+#
+# Submitting is by invitation. Register once (docs/SUBMITTING-REPORTS.md), join
+# the network the invitation names, and run this:
+#
+#     aur-sleuth-submit /tmp/aur-sleuth/aur-sleuth-report-<pkg>.txt <pkg>
+#
+# The endpoint URL arrives with the invitation. Put it in
+# ~/.config/aur-sleuth-submit.conf as `url = https://...`, or pass it in
+# AUR_SLEUTH_SUBMIT_URL. It is not published anywhere: the endpoint is only
+# reachable from inside the network, and knowing its name is not what admits
+# you.
+#
+# What is sent is a git bundle holding one commit, signed with your SSH
+# signing key, adding <package>/<name>.md. The signature is not decoration --
+# the ingest refuses a submission whose commit is not signed by a key on the
+# public trusted-contributors branch, and records you as the login that key is
+# registered under. So this refuses to build an unsigned commit at all: the
+# refusal is the same either way, and it is cheaper to hear it here.
+#
+# The endpoint admits a limited number of clients at once, so that a home
+# network stays usable while it serves them. It answers 429 or 503 when it is
+# full, with a Retry-After when it can say one, and this waits: the retry hint
+# first, otherwise an exponential backoff with jitter from 5s, doubling, never
+# more than five minutes in one wait, and giving up after
+# AUR_SLEUTH_SUBMIT_MAX_WAIT seconds in total (default 1800). Nothing else is
+# ever retried -- a 4xx that is not 429 will not become a 2xx by being sent
+# again.
+set -euo pipefail
+
+CONF="${AUR_SLEUTH_SUBMIT_CONF:-$HOME/.config/aur-sleuth-submit.conf}"
+MAX_WAIT="${AUR_SLEUTH_SUBMIT_MAX_WAIT:-1800}"
+FIRST_BACKOFF=5
+MAX_BACKOFF=300
+
+die() { printf 'aur-sleuth-submit: %s\n' "$*" >&2; exit 1; }
+
+usage() {
+    printf 'usage: aur-sleuth-submit <report-file> <package>\n' >&2
+    exit 2
+}
+
+[[ $# -eq 2 ]] || usage
+REPORT="$1"
+PACKAGE="$2"
+
+[[ -f "$REPORT" ]] || die "no such report: $REPORT"
+[[ "$PACKAGE" =~ ^[a-z0-9][a-z0-9@._+-]*$ ]] \
+    || die "'$PACKAGE' is not a pkgbase; it is the package's name as the AUR has it"
+
+# --- the endpoint -------------------------------------------------------------
+
+# The config file is read, never sourced: it is a `key = value` list, and a
+# file in $HOME should not be able to run commands because a submission was
+# made. Only `url` is read from it today.
+conf_value() {
+    [[ -f "$CONF" ]] || return 0
+    sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*//p" "$CONF" \
+        | tail -1 | tr -d '\r'
+}
+
+URL="${AUR_SLEUTH_SUBMIT_URL:-$(conf_value url)}"
+[[ -n "$URL" ]] || die "no endpoint. Set AUR_SLEUTH_SUBMIT_URL, or put
+  url = <the URL from your invitation>
+in $CONF"
+
+# --- signing ------------------------------------------------------------------
+
+gitcfg() { git config --get "$1" 2>/dev/null || true; }
+
+SIGNING_KEY="$(gitcfg user.signingkey)"
+SIGN_FORMAT="$(gitcfg gpg.format)"
+AUTHOR_EMAIL="$(gitcfg user.email)"
+AUTHOR_NAME="$(gitcfg user.name)"
+
+[[ "$SIGN_FORMAT" == "ssh" && -n "$SIGNING_KEY" ]] || die "git is not set up to sign
+commits with an SSH key, and an unsigned submission is refused when it
+arrives. Configure the key you registered:
+  git config --global gpg.format ssh
+  git config --global user.signingkey ~/.ssh/id_ed25519.pub"
+[[ -n "$AUTHOR_EMAIL" ]] || die "git has no user.email. It has to be the address
+you registered: the ingest requires the commit's author to be the person the
+signature is from.
+  git config --global user.email you@example.org"
+
+# --- build the commit ---------------------------------------------------------
+
+WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
+
+REPO="$WORK/repo"
+BUNDLE="$WORK/submission.bundle"
+BRANCH="submission"
+
+# The report's name here is not the name it lands under -- the ingest names
+# what it accepts, because choosing where a file goes in an archive is not
+# something a submission gets to do. This is only what the commit calls it.
+NAME="$(basename "$REPORT")"
+NAME="${NAME%.*}.md"
+
+git init --quiet --initial-branch="$BRANCH" "$REPO"
+mkdir -p "$REPO/$PACKAGE"
+cp "$REPORT" "$REPO/$PACKAGE/$NAME"
+git -C "$REPO" add "$PACKAGE/$NAME"
+GIT_AUTHOR_NAME="${AUTHOR_NAME:-$AUTHOR_EMAIL}" \
+GIT_AUTHOR_EMAIL="$AUTHOR_EMAIL" \
+GIT_COMMITTER_NAME="${AUTHOR_NAME:-$AUTHOR_EMAIL}" \
+GIT_COMMITTER_EMAIL="$AUTHOR_EMAIL" \
+git -C "$REPO" -c gpg.format=ssh -c "user.signingkey=$SIGNING_KEY" \
+    commit --quiet -S -m "report: $PACKAGE" \
+    || die "could not sign the commit with $SIGNING_KEY"
+
+git -C "$REPO" bundle create --quiet "$BUNDLE" "$BRANCH" \
+    || die "could not build the bundle"
+
+printf 'Submitting %s for %s (%s bytes) to %s\n' \
+    "$NAME" "$PACKAGE" "$(wc -c < "$BUNDLE" | tr -d ' ')" "$URL"
+
+# --- send it, and wait when the endpoint is full ------------------------------
+
+HEADERS="$WORK/headers"
+BODY="$WORK/body"
+
+post() {
+    curl -sS --max-time 300 -X POST \
+        -H "Content-Type: application/x-git-bundle" \
+        -H "X-AUR-Sleuth-Package: $PACKAGE" \
+        --data-binary "@$BUNDLE" \
+        -D "$HEADERS" -o "$BODY" -w '%{http_code}' "$URL"
+}
+
+retry_after() {
+    sed -n 's/^[Rr]etry-[Aa]fter:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$HEADERS" \
+        | tail -1
+}
+
+waited=0
+backoff="$FIRST_BACKOFF"
+while :; do
+    code="$(post)" || die "could not reach $URL"
+
+    case "$code" in
+        2??)
+            cat "$BODY"
+            exit 0
+            ;;
+        429|503)
+            hint="$(retry_after)"
+            if [[ -n "$hint" ]]; then
+                nap="$hint"
+            else
+                # Jitter, so a queue of clients released together does not
+                # come back together.
+                nap=$(( backoff + RANDOM % (backoff / 2 + 1) ))
+                backoff=$(( backoff * 2 ))
+                if (( backoff > MAX_BACKOFF )); then backoff="$MAX_BACKOFF"; fi
+            fi
+            if (( nap > MAX_BACKOFF )); then nap="$MAX_BACKOFF"; fi
+            if (( waited + nap > MAX_WAIT )); then
+                cat "$BODY" >&2
+                die "the endpoint is at capacity and has been for ${waited}s.
+It admits a limited number of clients at once so the maintainer's network
+stays usable; there is nothing wrong with your submission. Try again later,
+or raise AUR_SLEUTH_SUBMIT_MAX_WAIT (currently ${MAX_WAIT}s)."
+            fi
+            printf 'The endpoint is full (HTTP %s); waiting %ss, %ss so far.\n' \
+                "$code" "$nap" "$waited" >&2
+            sleep "$nap"
+            waited=$(( waited + nap ))
+            ;;
+        *)
+            cat "$BODY" >&2
+            die "the endpoint answered HTTP $code"
+            ;;
+    esac
+done
