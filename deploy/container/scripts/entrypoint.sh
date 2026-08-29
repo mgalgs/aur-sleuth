@@ -1240,6 +1240,59 @@ do_review() {
     return 0
 }
 
+# --- the archive lock ---------------------------------------------------------
+
+# The two stages that take the writer lock with `flock -n` leave a record of
+# who they are beside it, and each one's refusal reads the record back.
+#
+# `flock` itself tells a refused caller nothing, and that refusal is the only
+# line an operator reads at breakfast. "another run holds the archive lock" is
+# the audit stage as far as anybody is concerned -- so an ingest that went into
+# `git fetch` at 03:12 and stayed there costs the 04:00, 08:00 and 12:00
+# sweeps, and every one of them says the same six words, none of which name a
+# container to kill.
+#
+# The record is a HINT, and both halves of it are worded as one:
+#
+#   - The lock is also taken, blocking, by bench/pipeline.sh, bench/judge.sh
+#     and bench/bulk-audit.sh, in short subshells that write no record. So an
+#     ABSENT record does not mean nobody holds the lock; it means the holder is
+#     not one of the container's writer stages.
+#   - A stage killed between taking the lock and releasing it leaves its record
+#     behind. The lock is the kernel's and dies with the process; the file is
+#     not, and can outlive one. So a PRESENT record is the last stage that took
+#     the lock, which is a different claim from the one holding it now, and the
+#     refusal says which of the two it is offering.
+ARCHIVE_OWNER_FILE=""
+
+# What to tell a caller `flock -n` just refused.
+archive_lock_holder() {
+    local rec="$DATA_DIR/bulk-audit/archive.owner"
+    if [[ -s "$rec" ]]; then
+        printf 'last taken by %s' "$(head -n 1 "$rec")"
+    else
+        printf 'no stage left a record, so the holder is one of the pipeline scripts rather than a container stage'
+    fi
+}
+
+# Take it, or die saying who has it. $1 is what this stage is refusing to do.
+take_archive_lock() {
+    exec 9>"$DATA_DIR/bulk-audit/archive.lock"
+    flock -n 9 || die "another run holds the archive lock" \
+        "($(archive_lock_holder)); refusing to $1 under it"
+    # Only now: a caller that was refused above must not touch a record it does
+    # not own, and release_archive_lock keys on this being set.
+    ARCHIVE_OWNER_FILE="$DATA_DIR/bulk-audit/archive.owner"
+    printf '%s, pid %s, since %s\n' "$MODE" "$$" \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$ARCHIVE_OWNER_FILE"
+}
+
+release_archive_lock() {
+    [[ -n "$ARCHIVE_OWNER_FILE" ]] && rm -f "$ARCHIVE_OWNER_FILE"
+    ARCHIVE_OWNER_FILE=""
+    return 0
+}
+
 # --- quarantine ---------------------------------------------------------------
 
 # Drop every unpublished report that carries an internal string, by rewriting
@@ -1264,8 +1317,8 @@ do_review() {
 do_quarantine() {
     [[ -d "$GIT_STORE" ]] || die "$GIT_STORE missing; run the prepare stage first"
 
-    exec 9>"$DATA_DIR/bulk-audit/archive.lock"
-    flock -n 9 || die "another run holds the archive lock; refusing to rewrite under it"
+    trap release_archive_lock EXIT
+    take_archive_lock rewrite
 
     sanitize_store
     local g=(git --git-dir="$GIT_STORE")
@@ -1582,9 +1635,12 @@ do_ingest() {
     # two fetches after it and the archive lock after those are all refusals a
     # contributor has to hear about, and a trap set later would miss them.
     INGEST_RESULT_PATH="${AUR_SLEUTH_SUBMISSION_RESULT:-}"
-    if [[ -n "$INGEST_RESULT_PATH" ]]; then
-        trap 'write_ingest_result "$?"' EXIT
-    fi
+    # Chained, not two traps: the second `trap ... EXIT` would replace the
+    # first, and the owner record has to come off on the paths that die with
+    # the lock in hand as much as on the one that finishes. Armed
+    # unconditionally because release_archive_lock and write_ingest_result both
+    # no-op when they have nothing to do.
+    trap '__rc=$?; release_archive_lock; write_ingest_result "$__rc"' EXIT
 
     # The submission arrives over the maintainer's private network: the
     # endpoint behind the gateway spools each accepted upload as a git bundle
@@ -1613,7 +1669,8 @@ do_ingest() {
     # to give up, which is a couple of hours. A registry fetch into a blackhole
     # at 03:12 cost the 04:00, 08:00 and 12:00 sweeps, each of which exited
     # with "another run holds the archive lock" and no hint that a community
-    # submission was the thing sitting on it.
+    # submission was the thing sitting on it. (The owner record above is the
+    # other half of that: it says WHICH stage, once the stage is not this one.)
     #
     # What genuinely needs the lock is the borrow (a concurrent `prepare` could
     # prune the objects out from under the alternates link) and the
@@ -1665,8 +1722,7 @@ do_ingest() {
 
     # Everything from here down is local, and the lock covers all of it: the
     # borrow, the rules script that reads blobs through it, and the commit.
-    exec 9>"$DATA_DIR/bulk-audit/archive.lock"
-    flock -n 9 || die "another run holds the archive lock; refusing to ingest under it"
+    take_archive_lock ingest
 
     sanitize_store
     borrow_store "$repo"

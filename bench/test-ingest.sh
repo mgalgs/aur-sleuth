@@ -874,6 +874,10 @@ eval "$(sed -n '/^INGEST_MAX_BUNDLE_BYTES=/p' "$ENTRYPOINT")"
 eval "$(sed -n '/^INGEST_MAX_FILES=/p' "$ENTRYPOINT")"
 eval "$(sed -n '/^INGEST_MAX_FILE_BYTES=/p' "$ENTRYPOINT")"
 eval "$(sed -n '/^fetch_failure_note()/,/^}/p' "$ENTRYPOINT")"
+eval "$(sed -n '/^ARCHIVE_OWNER_FILE=""/p' "$ENTRYPOINT")"
+eval "$(sed -n '/^archive_lock_holder()/,/^}/p' "$ENTRYPOINT")"
+eval "$(sed -n '/^take_archive_lock()/,/^}/p' "$ENTRYPOINT")"
+eval "$(sed -n '/^release_archive_lock()/,/^}/p' "$ENTRYPOINT")"
 eval "$(sed -n '/^new_stage_repo()/,/^}/p' "$ENTRYPOINT")"
 eval "$(sed -n '/^borrow_store()/,/^}/p' "$ENTRYPOINT")"
 eval "$(sed -n '/^stage_reports_repo()/,/^}/p' "$ENTRYPOINT")"
@@ -1006,12 +1010,61 @@ rc=0
 if (( rc != 0 )); then ok "no AUR_SLEUTH_SUBMISSION_RING: the stage dies"; else bad "the stage ran without a ring"; fi
 rc=0
 ( exec 8>"$DATA_DIR/bulk-audit/archive.lock"; flock -n 8; stage refs/heads/orphan ) \
-    >/dev/null 2>&1 || rc=$?
+    > "$tmp/stage-nolock.log" 2>&1 || rc=$?
 if (( rc != 0 )); then
     ok "the stage refuses to write under a held archive lock"
 else
     bad "the stage wrote under a held archive lock"
 fi
+# `flock` names nobody, and this refusal is the only line an operator reads.
+# A holder that left no record is one of the pipeline scripts -- they take the
+# lock blocking, in short subshells, and write nothing -- which is a different
+# answer from "nobody", and the refusal has to give the one it can stand
+# behind.
+if grep -q 'no stage left a record' "$tmp/stage-nolock.log"; then
+    ok "  and with no record beside the lock it says so, rather than naming nobody"
+else
+    bad "the refusal should say no record was left: $(cat "$tmp/stage-nolock.log")"
+fi
+
+# With a record, the refusal names the stage. The holder is a real
+# take_archive_lock rather than a hand-written file: the point of the record is
+# that a writer leaves it, and a test that wrote it itself would assert its own
+# fixture.
+( MODE=quarantine take_archive_lock rewrite
+  touch "$tmp/holder.up"
+  sleep 30 ) > /dev/null 2>&1 &
+holder_pid=$!
+for _ in 1 2 3 4 5 6 7 8 9 10; do [[ -e "$tmp/holder.up" ]] && break; sleep 0.2; done
+rc=0
+stage refs/heads/orphan > "$tmp/stage-owned.log" 2>&1 || rc=$?
+if (( rc != 0 )) && grep -Eq 'last taken by quarantine, pid [0-9]+, since [0-9]{4}-[0-9]{2}-[0-9]{2}T' \
+        "$tmp/stage-owned.log"; then
+    ok "  and with one it names the stage, its pid and when it took the lock"
+else
+    bad "the refusal should name the holder: $(cat "$tmp/stage-owned.log")"
+fi
+kill "$holder_pid" 2>/dev/null || true
+wait "$holder_pid" 2>/dev/null || true
+rm -f "$tmp/holder.up" "$DATA_DIR/bulk-audit/archive.owner"
+
+# And a stage that got the lock takes its record off on the way out, so the
+# next refusal is not answered by a holder that is long gone. The lock is free
+# again by now, so this run takes it for real.
+rc=0
+stage refs/heads/good > "$tmp/stage-again.log" 2>&1 || rc=$?
+if (( rc == 0 )) && ! grep -q 'archive lock' "$tmp/stage-again.log"; then
+    ok "  the lock is free again once the holder is gone, and the next stage takes it"
+else
+    bad "this run was meant to take the lock: $(cat "$tmp/stage-again.log")"
+fi
+if [[ ! -e "$DATA_DIR/bulk-audit/archive.owner" ]]; then
+    ok "  and a stage that held the lock removes its record on the way out"
+else
+    bad "the owner record outlived the stage that wrote it"
+fi
+# That run moved the branch, and the checks below compare against it.
+after="$(git --git-dir="$GIT_STORE" rev-parse refs/heads/audit-reports)"
 
 # The hoist, pinned by which of two refusals wins. The ingest must not be the
 # one writer in the deployment that does network I/O with the writer lock in

@@ -426,6 +426,10 @@ else
 fi
 
 echo "== the review stage's exit status, which a caller gates on =="
+eval "$(sed -n '/^ARCHIVE_OWNER_FILE=""/p' "$ENTRYPOINT")"
+eval "$(sed -n '/^archive_lock_holder()/,/^}/p' "$ENTRYPOINT")"
+eval "$(sed -n '/^take_archive_lock()/,/^}/p' "$ENTRYPOINT")"
+eval "$(sed -n '/^release_archive_lock()/,/^}/p' "$ENTRYPOINT")"
 eval "$(sed -n '/^new_stage_repo()/,/^}/p' "$ENTRYPOINT")"
 eval "$(sed -n '/^borrow_store()/,/^}/p' "$ENTRYPOINT")"
 eval "$(sed -n '/^stage_reports_repo()/,/^}/p' "$ENTRYPOINT")"
@@ -625,6 +629,42 @@ if grep -q 'exit=0' <<< "$out"; then
     ok "quarantine exits 0"
 else
     bad "quarantine failed: $out"
+fi
+
+# The other `flock -n` in the entrypoint. `flock` names nobody, and this
+# refusal is the only line an operator reads -- so the writer stages leave a
+# record beside the lock and the refusal reads it back. Held here by a real
+# take_archive_lock, because a hand-written record would be the test asserting
+# its own fixture.
+( DATA_DIR="$tmp/data" MODE=ingest
+  # shellcheck disable=SC2329  # called by take_archive_lock
+  die() { echo "die: $*"; exit 1; }
+  take_archive_lock ingest
+  touch "$tmp/qholder.up"
+  sleep 30 ) > /dev/null 2>&1 &
+qholder=$!
+for _ in 1 2 3 4 5 6 7 8 9 10; do [[ -e "$tmp/qholder.up" ]] && break; sleep 0.2; done
+# `|| true`: die() exits 1 before quarantine() reaches its `echo exit=$?`, so
+# the substitution itself fails and errexit would end the suite here.
+out="$(quarantine || true)"
+if grep -q 'another run holds the archive lock' <<< "$out" \
+   && grep -Eq 'last taken by ingest, pid [0-9]+, since [0-9]{4}-' <<< "$out"; then
+    ok "quarantine's refusal names the stage holding the lock, not 'another run'"
+else
+    bad "quarantine should have named the holder: $out"
+fi
+kill "$qholder" 2>/dev/null || true
+wait "$qholder" 2>/dev/null || true
+rm -f "$tmp/qholder.up" "$tmp/data/bulk-audit/archive.owner"
+
+# Every `flock -n` in the image goes through take_archive_lock. A new one
+# written inline would compile, run, and silently go back to telling an
+# operator nothing.
+if [[ "$(grep -c '^[[:space:]]*flock -n' "$ENTRYPOINT")" == "1" ]] \
+   && sed -n '/^take_archive_lock()/,/^}/p' "$ENTRYPOINT" | grep -q '^[[:space:]]*flock -n'; then
+    ok "the only flock -n in the entrypoint is take_archive_lock's"
+else
+    bad "a flock -n outside take_archive_lock refuses without naming a holder"
 fi
 qhead="$(git --git-dir="$qstore" rev-parse refs/heads/audit-reports)"
 if [[ -z "$(internal_string_paths "$qstore" "$qhead")" ]]; then
