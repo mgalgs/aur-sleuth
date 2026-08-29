@@ -1640,6 +1640,7 @@ do_ingest() {
     # the lock in hand as much as on the one that finishes. Armed
     # unconditionally because release_archive_lock and write_ingest_result both
     # no-op when they have nothing to do.
+    # shellcheck disable=SC2154  # __rc is assigned by the trap string itself, at exit
     trap '__rc=$?; release_archive_lock; write_ingest_result "$__rc"' EXIT
 
     # The submission arrives over the maintainer's private network: the
