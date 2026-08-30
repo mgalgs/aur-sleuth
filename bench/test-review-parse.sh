@@ -96,27 +96,44 @@ check("an address-shaped quote is not dismissed when the detail calls it a machi
 
 # cleared_concern(): the model lists things it checked and found clean instead
 # of leaving them out, even though the prompt says an empty list is expected.
-# These six are the verbatim `detail` fields that stopped a real publish.
+# These are the verbatim `detail` fields that stopped a real publish -- one
+# per _CLEARED branch, so each branch is actually exercised.
 cc = rp.cleared_concern
 check("cleared: upstream file, not a operator leak (mcpp)", cc(
-    {"detail": "This path is an upstream file, not a operator leak. Not a leak."}))
-check("cleared: upstream file, not a operator leak, second quote (mcpp)", cc(
-    {"detail": "This path is an upstream file, not a operator leak. Not a leak."}))
-check("cleared: upstream file, not a operator leak, third quote (mcpp)", cc(
-    {"detail": "This path is an upstream file, not a operator leak. Not a leak."}))
-check("cleared: upstream file, not a operator leak, fourth quote (mcpp)", cc(
     {"detail": "This path is an upstream file, not a operator leak. Not a leak."}))
 check("cleared: build artifact directory, not an operator leak", cc(
     {"detail": "This path is a build artifact directory, not an operator leak. Not a leak."}))
 check("cleared: public package information", cc(
     {"detail": "The name of the upstream repository and its maintainer's GitHub username "
                "are public package information, not a leak of the operator's private data."}))
+check("cleared: is public, no contrast", cc(
+    {"detail": "This URL is public and belongs to the upstream project's own README."}))
+check("cleared: not a secret, no contrast", cc(
+    {"detail": "The package name in the PKGBUILD is not a secret."}))
 
 check("real concern: an API key in the report", not cc({"detail": "an API key in the report"}))
 check("real concern: the operator's home directory path",
       not cc({"detail": "the operator's home directory path"}))
 check("real concern: an internal hostname", not cc({"detail": "an internal hostname"}))
 check("empty detail is not cleared", not cc({"detail": ""}))
+
+# The false-dismissal boundary: a concessive clause makes the clearing phrase
+# describe one thing while a second, real leak sits in the other half of the
+# same sentence. A model asked for "one sentence: what it is" reaches for
+# exactly this contrastive shape, so each of these must stand as a concern,
+# not be cleared.
+check("NOT cleared: public project, but this key is not",
+      not cc({"detail": "The API key sk-live-abc appears; the project is public but "
+                        "this key is not."}))
+check("NOT cleared: not a credential, but it is their account name",
+      not cc({"detail": "The operator's login name 'mgalgs' appears in the report; "
+                        "not a credential, but it is their account name."}))
+check("NOT cleared: not a secret, but names the operator's machine",
+      not cc({"detail": "An internal hostname nuc.lan, not a secret in itself but it "
+                        "names the operator's machine."}))
+check("NOT cleared: repo is public, but the URL embeds a token",
+      not cc({"detail": "The GitHub repository is public, but the URL embeds what "
+                        "looks like an operator access token."}))
 
 # The prompt's email carve-out landed in code, not just in the model's list:
 # grep the source, rather than calling ask_model(), since building the

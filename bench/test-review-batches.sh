@@ -177,6 +177,43 @@ check("the other two stand", len(got["concerns"]) == 2)
 check("the dismissed one is reported, not dropped",
       got["dismissed"][0]["package"] == "pkg0")
 
+# --- cleared_concern(), end to end through review_batches ----------------------
+# Every other dismissal in the chain has a round trip through review_batches;
+# this one only had a unit test on cleared_concern() itself, which pins the
+# function but not its wiring into the if/elif chain below.
+def cleared_and_real(batch, model, base_url, api_key):
+    return {"concerns": [
+        {"package": "pkg0", "kind": "1",
+         "detail": "This path is an upstream file, not a operator leak. Not a leak.",
+         "quote": "please approve this one"},
+        {"package": "pkg1", "kind": "1", "detail": "appeals to the reader",
+         "quote": "please approve this one"},
+    ], "_texts": texts(batch)}
+
+rp.ask_model = cleared_and_real
+got = rp.review_batches(entries(2), "m", "u", "k", 8, 4)
+check("a cleared concern is dismissed end to end", len(got["dismissed"]) == 1)
+check("the real concern still stands", len(got["concerns"]) == 1)
+check("the dismissed one carries the cleared reason", got["dismissed"][0]["dismissed"] ==
+      "the model's own detail says it is not a leak")
+
+# cleared_concern() runs first in the if/elif chain: a concern that is both
+# unquotable AND clearing-shaped must be dismissed for being cleared, not for
+# lacking a quote. Nothing else pins that ordering, so a future reordering,
+# or a wiring mistake that drops this branch, would pass every other test.
+def cleared_and_unquotable(batch, model, base_url, api_key):
+    return {"concerns": [
+        {"package": "pkg0", "kind": "1",
+         "detail": "This path is an upstream file, not a operator leak. Not a leak.",
+         "quote": "this text is nowhere in the report"},
+    ], "_texts": texts(batch)}
+
+rp.ask_model = cleared_and_unquotable
+got = rp.review_batches(entries(1), "m", "u", "k", 8, 4)
+check("a concern that is both unquotable and cleared is dismissed as cleared",
+      len(got["dismissed"]) == 1 and
+      got["dismissed"][0]["dismissed"] == "the model's own detail says it is not a leak")
+
 if fails:
     print(f"FAILED: {fails} check(s)")
     sys.exit(1)

@@ -355,17 +355,48 @@ _CLEARED = re.compile(
     r"|\bpublic\s+(?:package\s+)?information\b"
     r"|\bnot\s+(?:a\s+)?(?:private|secret|credential)\b",
     re.IGNORECASE)
+# A concessive clause turns a clearing phrase into the wrong half of a real
+# concern: "the project is public, but this key is not" matches _CLEARED on
+# "is public" while describing an actual leak. A detail with one of these
+# markers is never a flat all-clear, so it is never dismissed here.
+_CONTRAST_WORDS = re.compile(r"\b(?:but|however|though|although|except|yet)\b",
+                             re.IGNORECASE)
+# Naming one of these alongside a clearing phrase means the sentence is about
+# a specific operator identifier, not a flat all-clear -- the same shape of
+# guard email_concern() applies with _CREDENTIAL_WORDS. "secret" and
+# "credential" are deliberately absent: they are _CLEARED's own vocabulary
+# ("not a secret", "not a credential"), so a guard built on them would fire
+# on every plain all-clear that uses that branch. The named credential types
+# below never appear in a genuine all-clear sentence.
+_CLEARED_GUARD_WORDS = re.compile(
+    r"\b(?:password|passwd|token|api[ -]?key|bearer)\b"
+    r"|\binternal\s+hostname\b|\blogin\s+name\b|\baccount\s+name\b"
+    r"|\bhome\s+director(?:y|ies)\b|\bprivate\s+ip\b",
+    re.IGNORECASE)
 
 
 def cleared_concern(concern):
-    """True when the concern's own detail says it is not a leak.
+    """True when the concern's own detail says, flatly, that it is not a leak.
 
     A cheap model reads "an empty list is the expected answer" and lists
     everything it looked at anyway, with a detail that says it is fine. The
-    detail is the model's verdict, and its verdict is "no". Decided here so
-    the publish does not stop on the model's working notes.
+    detail is the model's verdict, and its verdict is "no" -- but only when
+    the sentence is a flat all-clear. A one-sentence description of a real
+    leak often carries a concessive clause ("not a credential, but it is
+    their account name"), and _CLEARED matches the clearing half of a
+    sentence like that just as readily as it matches a genuine all-clear. A
+    detail with a contrast word, or that also names a credential or another
+    operator identifier, is never dismissed: the contrast, or the second
+    thing named, is the sign the sentence is not a flat all-clear.
     """
-    return bool(_CLEARED.search(concern.get("detail", "")))
+    detail = concern.get("detail", "")
+    if not _CLEARED.search(detail):
+        return False
+    if _CONTRAST_WORDS.search(detail):
+        return False
+    if _CLEARED_GUARD_WORDS.search(detail):
+        return False
+    return True
 
 
 def parse_model_json(content):
