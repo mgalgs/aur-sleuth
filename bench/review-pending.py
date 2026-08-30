@@ -371,6 +371,14 @@ def ask_model(entries, model, base_url, api_key):
             cut.add(e["package"])
         blocks.append(f"=== {e['package']} ({e['model']}) ===\n{body}")
 
+    # Email is called out below as NOT a leak because the model has no way to
+    # tell the operator's address from a maintainer's or upstream's -- every
+    # address in a report is one of those, and public already. Whether a
+    # string matches the operator's own configured needle is decidable, so it
+    # belongs in code (internal_string_paths()), not judged here; see
+    # CLAUDE.md's "Prefer code over prompt for anything decidable". Two false
+    # positives on real packages' email addresses stopped a publish before
+    # this line existed.
     prompt = f"""These AUR package audit reports are about to be published on a public site.
 You have ONE job: find anything in them that leaks something private about the
 people or machines that RAN these audits. Nothing else.
@@ -382,9 +390,12 @@ A leak is text that belongs to the operator, not to the package:
   with a user name in it, a path on a named host. A path inside the audit
   container itself (/data/..., /tmp/..., /opt/aur-sleuth/...) names nothing
   private and is NOT a leak.
-- the operator's own email address or account name
 
 NOT a leak, and not your business:
+- an email address, any email address. Every one in a report belongs to
+  the package's maintainer, its upstream, or a signing key's principal,
+  and all of those are public already. The operator's own address, if
+  they want it caught, is a needle the code checks before you run.
 - credentials, hostnames, URLs, and paths that belong to the audited package --
   its PKGBUILD, its upstream project, its build scripts, its README. Those are
   public already.
