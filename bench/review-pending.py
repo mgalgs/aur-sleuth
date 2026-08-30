@@ -346,6 +346,28 @@ def email_concern(concern):
     return bool(_EMAIL_RE.search(quote))
 
 
+# What a model writes when it lists something it examined and found clean,
+# instead of leaving it out. Matched on the model's own detail: it is the
+# model saying "not a leak", so it is not a concern, whatever list it is in.
+_CLEARED = re.compile(
+    r"\bnot\s+(?:a|an)?\s*(?:operator[' s]*)?\s*leak\b"
+    r"|\bis\s+public\b"
+    r"|\bpublic\s+(?:package\s+)?information\b"
+    r"|\bnot\s+(?:a\s+)?(?:private|secret|credential)\b",
+    re.IGNORECASE)
+
+
+def cleared_concern(concern):
+    """True when the concern's own detail says it is not a leak.
+
+    A cheap model reads "an empty list is the expected answer" and lists
+    everything it looked at anyway, with a detail that says it is fine. The
+    detail is the model's verdict, and its verdict is "no". Decided here so
+    the publish does not stop on the model's working notes.
+    """
+    return bool(_CLEARED.search(concern.get("detail", "")))
+
+
 def parse_model_json(content):
     """Best-effort parse of a model's JSON reply into a dict.
 
@@ -583,7 +605,10 @@ def review_batches(entries, model, base_url, api_key, batch_size, workers):
             }
             # Dismissed, not dropped: the count goes out with the result, so a
             # reader can see the model raised it and why it does not stand.
-            if cut_concern(entry, cut_packages):
+            if cleared_concern(entry):
+                entry["dismissed"] = "the model's own detail says it is not a leak"
+                dismissed.append(entry)
+            elif cut_concern(entry, cut_packages):
                 entry["dismissed"] = "about the reviewer's own cut"
                 dismissed.append(entry)
             elif email_concern(entry):
@@ -760,8 +785,8 @@ def main():
 
     summary = f"{len(concerns)} concern(s) across {got['read']} report(s)"
     if got["dismissed"]:
-        summary += (f"; {len(got['dismissed'])} dismissed (unquotable, about the reviewer's"
-                    " own cut, or an email address)")
+        summary += (f"; {len(got['dismissed'])} dismissed (cleared by the model's own"
+                    " detail, unquotable, about the reviewer's own cut, or an email address)")
     out["llm"]["dismissed_concerns"] = got["dismissed"][:50]
     if got["errors"]:
         out["llm"]["status"] = "partial"

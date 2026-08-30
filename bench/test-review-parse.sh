@@ -94,6 +94,30 @@ check("an address-shaped quote is not dismissed when the detail calls it a machi
       not ec({"quote": "mgalgs@nuc.lan.example",
               "detail": "the operator's username and internal machine name"}))
 
+# cleared_concern(): the model lists things it checked and found clean instead
+# of leaving them out, even though the prompt says an empty list is expected.
+# These six are the verbatim `detail` fields that stopped a real publish.
+cc = rp.cleared_concern
+check("cleared: upstream file, not a operator leak (mcpp)", cc(
+    {"detail": "This path is an upstream file, not a operator leak. Not a leak."}))
+check("cleared: upstream file, not a operator leak, second quote (mcpp)", cc(
+    {"detail": "This path is an upstream file, not a operator leak. Not a leak."}))
+check("cleared: upstream file, not a operator leak, third quote (mcpp)", cc(
+    {"detail": "This path is an upstream file, not a operator leak. Not a leak."}))
+check("cleared: upstream file, not a operator leak, fourth quote (mcpp)", cc(
+    {"detail": "This path is an upstream file, not a operator leak. Not a leak."}))
+check("cleared: build artifact directory, not an operator leak", cc(
+    {"detail": "This path is a build artifact directory, not an operator leak. Not a leak."}))
+check("cleared: public package information", cc(
+    {"detail": "The name of the upstream repository and its maintainer's GitHub username "
+               "are public package information, not a leak of the operator's private data."}))
+
+check("real concern: an API key in the report", not cc({"detail": "an API key in the report"}))
+check("real concern: the operator's home directory path",
+      not cc({"detail": "the operator's home directory path"}))
+check("real concern: an internal hostname", not cc({"detail": "an internal hostname"}))
+check("empty detail is not cleared", not cc({"detail": ""}))
+
 # The prompt's email carve-out landed in code, not just in the model's list:
 # grep the source, rather than calling ask_model(), since building the
 # prompt needs an API key and a live entries list this suite has no
