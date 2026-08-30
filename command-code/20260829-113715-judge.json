@@ -1,0 +1,32 @@
+{
+  "package": "command-code",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The AUR packaging (PKGBUILD, .SRCINFO) is standard and safe, fetching a pinned tarball from the official npm registry and using --ignore-scripts. The 'inconclusive' verdict from the escalation model was caused by a tool error (413 Request Entity Too Large) when attempting to read a minified upstream file, and false positive concerns regarding upstream application behavior (obfuscation, telemetry) which are outside the AUR injection threat model.",
+  "disagreement_analysis": "The escalation model (claude-sonnet-4.6) hit a 413 HTTP error when trying to audit a large minified upstream file (cli.mjs), forcing an inconclusive result. It also flagged upstream application traits (obfuscation, telemetry) as trust concerns, violating the threat model boundary that separates upstream product behavior from AUR packaging injection. The cheaper models correctly focused on the AUR files and found them safe.",
+  "coverage_issues": [
+    "Escalation model failed to audit cli.mjs due to a 413 Request Entity Too Large tool error."
+  ],
+  "false_positives": [
+    "claude-sonnet-4.6 flagged upstream obfuscation and telemetry in package.json as a trust concern. This is upstream application behavior, not an AUR packaging injection, and the artifact is pinned via sha512sums."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "The audit tool should gracefully handle 413 Request Entity Too Large errors for large upstream files instead of propagating them as 'inconclusive' security verdicts, especially for minified upstream code which is outside the core AUR threat model.",
+    "Models need stronger prompt reinforcement to ignore upstream application characteristics (obfuscation, telemetry, proprietary licenses) when the upstream artifact is cryptographically pinned, as these are product features, not packaging injections."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 8798,
+    "completion_tokens": 2333,
+    "cost": 0.0058016000000000005
+  },
+  "audits_judged": [
+    "20260829-113229-qwen-qwen3-235b-a22b-2507.md",
+    "20260829-113226-deepseek-deepseek-v4-flash.md",
+    "20260824-094124-anthropic-claude-sonnet-4.6.md",
+    "20260828-193614-openrouter-free.md"
+  ]
+}

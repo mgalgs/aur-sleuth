@@ -1,0 +1,31 @@
+{
+  "package": "astrobox-ng",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD downloads a prebuilt binary from the declared upstream (GitHub releases for AstralSightStudios/AstroBox-NG) and pins it with a hardcoded SHA256 checksum. Per the threat model, 'when a real checksum pins the downloaded artifact, the swap risk is closed: makepkg rejects substituted bytes.' The package's stated purpose is distributing a prebuilt binary, so this serves the claimed purpose. The proxy mirrors (ghfast.top, ghproxy.com) are transparent GitHub proxies serving the same checksummed artifact\u2014a common AUR pattern for regions with poor GitHub connectivity. This is a packaging style choice (prebuilt vs. source build), not an injection. The threat model explicitly states 'violates packaging best practices is never, by itself, grounds for unsafe.'",
+  "disagreement_analysis": "The qwen model committed a classic false positive by conflating 'prebuilt binary distribution' with 'supply-chain risk.' Its reasoning\u2014that the binary is 'opaque and unverifiable' and 'bypasses source review'\u2014ignores that the checksum pins the artifact and that the package explicitly claims to distribute prebuilt binaries. The deepseek model correctly identified this as safe, noting 'the checksum ensures integrity regardless of which mirror serves the file.' The disagreement stems from qwen applying a 'build from source or else unsafe' standard that the threat model explicitly rejects.",
+  "coverage_issues": [
+    "deepseek/deepseek-v4-flash had an LLM error (empty response) on PKGBUILD.prebuilt, resulting in INCONCLUSIVE status. However, PKGBUILD.prebuilt is a fallback/alternative PKGBUILD not used by the main package, and the main PKGBUILD was correctly assessed."
+  ],
+  "false_positives": [
+    "qwen's UNSAFE finding on PKGBUILD: 'Binary blob download bypasses source review' is a false positive. The checksum pins the artifact, closing swap risk. Distributing prebuilt binaries is a valid AUR pattern when the package claims to do so. The model's concern about 'opaque and unverifiable' content ignores that the checksum verification is the security mechanism, and peer review of the PKGBUILD itself is sufficient."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models need stronger calibration to distinguish 'packaging style violations' from 'injection risks.' The pattern of downloading prebuilt binaries with checksums is common and legitimate when the package claims to distribute prebuilt content. Audit prompts should explicitly state that 'not built from source' is not a security finding.",
+    "When a checksum pins a downloaded artifact, models should recognize this closes the swap risk per the threat model. The concern should shift to whether the checksum itself could be manipulated (e.g., fetched from an untrusted source), not whether the binary is 'opaque.'",
+    "Proxy mirrors for GitHub (ghproxy.com, etc.) should be recognized as transparent proxies serving the same checksummed artifact, not as 'untrusted hosts.' The security property is the checksum, not the network path."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 9478,
+    "completion_tokens": 1692,
+    "cost": 0.00519872
+  },
+  "audits_judged": [
+    "20260829-072440-qwen-qwen3-235b-a22b-2507.md",
+    "20260829-072448-deepseek-deepseek-v4-flash.md"
+  ]
+}
