@@ -1,0 +1,31 @@
+{
+  "package": "omikuji-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "All models correctly identified this as a standard -bin package. The PKGBUILD downloads an AppImage from the project's own GitHub releases with a pinned SHA256 checksum, eliminating swap risk. The package() function performs expected operations: extracting the AppImage, installing to /opt/, creating a wrapper script, and symlinking the KDE platform theme (a documented workaround for Qt/KDE AppImages). No dynamic fetching, no execution of untrusted content, no obfuscation. The trigger concern about 'shallow' coverage was misplaced: the skipped AppImage binary is upstream content outside the threat model, and checksum-pinning closes the swap vector.",
+  "disagreement_analysis": null,
+  "coverage_issues": [
+    "anthropic/claude-sonnet-4.6 skipped the AppImage binary, but this was correct behavior: it's upstream content with a pinned checksum, outside the injection threat model"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Binary upstream artifacts with pinned checksums should be explicitly classified as 'out of scope' rather than 'skipped' to avoid triggering shallow-coverage escalations",
+    "The audit tool should recognize that -bin packages with pinned SHA256 sums from official upstream releases have minimal injection surface, and coverage of PKGBUILD + .SRCINFO is sufficient",
+    "Symlinks to system libraries (like KDEPlasmaPlatformTheme6.so) are common AppImage workarounds and should not trigger concern unless they point to unexpected locations"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 6612,
+    "completion_tokens": 1289,
+    "cost": 0.00376576
+  },
+  "audits_judged": [
+    "20260830-072053-qwen-qwen3-235b-a22b-2507.md",
+    "20260830-072032-deepseek-deepseek-v4-flash.md",
+    "20260824-095440-anthropic-claude-sonnet-4.6.md",
+    "20260827-115918-openrouter-free.md"
+  ]
+}
