@@ -67,10 +67,32 @@ check("an API key is not an email concern",
       not ec({"quote": "sk-live-abc123", "detail": "an API key"}))
 check("an address incidental to a real concern still stands", not ec(
     {"quote": "token=abc for root@scdevel.net", "detail": "a bearer token in the report"}))
+# Same quote, detail says "email" instead: this is the case the previous
+# check did not cover, because its detail happened to avoid the word
+# "email" and so passed regardless of the gate below. A credential sitting
+# beside an address must not be dismissed just because the model's detail
+# also mentions the address.
+check("a credential is not dismissed when the detail calls the address out too",
+      not ec({"quote": "SMTP_PASSWORD=hunter2 for ops@acme.com",
+              "detail": "an email account password belonging to the operator"}))
+check("a bearer token is not dismissed when the detail mentions the e-mail beside it",
+      not ec({"quote": "Authorization: Bearer sk-live-9f3 (contact ops@acme.com)",
+              "detail": "an API token, next to the e-mail of whoever owns it"}))
 check("brackets stripped, quote is exactly one address",
-      ec({"quote": "<hi@josie.lol>", "detail": "contact"}))
+      ec({"quote": "<hi@josie.lol>", "detail": "an email address, for contact"}))
 check("no address in the quote is not an email concern",
       not ec({"quote": "see the README", "detail": "mentions an e-mail"}))
+# An address-shaped quote is also the shape of an ssh remote, a git author on
+# a named machine, or a service account -- exactly what the prompt still asks
+# the model to flag as an internal hostname or account. The quote's shape
+# alone must not dismiss the concern; the detail has to say it is about an
+# email address.
+check("an address-shaped quote is not dismissed when the detail calls it a host",
+      not ec({"quote": "aur-sleuth@build01.ops.acme-internal.net",
+              "detail": "an internal build host and the account that ran the audit"}))
+check("an address-shaped quote is not dismissed when the detail calls it a machine",
+      not ec({"quote": "mgalgs@nuc.lan.example",
+              "detail": "the operator's username and internal machine name"}))
 
 # The prompt's email carve-out landed in code, not just in the model's list:
 # grep the source, rather than calling ask_model(), since building the

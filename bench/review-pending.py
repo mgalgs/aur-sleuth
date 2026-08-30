@@ -65,6 +65,13 @@ _CUT_WORDS = re.compile(
 # the operator needs to act on -- see the prompt's own carve-out below.
 _EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 _EMAIL_WORDS = re.compile(r"\be-?mail\b", re.IGNORECASE)
+# A detail naming one of these sits beside the address, not about it: an
+# address next to a password or token is a credential leak that happens to
+# quote an address, not an email-address concern. Checked so email_concern()
+# does not take a real leak down with the address beside it.
+_CREDENTIAL_WORDS = re.compile(
+    r"\b(password|passwd|token|secret|api[ -]?key|bearer)\b", re.IGNORECASE,
+)
 _QUOTE_STRIP_CHARS = "<>()[]{}\"'.,;:!? \t\n\r"
 # 0 means every generated text in the sweep. The read is advisory, and a text
 # nobody read is the one a leak hides in, so the default is to read them all.
@@ -311,22 +318,32 @@ def cut_concern(concern, cut_packages):
 
 
 def email_concern(concern):
-    """True when the concern is about an email address.
+    """True when the concern is about an email address, and nothing else.
 
     An email address in a report is the package's -- the maintainer's, the
     upstream's, a signing key's principal -- and public already. The
-    operator's own address is decidable in code: it is a needle in
-    AUR_SLEUTH_INTERNAL_STRINGS, and internal_string_paths() catches it
-    before this read runs. So a concern that is about an address is one the
+    operator's own address is decidable in code only if they configured it:
+    it is a needle in AUR_SLEUTH_INTERNAL_STRINGS, and internal_string_paths()
+    catches it before this read runs, but the default needle list carries no
+    address of its own. So a concern that is about an address is one the
     model was told not to raise, and it is dismissed here in case the prompt
     was not enough; the prompt is advice, this is the rule.
+
+    Gated on the model's own detail, not the quote's shape alone: an
+    "address@host" string is also the shape of an ssh remote, a git author on
+    a named machine, or a service account -- exactly what the prompt still
+    asks the model to flag as an internal hostname or account. Only a detail
+    that names the concern as being about an email address, and does not also
+    name a credential sitting in the same quote, is dismissed.
     """
     quote = str(concern.get("quote", ""))
+    detail = str(concern.get("detail", ""))
+    if not _EMAIL_WORDS.search(detail) or _CREDENTIAL_WORDS.search(detail):
+        return False
     stripped = quote.strip(_QUOTE_STRIP_CHARS)
     if _EMAIL_RE.fullmatch(stripped):
         return True
-    detail = str(concern.get("detail", ""))
-    return bool(_EMAIL_WORDS.search(detail) and _EMAIL_RE.search(quote))
+    return bool(_EMAIL_RE.search(quote))
 
 
 def parse_model_json(content):
@@ -414,6 +431,8 @@ A leak is text that belongs to the operator, not to the package:
   with a user name in it, a path on a named host. A path inside the audit
   container itself (/data/..., /tmp/..., /opt/aur-sleuth/...) names nothing
   private and is NOT a leak.
+- the operator's own account name or login, on its own -- not inside a path
+  or an email address, both already covered above
 
 NOT a leak, and not your business:
 - an email address, any email address. Every one in a report belongs to
@@ -741,7 +760,8 @@ def main():
 
     summary = f"{len(concerns)} concern(s) across {got['read']} report(s)"
     if got["dismissed"]:
-        summary += f"; {len(got['dismissed'])} dismissed (unquotable, or about the reviewer's own cut)"
+        summary += (f"; {len(got['dismissed'])} dismissed (unquotable, about the reviewer's"
+                    " own cut, or an email address)")
     out["llm"]["dismissed_concerns"] = got["dismissed"][:50]
     if got["errors"]:
         out["llm"]["status"] = "partial"
