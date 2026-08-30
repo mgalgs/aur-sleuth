@@ -51,6 +51,37 @@ check("a scalar is not a dict", p('42') is None)
 check("empty string", p('') is None)
 check("none", p(None) is None)
 
+# email_concern(): the operator's own email address is decidable in code
+# (a needle, checked before this read runs), not by a model guessing whose
+# address it saw. Two real reports were flagged this way and blocked a
+# publish before this existed.
+ec = rp.email_concern
+check("real concern: allowed_signers address (cockpit-pacman-git)", ec(
+    {"quote": "hi@josie.lol",
+     "detail": "The operator's email address is exposed in the allowed_signers file."}))
+check("real concern: LICENSE copyright address (hytale-launcher-bin)", ec(
+    {"quote": "copyrighted by [SCDevel/root@scdevel.net]",
+     "detail": "The LICENSE file contains the operator's email address root@scdevel.net, "
+               "which is a private credential/contact of the package maintainer."}))
+check("an API key is not an email concern",
+      not ec({"quote": "sk-live-abc123", "detail": "an API key"}))
+check("an address incidental to a real concern still stands", not ec(
+    {"quote": "token=abc for root@scdevel.net", "detail": "a bearer token in the report"}))
+check("brackets stripped, quote is exactly one address",
+      ec({"quote": "<hi@josie.lol>", "detail": "contact"}))
+check("no address in the quote is not an email concern",
+      not ec({"quote": "see the README", "detail": "mentions an e-mail"}))
+
+# The prompt's email carve-out landed in code, not just in the model's list:
+# grep the source, rather than calling ask_model(), since building the
+# prompt needs an API key and a live entries list this suite has no
+# business constructing.
+src = open(sys.argv[1]).read()
+check("prompt no longer singles out 'the operator's own email'",
+      "operator's own email" not in src)
+check("prompt tells the model any email address is not its business",
+      "any email address" in src)
+
 if fails:
     print(f"FAILED: {fails} check(s)")
     sys.exit(1)

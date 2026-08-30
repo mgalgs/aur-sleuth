@@ -61,6 +61,11 @@ _CUT_WORDS = re.compile(
     r"|mid-sentence|ends? (?:suddenly|early|prematurely)|trails? off",
     re.IGNORECASE,
 )
+# Used by email_concern(): a concern about an email address is never a leak
+# the operator needs to act on -- see the prompt's own carve-out below.
+_EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+_EMAIL_WORDS = re.compile(r"\be-?mail\b", re.IGNORECASE)
+_QUOTE_STRIP_CHARS = "<>()[]{}\"'.,;:!? \t\n\r"
 # 0 means every generated text in the sweep. The read is advisory, and a text
 # nobody read is the one a leak hides in, so the default is to read them all.
 DEFAULT_MAX_REVIEWS = 0
@@ -305,6 +310,25 @@ def cut_concern(concern, cut_packages):
     return bool(_CUT_WORDS.search(concern.get("detail", "") + " " + concern.get("kind", "")))
 
 
+def email_concern(concern):
+    """True when the concern is about an email address.
+
+    An email address in a report is the package's -- the maintainer's, the
+    upstream's, a signing key's principal -- and public already. The
+    operator's own address is decidable in code: it is a needle in
+    AUR_SLEUTH_INTERNAL_STRINGS, and internal_string_paths() catches it
+    before this read runs. So a concern that is about an address is one the
+    model was told not to raise, and it is dismissed here in case the prompt
+    was not enough; the prompt is advice, this is the rule.
+    """
+    quote = str(concern.get("quote", ""))
+    stripped = quote.strip(_QUOTE_STRIP_CHARS)
+    if _EMAIL_RE.fullmatch(stripped):
+        return True
+    detail = str(concern.get("detail", ""))
+    return bool(_EMAIL_WORDS.search(detail) and _EMAIL_RE.search(quote))
+
+
 def parse_model_json(content):
     """Best-effort parse of a model's JSON reply into a dict.
 
@@ -542,6 +566,9 @@ def review_batches(entries, model, base_url, api_key, batch_size, workers):
             # reader can see the model raised it and why it does not stand.
             if cut_concern(entry, cut_packages):
                 entry["dismissed"] = "about the reviewer's own cut"
+                dismissed.append(entry)
+            elif email_concern(entry):
+                entry["dismissed"] = "an email address: the package's, and the operator's are needles"
                 dismissed.append(entry)
             elif unquoted_concern(entry, texts):
                 entry["dismissed"] = "the quote is not in the report"
