@@ -1,0 +1,32 @@
+{
+  "package": "t3code-nightly-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Two independent models (qwen3-235b and deepseek-v4-flash) successfully reviewed the PKGBUILD and found it to be standard AppImage packaging with pinned SHA-256 checksums from the official upstream GitHub repository. No malicious code execution, unexpected network requests, or data exfiltration mechanisms were identified. The chmod 4755 on chrome-sandbox is a known requirement for Chromium/Electron applications. The inconclusive verdicts were caused by tool errors (HTTP 400 API failure on .SRCINFO, parsing error), not security concerns.",
+  "disagreement_analysis": "The disagreement was caused entirely by tool errors, not security analysis. Report 1 (qwen) failed to audit .SRCINFO due to an HTTP 400 error. Report 3 (openrouter/free, advisory only) failed to parse the model's response. Report 2 (deepseek) successfully audited both files and found them safe. The actual security-relevant content (PKGBUILD) was consistently deemed safe by all models that successfully analyzed it.",
+  "coverage_issues": [
+    "Report 1: .SRCINFO audit failed due to HTTP 400 API error",
+    "Report 3: PKGBUILD audit failed due to parsing error; source_fetch not attempted"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Tool errors (API failures, parsing errors) should not block a security verdict when the security-critical files (PKGBUILD) have been successfully audited",
+    ".SRCINFO is metadata-only and doesn't contain executable code - a failure to audit it should not prevent a verdict if PKGBUILD is clean",
+    "The audit tool should distinguish between 'file unavailable due to tool error' and 'file has security concerns' when computing final verdicts",
+    "Advisory reports with tool errors should be clearly marked as non-voting to avoid confusion in disagreement analysis"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 4603,
+    "completion_tokens": 1272,
+    "cost": 0.0031011199999999997
+  },
+  "audits_judged": [
+    "20260901-230230-qwen-qwen3-235b-a22b-2507.md",
+    "20260901-230238-deepseek-deepseek-v4-flash.md",
+    "20260901-041537-openrouter-free.md"
+  ]
+}
