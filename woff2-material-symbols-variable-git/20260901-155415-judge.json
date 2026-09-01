@@ -1,0 +1,33 @@
+{
+  "package": "woff2-material-symbols-variable-git",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "This is a standard -git AUR package that fetches font files from the declared upstream (github.com/google/material-design-icons). The _update_version function makes network calls to GitHub API during PKGBUILD sourcing to determine the latest version, which is a common and acceptable pattern for -git packages in AUR. The sources are fetched from the project's own upstream repository, no fetched content is executed, and checksums are SKIP which is normal for VCS packages tracking mutable branches. The undefined variable $commit_history is a harmless bug, not malicious. No injection or supply-chain risk is present.",
+  "disagreement_analysis": "The disagreement was caused by qwen3-235b's initial overreaction to network calls during PKGBUILD sourcing. The model first flagged this as UNSAFE, citing supply-chain risks from executing network requests during sourcing. However, on its second look, it correctly self-corrected to SAFE, recognizing this as standard AUR practice for -git packages. deepseek-v4-flash correctly identified the package as SAFE from the start. The openrouter/free report is advisory-only (skipped PKGBUILD as binary, which is an error) and does not count toward the verdict.",
+  "coverage_issues": [
+    "qwen3-235b: API error (HTTP 400) when reviewing .gitignore, resulting in INCONCLUSIVE status for that file",
+    "openrouter/free: Incorrectly skipped PKGBUILD as a binary file (advisory report, not counted)"
+  ],
+  "false_positives": [
+    "qwen3-235b initial UNSAFE verdict for PKGBUILD: Overreacted to network calls during sourcing (_update_version function). These calls are to the declared upstream (GitHub API) for version detection only, which is standard AUR practice for -git packages. The model correctly self-corrected on second look."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models may initially flag network calls during PKGBUILD sourcing as unsafe, even when they are standard AUR patterns for -git packages. The audit tool should provide clearer context about acceptable patterns for VCS packages.",
+    "API errors during file review (like the .gitignore failure) should be handled more gracefully, possibly with automatic retry or fallback to a simpler assessment.",
+    "The tool should prevent text files like PKGBUILD from being incorrectly classified as binary files and skipped."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 7915,
+    "completion_tokens": 1585,
+    "cost": 0.0045616
+  },
+  "audits_judged": [
+    "20260901-152537-qwen-qwen3-235b-a22b-2507.md",
+    "20260901-152707-deepseek-deepseek-v4-flash.md",
+    "20260824-150657-openrouter-free.md"
+  ]
+}
