@@ -1,0 +1,30 @@
+{
+  "package": "hyprmoncfg",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The deepseek model successfully reviewed all 5 maintainer files (PKGBUILD, .SRCINFO, LICENSE, .gitignore, hyprmoncfg.install) and found no malicious code. The PKGBUILD safely downloads pinned sources from the official GitHub repository, and the install script only prints informational messages. The inconclusive verdict from the qwen model was solely due to API errors, not security findings.",
+  "disagreement_analysis": "The disagreement was caused by tool failures rather than security concerns. The qwen model experienced HTTP 400 errors when reviewing .gitignore and hyprmoncfg.install, forcing an inconclusive verdict. The openrouter report (advisory only) also suffered a parsing error on the PKGBUILD. The deepseek model completed the review successfully and found no issues.",
+  "coverage_issues": [
+    "qwen model failed to review .gitignore and hyprmoncfg.install due to LLM API errors (HTTP 400).",
+    "openrouter model (advisory) failed to parse the PKGBUILD decision due to malformed model output."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Implement retry logic or fallback parsing for LLM responses that fail to match the expected XML schema (as seen with the openrouter model).",
+    "Reconsider whether non-executable files like .gitignore should trigger an 'inconclusive' package verdict if their audit fails, since they pose no execution risk under the defined threat model."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 7665,
+    "completion_tokens": 1803,
+    "cost": 0.00476064
+  },
+  "audits_judged": [
+    "20260901-152112-qwen-qwen3-235b-a22b-2507.md",
+    "20260901-152128-deepseek-deepseek-v4-flash.md",
+    "20260826-230654-openrouter-free.md"
+  ]
+}
