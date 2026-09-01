@@ -1,0 +1,28 @@
+{
+  "package": "ttf-material-icons-git",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD uses curl to fetch commit metadata from the official upstream GitHub repository's API to dynamically determine the package version. This is a standard AUR pattern for auto-updating VCS packages. It does not execute fetched content, nor does it contact an unrelated host. The sources also point directly to the official upstream repository. The 'unsafe' verdict is a false positive based on a misunderstanding of AUR auto-update mechanisms and packaging patterns.",
+  "disagreement_analysis": "qwen flagged the top-level execution of a function that queries the GitHub API for versioning as 'unauthorized network calls' and 'exfiltration'. deepseek correctly identified this as standard AUR auto-update behavior for VCS packages targeting the official upstream, recognizing that fetching metadata from the declared upstream is not an injection.",
+  "coverage_issues": [],
+  "false_positives": [
+    "qwen flagged GitHub API calls for version resolution as 'unauthorized network exfiltration'. This is a standard AUR pattern for auto-updating packages and targets the declared upstream, not a malicious injection."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models need better context on AUR-specific patterns, specifically that querying the upstream's own API (e.g., GitHub API) for commit/version metadata during PKGBUILD sourcing is a known auto-update pattern for VCS packages and not inherently malicious.",
+    "Network requests to the package's declared upstream repository for metadata should not be flagged as exfiltration or unauthorized access, as per the rule that fetching from the package's own upstream page is a normal AUR pattern."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 6272,
+    "completion_tokens": 2222,
+    "cost": 0.0048512
+  },
+  "audits_judged": [
+    "20260901-152246-qwen-qwen3-235b-a22b-2507.md",
+    "20260901-152309-deepseek-deepseek-v4-flash.md"
+  ]
+}
