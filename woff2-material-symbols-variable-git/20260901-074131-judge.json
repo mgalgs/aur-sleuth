@@ -1,0 +1,32 @@
+{
+  "package": "woff2-material-symbols-variable-git",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD implements a standard AUR -git package pattern where _update_version() fetches commit metadata from the official upstream repository (google/material-design-icons) to compute a dynamic version string. The network calls (curl to GitHub API, git ls-remote) target only the package's declared upstream and serve the legitimate purpose of version string generation. Per the threat model, this is a normal AUR pattern for vendors without stable URLs, not an injection. No code is executed from fetched content, no unexpected hosts are contacted, and no data exfiltration occurs.",
+  "disagreement_analysis": "The qwen model flagged the global-scope execution of _update_version() as 'unconditional network access during sourcing,' treating a packaging style choice as a security risk. This is a false positive: the function queries only the official upstream API to set _pkgver, which is the package's stated purpose. The deepseek model correctly identified this as standard VCS auto-update behavior. The disagreement stems from qwen over-applying the 'network access during sourcing' heuristic without recognizing that fetching version metadata from the declared upstream is legitimate.",
+  "coverage_issues": [
+    "openrouter/free report failed with tool error: skipped PKGBUILD as 'binary file' - no verdict signal"
+  ],
+  "false_positives": [
+    "qwen model: 'Unconditional network access during PKGBUILD sourcing' - The _update_version() function fetching commit data from api.github.com/repos/google/material-design-icons is a standard AUR -git pattern for version string generation, not an injection. The threat model explicitly excludes 'violates packaging best practices' as grounds for unsafe when the package fetches from its own declared upstream."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Audit models should distinguish between 'network access during sourcing' as a style concern vs. 'fetching from unexpected hosts' as a security concern. Fetching version metadata from the package's declared upstream repository is a legitimate AUR pattern for -git packages.",
+    "The prompt should clarify that global-scope function calls that query the upstream API for version strings are not supply-chain risks when they only set variables and don't execute fetched content.",
+    "Tool errors (like openrouter skipping PKGBUILD as binary) should be handled more gracefully to avoid false 'skipped' verdicts that trigger unnecessary escalation audits."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 6494,
+    "completion_tokens": 1396,
+    "cost": 0.0038649599999999997
+  },
+  "audits_judged": [
+    "20260901-071204-qwen-qwen3-235b-a22b-2507.md",
+    "20260901-071242-deepseek-deepseek-v4-flash.md",
+    "20260824-150657-openrouter-free.md"
+  ]
+}
