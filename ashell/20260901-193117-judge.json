@@ -1,0 +1,27 @@
+{
+  "package": "ashell",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD and other maintainer files are standard and safe. The only disagreement stems from an API error in the first model when auditing .SRCINFO, which is non-executable metadata. The second model successfully audited .SRCINFO and found it safe. There are no security risks in the packaging.",
+  "disagreement_analysis": "The qwen model returned 'inconclusive' because it encountered an HTTP 400 API error while auditing .SRCINFO. The deepseek model successfully audited .SRCINFO and found it safe. Since .SRCINFO is just metadata and cannot execute code, the API error does not mask a security vulnerability, making the 'safe' verdict correct.",
+  "coverage_issues": [
+    "qwen model failed to audit .SRCINFO due to an LLM API error (HTTP 400)."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "The audit tool should handle LLM API errors gracefully, perhaps by retrying or downgrading the severity of the failure if the affected file is non-executable metadata like .SRCINFO, rather than failing the entire audit."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5014,
+    "completion_tokens": 1236,
+    "cost": 0.0031865599999999997
+  },
+  "audits_judged": [
+    "20260901-190406-qwen-qwen3-235b-a22b-2507.md",
+    "20260901-190402-deepseek-deepseek-v4-flash.md"
+  ]
+}
