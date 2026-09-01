@@ -1,0 +1,29 @@
+{
+  "package": "nebula-desktop-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard -bin AUR package that downloads a prebuilt .pacman archive from the vendor's own domain (app-assets.nebula.gg) pinned with a SHA256 checksum. The PKGBUILD contains no executable code at the top level. The .install script performs a standard Electron/Chromium sandbox permission setup (conditionally setting setuid on chrome-sandbox if user namespaces are unavailable), which is a well-known and benign pattern. No injections, suspicious network calls, or execution of fetched content were found.",
+  "disagreement_analysis": "The disagreement was caused by a transient API error (HTTP 400 BadRequestError) in the qwen3-235b model when attempting to audit nebula-desktop-bin.install, forcing an 'inconclusive' verdict. The deepseek model successfully audited the same file and correctly identified it as a standard sandbox permission script. This is a tool failure, not a genuine security disagreement.",
+  "coverage_issues": [
+    "qwen3-235b model failed to audit nebula-desktop-bin.install due to an HTTP 400 API error, leaving a coverage gap that forced an inconclusive package verdict."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Implement a retry mechanism for individual file audits that fail due to transient API errors before declaring the entire package inconclusive.",
+    "When multiple models are used, the adjudicator should be able to resolve coverage gaps from one model using the successful audit of the same file by another model, avoiding unnecessary re-audits."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 7240,
+    "completion_tokens": 1155,
+    "cost": 0.0037952
+  },
+  "audits_judged": [
+    "20260901-072157-qwen-qwen3-235b-a22b-2507.md",
+    "20260901-072200-deepseek-deepseek-v4-flash.md",
+    "20260901-043435-openrouter-free.md"
+  ]
+}
