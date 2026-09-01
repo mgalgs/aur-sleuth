@@ -1,0 +1,30 @@
+{
+  "package": "t3code-nightly-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The only successful audit (deepseek) thoroughly reviewed the PKGBUILD and .SRCINFO, finding a standard AppImage packaging recipe with pinned SHA256 checksums, standard Electron/Chromium setuid requirements, and no malicious execution or unexpected network requests. The other two reports failed due to tool/API errors and carry no verdict signal.",
+  "disagreement_analysis": "The disagreement is purely due to tool failures (an HTTP 400 API error and a response parse error) in the other models, not a genuine security disagreement. The single successful model correctly identified the package as safe.",
+  "coverage_issues": [
+    "qwen/qwen3-235b-a22b-2507 failed to audit the PKGBUILD due to an HTTP 400 API error.",
+    "openrouter/free failed to audit the PKGBUILD due to a parse error, likely because it was routed to a content-safety model that does not follow the expected structured output format."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Avoid routing code audit tasks to content-safety models (e.g., nvidia/nemotron-3.5-content-safety), as they frequently fail to produce the required structured XML/JSON output, resulting in parse errors.",
+    "Implement automatic retries or fallback models when an LLM API returns a 400 error or fails to parse, to prevent the entire audit from being marked inconclusive due to transient API issues or bad routing."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 4925,
+    "completion_tokens": 1602,
+    "cost": 0.00362656
+  },
+  "audits_judged": [
+    "20260901-110046-qwen-qwen3-235b-a22b-2507.md",
+    "20260901-110054-deepseek-deepseek-v4-flash.md",
+    "20260901-041537-openrouter-free.md"
+  ]
+}
