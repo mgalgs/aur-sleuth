@@ -1,0 +1,34 @@
+{
+  "package": "azerothcore-wotlk-git",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The disagreement centers on acore_mod, which qwen flagged as unsafe due to sudo usage, symlink manipulation, and makepkg execution. However, this is a false positive. The script is a legitimate administrative helper for AzerothCore module management - a core feature of the server emulator. Its operations (symlinking modules from /usr/src/acore-modules, rebuilding via makepkg, restarting services) directly serve the package's stated purpose of enabling custom module deployment. The security concern about trusting /usr/src/acore-modules is a design consideration, not malicious injection. The deepseek model correctly identified this as standard AUR helper functionality, while qwen overreacted to privileged operations that are appropriate for the tool's intended use.",
+  "disagreement_analysis": "qwen flagged acore_mod as unsafe due to sudo usage and symlink operations from /usr/src/acore-modules, claiming this enables arbitrary code execution. However, this is the script's intended functionality - AzerothCore supports custom modules, and this helper automates their compilation/deployment. The operations serve the package's stated purpose and are not malicious injection. deepseek correctly recognized this as legitimate administrative tooling.",
+  "coverage_issues": [
+    "qwen model had 4 files inconclusive due to API errors (PKGBUILD, acore-world-server.service, .SRCINFO, attach-world)",
+    "openrouter/free had attach-world inconclusive due to parsing error"
+  ],
+  "false_positives": [
+    "acore_mod flagged by qwen: legitimate administrative helper for module management, not malicious injection. Sudo/symlink/makepkg operations serve the package's stated purpose of enabling custom module deployment."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models overreact to legitimate sudo usage in administrative scripts - need to distinguish between 'requires elevated privileges' and 'malicious intent'",
+    "Helper scripts that perform system-level operations should be evaluated against the package's stated functionality, not just the presence of privileged commands",
+    "Need better context for domain-specific tools: AzerothCore's module system is a core feature, so module compilation helpers are expected, not suspicious",
+    "API errors causing inconclusive results should trigger retry logic rather than partial audits"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 13571,
+    "completion_tokens": 2044,
+    "cost": 0.0069590400000000005
+  },
+  "audits_judged": [
+    "20260901-030548-qwen-qwen3-235b-a22b-2507.md",
+    "20260901-030635-deepseek-deepseek-v4-flash.md",
+    "20260831-235545-openrouter-free.md"
+  ]
+}
