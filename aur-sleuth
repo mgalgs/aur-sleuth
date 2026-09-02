@@ -2145,9 +2145,10 @@ def run_makepkg(cmd: List[str], **kwargs) -> subprocess.CompletedProcess:
 def download_sources(tui: ConsoleUI, max_retries: int = 3):
     cmd = ["makepkg", "--nobuild", "--nodeps", "--noprepare", "--skippgpcheck"]
     for attempt in range(1, max_retries + 1):
-        tui.update_status(
-            f"Downloading sources (attempt {attempt}/{max_retries})..."
-        )
+        # The counter appears only on retries: "(attempt 1/3)" on the
+        # normal path reads as something going wrong in a quick log scan.
+        suffix = f" (attempt {attempt}/{max_retries})" if attempt > 1 else ""
+        tui.update_status(f"Downloading sources{suffix}...")
         try:
             run_makepkg(cmd)
             tui.finalize_step("makepkg --nobuild --nodeps --noprepare successful")
