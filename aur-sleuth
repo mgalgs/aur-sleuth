@@ -2143,7 +2143,7 @@ def run_makepkg(cmd: List[str], **kwargs) -> subprocess.CompletedProcess:
 
 
 def download_sources(tui: ConsoleUI, max_retries: int = 3):
-    cmd = ["makepkg", "--nobuild", "--nodeps", "--noprepare", "--skippgpcheck"]
+    cmd = ["makepkg", "--verifysource", "--nodeps", "--skippgpcheck"]
     for attempt in range(1, max_retries + 1):
         # The counter appears only on retries: "(attempt 1/3)" on the
         # normal path reads as something going wrong in a quick log scan.
@@ -2151,17 +2151,17 @@ def download_sources(tui: ConsoleUI, max_retries: int = 3):
         tui.update_status(f"Downloading sources{suffix}...")
         try:
             run_makepkg(cmd)
-            tui.finalize_step("makepkg --nobuild --nodeps --noprepare successful")
+            tui.finalize_step("makepkg --verifysource --nodeps successful")
             return True
         except subprocess.TimeoutExpired:
             # No retry: a mirror that stalled for the whole ceiling is not going
             # to recover in a few seconds, and retrying would triple the ceiling.
             logger.error(
-                f"makepkg --nobuild exceeded {MAKEPKG_TIMEOUT_SECONDS}s and was killed"
+                f"makepkg --verifysource exceeded {MAKEPKG_TIMEOUT_SECONDS}s and was killed"
             )
             return False
         except subprocess.CalledProcessError as e:
-            logger.error(f"makepkg --nobuild attempt {attempt} failed: {e.stderr}")
+            logger.error(f"makepkg --verifysource attempt {attempt} failed: {e.stderr}")
             # `manual://` is an explicit AUR contract: the maintainer cannot
             # redistribute the vendor archive, so makepkg expects the
             # operator to place it locally. Retrying cannot change that state
@@ -2414,7 +2414,7 @@ def _second_look_question(package_name: str, at_gate: bool = False) -> str:
     # review, where "runs at build time" is in scope and here it is not.
     gate_scope = (
         """
-This verdict came from the NARROW makepkg gate, which decides one thing: is it safe to run `makepkg --nobuild --nodeps --noprepare` and `makepkg --printsrcinfo` to fetch the sources. Those commands execute the PKGBUILD's global scope and pkgver() as it is sourced. They do NOT run prepare(), build() or package(). Extraction writes files; it does not run them.
+This verdict came from the NARROW makepkg gate, which decides one thing: is it safe to run `makepkg --verifysource --nodeps` and `makepkg --printsrcinfo` to fetch and verify the sources. Those commands execute the PKGBUILD's global scope and pkgver() as it is sourced. They do NOT run prepare(), build() or package(). Verification checks checksums; it does not extract or run anything.
 
 So code that can only execute inside those functions is out of scope HERE, and a missing or SKIPped checksum is never grounds to fail this gate -- fetching unverified bytes in order to audit them is what the commands are for. What IS in scope: something that executes while the PKGBUILD is sourced, such as a global-scope command substitution or a pkgver() that downloads and runs an untrusted payload, or that exfiltrates data.
 """
@@ -3047,18 +3047,17 @@ def check_pkgbuild(tui, report, package_name, pkgdir, llm_client) -> AuditResult
         "Performing initial audit of PKGBUILD to ensure that we can safely run `makepkg`"
     )
 
-    extra_instructions = """We're about to run `makepkg --nobuild --nodeps --noprepare` and
-`makepkg --printsrcinfo` on the following PKGBUILD in order to download the package sources for
+    extra_instructions = """We're about to run `makepkg --verifysource --nodeps` and
+`makepkg --printsrcinfo` on the following PKGBUILD in order to download and verify the package sources for
 auditing. This is a NARROW safety gate: we only need to decide whether running THOSE specific
 commands is safe. A more comprehensive audit of the full PKGBUILD happens later, so do not block
 on issues that cannot execute during these commands.
 
 What these commands actually do:
-  - Fetch the `source` array (git clone / http(s) download) and extract archives.
+  - Fetch the `source` array (git clone / http(s) download) and verify checksums.
   - Execute code in the PKGBUILD's global/top-level scope and in `pkgver()` as the PKGBUILD is
     sourced.
-  - They DO NOT run `prepare()`, `build()`, or `package()` -- note the `--noprepare` flag, and
-    that `--nobuild` stops before `build()`/`package()`. Code that only runs inside those
+  - They DO NOT run `prepare()`, `build()`, or `package()`. Code that only runs inside those
     functions cannot execute during this step, so it is out of scope for THIS gate (it will be
     audited later).
 
@@ -3070,9 +3069,9 @@ branches/tags, and SKIP checksums on ANY source type -- VCS or a prebuilt binary
 alike.
 
 Be explicit about that last one, because it is the most common way this gate is failed by
-mistake: downloading and extracting an UNVERIFIED archive is precisely what these commands
-are designed to do. We fetch the sources in order to audit them. Extraction writes files to
-disk; it does not run them, and `--nobuild`/`--noprepare` stop before anything in the
+mistake: downloading and verifying an UNVERIFIED artifact (via checksum) is precisely what these commands
+are designed to do. We fetch the sources in order to audit them. Verification checks checksums;
+it does not extract or run anything, and `--verifysource` stops before anything in the
 package could execute. So a missing or SKIPped checksum is NEVER grounds to fail THIS gate,
 no matter what the artifact is -- the full PKGBUILD review that follows will record it for
 the user.
@@ -3149,7 +3148,7 @@ def do_agentic_audit(
     SOURCE_FETCH_STATUS[0] = "ok" if sources_fetched else "failed"
     if not sources_fetched:
         msg = (
-            "makepkg --nobuild could not fetch all upstream sources; continuing "
+            "makepkg --verifysource could not fetch all upstream sources; continuing "
             "with the AUR repository files, which are the complete maintainer-controlled "
             "audit boundary. Downloaded-source facts are unavailable."
         )
@@ -4215,7 +4214,7 @@ def selftest_benchmark_arms():
     # records being made twice.
     gate_q = _second_look_question("somepkg", at_gate=True)
     review_q = _second_look_question("somepkg", at_gate=False)
-    assert "--noprepare" in gate_q and "--noprepare" not in review_q
+    assert "--verifysource" in gate_q
     assert "SKIP" in gate_q
     assert "do NOT run prepare(), build() or package()" in gate_q
     for q in (gate_q, review_q):
