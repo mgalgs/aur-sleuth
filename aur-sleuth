@@ -3506,27 +3506,35 @@ def download_package_to_tmpdir(
     # Create a temp directory inside it
     tmpdir = tempfile.mkdtemp(prefix="aur-sleuth-", dir=tmpdir_parent)
 
-    if not clone_url:
-        pkgbase = resolve_pkgbase(package_name)
-        if pkgbase != package_name:
-            tui.finalize_step(f"{package_name} is built from {pkgbase}")
-        clone_url = f"https://aur.archlinux.org/{pkgbase}.git"
+    # On any failure the directory this function just made is nobody else's
+    # to find: the caller never sees the path, so an early raise (a package
+    # the AUR does not list, a clone that failed) would leak it into the
+    # report directory forever.
+    try:
+        if not clone_url:
+            pkgbase = resolve_pkgbase(package_name)
+            if pkgbase != package_name:
+                tui.finalize_step(f"{package_name} is built from {pkgbase}")
+            clone_url = f"https://aur.archlinux.org/{pkgbase}.git"
 
-    # The destination is a temporary path on the machine running the audit, and
-    # this line ends up in the published report. Keep it out of there.
-    logger.info("Cloning %s into %s", package_name, tmpdir)
-    tui.update_status(f"Cloning {clone_url}...")
-    subprocess.run(
-        ["git", "clone", clone_url, tmpdir],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
-    # git clones a repository with no commits without complaint. An audit of
-    # nothing must not proceed to call "nothing" a verdict.
-    if not (Path(tmpdir) / "PKGBUILD").is_file():
-        raise PackageNotFound(package_name, clone_url)
+        # The destination is a temporary path on the machine running the audit, and
+        # this line ends up in the published report. Keep it out of there.
+        logger.info("Cloning %s into %s", package_name, tmpdir)
+        tui.update_status(f"Cloning {clone_url}...")
+        subprocess.run(
+            ["git", "clone", clone_url, tmpdir],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        # git clones a repository with no commits without complaint. An audit of
+        # nothing must not proceed to call "nothing" a verdict.
+        if not (Path(tmpdir) / "PKGBUILD").is_file():
+            raise PackageNotFound(package_name, clone_url)
+    except BaseException:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+        raise
     logger.info("Cloned %s into %s", package_name, tmpdir)
     tui.finalize_step(f"Cloned {package_name}")
     return Path(tmpdir).resolve()
@@ -3636,6 +3644,9 @@ def sleuth_main() -> int:
         report_file = tmpdir_parent / f"aur-sleuth-report-{package_name}.txt"
 
     llm_client = get_openai_client()
+    # Assigned inside the try; the cleanup in the finally must know whether
+    # the clone ever happened.
+    pkgdir = None
     try:
         with Report(report_file) as report:
             with TuiCls(report) as tui:
@@ -3672,11 +3683,14 @@ def sleuth_main() -> int:
         if llm_client.ok_calls == 0:
             report_file.unlink(missing_ok=True)
         raise
-
-    if not args.pkgdir:
-        # Clean up temporary cloned directory
-        if os.path.exists(pkgdir):
-            shutil.rmtree(pkgdir)
+    finally:
+        # Clean up the temporary cloned directory on every exit, not just
+        # success. The pipeline's timeout sends SIGTERM, which the handler
+        # turns into SystemExit precisely so this runs: before it did, every
+        # timed-out audit left its extracted source tree in the report
+        # directory. A caller's own --pkgdir is not ours to delete.
+        if not args.pkgdir and pkgdir is not None and os.path.exists(pkgdir):
+            shutil.rmtree(pkgdir, ignore_errors=True)
 
     # A report no model ever answered into holds nothing but this program's
     # own error lines. Keeping it would call the package "audited" when
