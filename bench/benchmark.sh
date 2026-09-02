@@ -14,6 +14,14 @@
 # Usage: benchmark.sh --models a,b[,c] [--role audit|judge] [--target NAME]
 #                     [--sample N] [--packages p,q,...] [--budget USD] [--jobs N]
 #                     [--audit-timeout SECONDS] [--no-synthetics] [--run-id ID]
+#                     [--keep-raw]
+#
+# When the run has scored, the raw transcripts and reports of every row that
+# AGREED with the settled reference are deleted (bench/prune-bench-run.py):
+# the agreement is already the summary row, and one wide run left 24.6 GB of
+# agreeing transcripts on the volume. Disagreements and failed synthetics
+# keep their raw artifacts for the follow-up "why?". --keep-raw skips the
+# prune for a run whose every transcript is wanted.
 #
 # --sample 0 with no --packages is a SCREEN: the synthetic fixtures alone, the
 # cheap behavioural filter in front of a full benchmark. Three benign fixtures
@@ -46,6 +54,7 @@ BUDGET="2.00"
 JOBS=4
 AUDIT_TIMEOUT=900
 SYNTHETICS=true
+KEEP_RAW=false
 RUN_ID="$(date -u +%Y%m%d-%H%M%S)"
 
 while [[ $# -gt 0 ]]; do
@@ -59,6 +68,7 @@ while [[ $# -gt 0 ]]; do
         --jobs) JOBS="$2"; shift 2 ;;
         --audit-timeout) AUDIT_TIMEOUT="$2"; shift 2 ;;
         --no-synthetics) SYNTHETICS=false; shift ;;
+        --keep-raw) KEEP_RAW=true; shift ;;
         --run-id) RUN_ID="$2"; shift 2 ;;
         *) echo "Unknown option: $1" >&2; exit 1 ;;
     esac
@@ -440,3 +450,12 @@ python3 bench/benchmark-report.py --rows "$ROWS" --synthetics "$SYNTH" \
     --meta "$meta" --json "$RUN_DIR/result.json"
 cp -f "$RUN_DIR/result.json" "$DATA_DIR/bench/latest.json"
 log "Spent \$$(run_spent) on this run; written to $RUN_DIR/result.json"
+
+# The summaries above are the run's product; the raw transcripts are kept
+# only where they disagree with the settled reference (one wide run left
+# 24.6 GB of agreeing transcripts behind). Failure is not fatal: the run
+# already scored, the volume just keeps the bytes until the next prune.
+if ! $KEEP_RAW; then
+    python3 bench/prune-bench-run.py "$RUN_DIR" \
+        || log "WARNING: raw-artifact prune failed; $RUN_DIR keeps everything"
+fi
