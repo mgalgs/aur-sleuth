@@ -79,6 +79,11 @@ PUSH_URL="${AUR_SLEUTH_PUSH_URL:-}"
 SSH_KEY="${AUR_SLEUTH_SSH_KEY:-/secrets/git/ssh-privatekey}"
 KNOWN_HOSTS="${AUR_SLEUTH_KNOWN_HOSTS:-/etc/ssh/ssh_known_hosts}"
 SPEND_LOG_RETENTION_DAYS="${AUR_SLEUTH_SPEND_LOG_RETENTION_DAYS:-30}"
+# Working copies under bulk-reports/ past this age are deleted at prepare.
+# The audit-reports branch holds every archived report, judge reads a report
+# the run it was written, and scout's spend window is 7 days -- 30 is slack
+# over all of it. The corpus reached 25.5 GB before any of this existed.
+REPORT_RETENTION_DAYS="${AUR_SLEUTH_REPORT_RETENTION_DAYS:-30}"
 PUBLISH_DRY_RUN="${AUR_SLEUTH_PUBLISH_DRY_RUN:-false}"
 # The commit a review approved. When set, publish pushes exactly that commit,
 # which is what makes a review and its publish one transaction rather than
@@ -262,11 +267,36 @@ do_prepare() {
 
     # An audit that dies mid-run leaves its extracted package sources behind.
     # Anything older than two hours cannot belong to a live run: runs do not
-    # overlap, and each one is capped well below that.
+    # overlap, and each one is capped well below that. Benchmark runs leak
+    # the same way -- their audits clone under bench/<run>/reports/<model>/ --
+    # and candidate models time out far more than seat holders do.
     local stale
     stale="$(find "$DATA_DIR/bulk-reports" -mindepth 2 -maxdepth 2 -type d \
         -name 'aur-sleuth-*' -mmin +120 -print -exec rm -rf {} + | wc -l)"
     (( stale > 0 )) && log "Removed $stale stale source tree(s)"
+    if [[ -d "$DATA_DIR/bench" ]]; then
+        local stale_bench
+        stale_bench="$(find "$DATA_DIR/bench" -mindepth 4 -maxdepth 6 \
+            \( -type d -name 'aur-sleuth-*' -mmin +120 \) -prune -print \
+            -exec rm -rf {} + | wc -l)"
+        (( stale_bench > 0 )) && log "Removed $stale_bench stale benchmark source tree(s)"
+    fi
+
+    # Working reports the branch already archives (see REPORT_RETENTION_DAYS).
+    local old_reports
+    old_reports="$(find "$DATA_DIR/bulk-reports" -mindepth 2 -maxdepth 2 -type f \
+        -name 'aur-sleuth-report-*.txt' -mtime "+$REPORT_RETENTION_DAYS" \
+        -print -delete | wc -l)"
+    (( old_reports > 0 )) && log "Pruned $old_reports working report(s) older than ${REPORT_RETENTION_DAYS}d (the branch keeps the archive)"
+
+    # Every archived report lands as loose objects (archive-report.sh uses
+    # hash-object/commit-tree), and nothing else ever packs them: at the
+    # current cadence that is ~1000 new inodes a day on the volume for
+    # content that packs to ~1 MiB. --auto is a no-op until git's own
+    # thresholds say otherwise; autoDetach would background the repack and
+    # race the stages that run next.
+    git -c gc.autoDetach=false gc --auto --quiet \
+        || log "WARNING: git gc failed; the store keeps accumulating loose objects"
 
     log "Ready. Today's spend so far: \$$(spent_today)"
 }
