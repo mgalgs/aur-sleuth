@@ -1,0 +1,32 @@
+{
+  "package": "woff2-material-symbols-variable-git",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The disagreement stems from qwen flagging network calls to api.github.com during PKGBUILD sourcing as unsafe. However, this is a standard AUR pattern for -git packages to resolve the latest upstream version. The threat model explicitly states that fetching the package's own declared upstream page and parsing it is normal, and 'violates packaging best practices' is never grounds for unsafe. The calls are to the package's own upstream (google/material-design-icons), no fetched content is executed, and deepseek correctly identified this as benign version-check logic. No injection or exfiltration is present.",
+  "disagreement_analysis": "Qwen overreacted to network calls during PKGBUILD sourcing, treating a normal AUR version-resolution pattern as a supply-chain risk. It acknowledged the domains were legitimate and no exfiltration was present, but still ruled unsafe based on 'principle of least surprise' and 'unauthorized outbound network calls' \u2014 both of which are packaging hygiene concerns, not injection. Deepseek correctly applied the threat model and recognized the calls as benign.",
+  "coverage_issues": [
+    "openrouter/free skipped PKGBUILD due to tool error (misidentified as binary file), carrying no verdict signal"
+  ],
+  "false_positives": [
+    "Qwen's 'Unconditional network calls during PKGBUILD sourcing': This is a normal AUR pattern for resolving upstream versions from GitHub. The calls are to the package's own declared upstream, no content is executed, and the threat model explicitly excludes packaging hygiene from the verdict."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models must distinguish between network calls to a package's own declared upstream (benign version resolution) vs. calls to unrelated hosts (potential exfiltration). The former is a normal AUR pattern.",
+    "Prompts should more strongly emphasize that 'principle of least surprise' or 'unauthorized outbound calls' are not valid unsafe criteria when the destination is the package's own upstream and no fetched content is executed.",
+    "Tool errors that skip critical files (like PKGBUILD) should be caught earlier or retried, as they leave coverage gaps."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 7030,
+    "completion_tokens": 1486,
+    "cost": 0.00415168
+  },
+  "audits_judged": [
+    "20260901-191536-qwen-qwen3-235b-a22b-2507.md",
+    "20260901-191612-deepseek-deepseek-v4-flash.md",
+    "20260824-150657-openrouter-free.md"
+  ]
+}

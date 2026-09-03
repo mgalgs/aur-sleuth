@@ -1,0 +1,29 @@
+{
+  "package": "ttf-material-icons-git",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD's _update_version function only performs network requests when $_autoupdate is explicitly set to true. During normal makepkg operations (including --printsrcinfo), this condition is not met, so no network activity occurs. Even when the function does execute, it queries the declared upstream (github.com/google/material-design-icons) solely to determine version metadata\u2014a standard pattern for -git AUR packages. The use of sha256sums=SKIP for VCS sources is expected and acceptable. No malicious code execution, data exfiltration, or supply-chain injection is present.",
+  "disagreement_analysis": "qwen3-235b incorrectly flagged the conditional network call in _update_version as a supply-chain risk, failing to recognize that the function checks $_autoupdate before executing curl. The model's own 'second look' correctly identified this as normal -git package behavior, but the final assessment reverted to UNSAFE due to a tool error (HTTP 400). deepseek-v4-flash correctly traced the control flow and identified that no network requests occur during standard makepkg operations.",
+  "coverage_issues": [],
+  "false_positives": [
+    "Unsafe API calls and untrusted JSON parsing: The curl call is conditional on $_autoupdate, targets the declared upstream, and only retrieves version metadata. This is standard AUR -git packaging, not a supply-chain attack vector."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Audit models should trace conditional execution paths before flagging network calls. A curl inside a function that checks an autoupdate flag is not equivalent to unconditional network activity during build.",
+    "Tool errors (like HTTP 400 on second-look requests) can cause models to revert to earlier incorrect assessments. The audit pipeline should handle API failures gracefully rather than falling back to a prior unsafe verdict.",
+    "Models should distinguish between 'fragile shell parsing' (a code quality issue) and 'malicious injection' (a security issue). The former does not meet the threshold for an unsafe verdict under the AUR threat model."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 8244,
+    "completion_tokens": 1249,
+    "cost": 0.004236800000000001
+  },
+  "audits_judged": [
+    "20260903-004232-qwen-qwen3-235b-a22b-2507.md",
+    "20260903-004332-deepseek-deepseek-v4-flash.md"
+  ]
+}

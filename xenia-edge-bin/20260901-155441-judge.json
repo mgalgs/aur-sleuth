@@ -1,0 +1,30 @@
+{
+  "package": "xenia-edge-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard AppImage binary package that fetches a prebuilt AppImage from the project's official GitHub releases (has207/xenia-edge) with a pinned SHA256 checksum. The LICENSE file is fetched from the same repository with SKIP checksum, which is acceptable for non-executable metadata. The PKGBUILD contains no command substitution, eval, or dangerous operations in global scope. The prepare(), build(), and package() functions perform standard AppImage extraction and installation. No malicious code, network exfiltration, or unauthorized execution is present. The disagreement between reports is due to a tool error (HTTP 400 API failure) in the qwen model when auditing .SRCINFO, not a security concern.",
+  "disagreement_analysis": "The qwen model failed to audit .SRCINFO due to an HTTP 400 BadRequestError, resulting in an inconclusive verdict. The deepseek model successfully audited all three files (PKGBUILD, LICENSE, .SRCINFO) and correctly determined the package is safe. The openrouter report is advisory and does not count toward the verdict. The disagreement is purely a tool failure, not a difference in security assessment.",
+  "coverage_issues": [
+    "qwen model: .SRCINFO audit failed with HTTP 400 error, leaving one file unreviewed"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Tool errors (API failures, parse errors) should be distinguished from security findings to avoid unnecessary inconclusive verdicts when other models successfully complete the audit",
+    "When one model fails due to a tool error and another succeeds with full coverage, the successful model's verdict should be weighted appropriately",
+    "SKIP checksums on non-executable files (like LICENSE) are standard practice and should not trigger security concerns when the primary artifact has a pinned checksum"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 6826,
+    "completion_tokens": 1284,
+    "cost": 0.00382784
+  },
+  "audits_judged": [
+    "20260901-153021-qwen-qwen3-235b-a22b-2507.md",
+    "20260901-153142-deepseek-deepseek-v4-flash.md",
+    "20260901-075150-openrouter-free.md"
+  ]
+}

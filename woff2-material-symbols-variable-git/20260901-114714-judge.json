@@ -1,0 +1,32 @@
+{
+  "package": "woff2-material-symbols-variable-git",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard AUR -git VCS package. The _update_version() function makes curl requests to the GitHub API for the package's own declared upstream (google/material-design-icons) to determine the latest commit/tag for pkgver calculation. This is a normal AUR pattern for auto-updating VCS packages, explicitly covered by the threat model exception: 'A PKGBUILD that resolves its download URL by fetching the package's own declared upstream page, parsing it with grep/sed and executing none of it, is a normal AUR pattern.' All source URLs point to the project's own upstream repository. No code executes fetched content, no unknown hosts are contacted, and no malicious behavior is present.",
+  "disagreement_analysis": "qwen3-235b flagged the unconditional curl to GitHub API during PKGBUILD sourcing as unsafe, citing information leakage and DoS risks. This is a false positive: the network requests are to the package's own declared upstream (GitHub API for google/material-design-icons), used solely for version detection, which is a standard AUR VCS pattern. The model conflated packaging hygiene (network requests during sourcing) with security injection. deepseek-v4-flash correctly identified this as a standard VCS package pattern with no malicious behavior.",
+  "coverage_issues": [
+    "openrouter/free incorrectly identified PKGBUILD as a binary file and skipped it entirely, resulting in no audit coverage"
+  ],
+  "false_positives": [
+    "qwen3-235b: 'Unconditional curl to GitHub API during sourcing' - This is a standard AUR VCS package pattern for auto-detecting the latest upstream version. The threat model explicitly exempts this: fetching from the package's own declared upstream and parsing it without execution is normal. Concerns about information leakage and DoS are outside the AUR injection threat model."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models need clearer guidance that network requests to a package's own declared upstream during PKGBUILD sourcing (for version detection) are a standard AUR VCS pattern and not a security issue",
+    "The audit tool should better distinguish between 'packaging hygiene/style violations' and 'security injection' - the former should never trigger an unsafe verdict",
+    "openrouter/free has a bug where it misidentifies PKGBUILD files as binary, causing complete audit failure - this needs a fix in file type detection"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 6370,
+    "completion_tokens": 1648,
+    "cost": 0.00414784
+  },
+  "audits_judged": [
+    "20260901-111448-qwen-qwen3-235b-a22b-2507.md",
+    "20260901-111504-deepseek-deepseek-v4-flash.md",
+    "20260824-150657-openrouter-free.md"
+  ]
+}

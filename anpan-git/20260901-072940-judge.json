@@ -1,0 +1,30 @@
+{
+  "package": "anpan-git",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard VCS (-git) package for a Go application. The PKGBUILD uses standard git cloning, pkgver() with git describe, and go build. There are no install hooks, patches, or suspicious network/file operations. The 'inconclusive' verdicts from other models were solely due to API and parsing errors, not actual security concerns.",
+  "disagreement_analysis": "The disagreement was caused by tool and API failures, not security analysis. Qwen failed with an HTTP 400 error on .SRCINFO, and OpenRouter failed to parse the model's response for the PKGBUILD. Deepseek successfully analyzed all files and correctly identified the package as safe.",
+  "coverage_issues": [
+    "Qwen failed to review .SRCINFO due to an HTTP 400 API error.",
+    "OpenRouter failed to review PKGBUILD due to a response parsing error and did not attempt source fetching."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "API errors (e.g., HTTP 400, parsing failures) should trigger automatic retries or be classified as tool failures rather than security 'inconclusive' verdicts, which unnecessarily trigger escalation audits.",
+    ".SRCINFO is auto-generated metadata and contains no executable code; failures to parse it should not block a safe verdict if the PKGBUILD is verified safe."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5245,
+    "completion_tokens": 1709,
+    "cost": 0.00386592
+  },
+  "audits_judged": [
+    "20260901-070559-qwen-qwen3-235b-a22b-2507.md",
+    "20260901-070610-deepseek-deepseek-v4-flash.md",
+    "20260901-041645-openrouter-free.md"
+  ]
+}

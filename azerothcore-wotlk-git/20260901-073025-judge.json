@@ -1,0 +1,33 @@
+{
+  "package": "azerothcore-wotlk-git",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "All reviewed files (PKGBUILD, .install, helper scripts, patches, and systemd units) contain standard packaging logic and legitimate application-specific administrative tooling. No supply-chain injections, malicious payloads, or unauthorized network exfiltration were found. The use of sudo and user dropzones in helper scripts is expected for this specific game server's modular architecture.",
+  "disagreement_analysis": "qwen3 initially flagged acore_mod as UNSAFE due to sudo usage and unvalidated dropzone operations, but self-corrected to SAFE upon a second look, recognizing it as a legitimate maintainer helper. qwen3 also suffered an API error on attach-world, leading to an inconclusive overall verdict. deepseek correctly assessed all files as safe without false positives.",
+  "coverage_issues": [
+    "qwen3 failed to review attach-world due to an LLM API error (HTTP 400).",
+    "openrouter/free (advisory) failed to parse decisions for acore-auth-server.service, acore-world-server.service, and attach-world."
+  ],
+  "false_positives": [
+    "qwen3's initial UNSAFE verdict on acore_mod: flagged sudo usage and dropzone operations as privilege escalation, missing the context that it is a legitimate maintainer helper script for a modular game server."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models need better context for maintainer helper scripts that use sudo or operate on user-writable directories; these are often legitimate application-specific tooling, not supply-chain injections.",
+    "Local security hygiene issues (like SQL injection in an interactive local setup script) should be explicitly distinguished from supply-chain risks to prevent false positives.",
+    "The audit tool should implement retry logic or fallback models for API failures and parsing errors to prevent inconclusive verdicts."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 13694,
+    "completion_tokens": 2162,
+    "cost": 0.00714944
+  },
+  "audits_judged": [
+    "20260901-070446-qwen-qwen3-235b-a22b-2507.md",
+    "20260901-070522-deepseek-deepseek-v4-flash.md",
+    "20260901-042130-openrouter-free.md"
+  ]
+}

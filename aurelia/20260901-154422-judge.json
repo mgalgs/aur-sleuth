@@ -1,0 +1,33 @@
+{
+  "package": "aurelia",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD is a standard Rust package that downloads from the official GitHub repository with a pinned version tag and SHA256 checksum verification. No malicious code executes during the build process - all operations are standard cargo build commands. The source integrity is verified, and there are no suspicious network operations, obfuscated code, or data exfiltration attempts. Two independent models reviewed the same maintainer files and found them safe; the only disagreement was due to a tool error on .gitignore, not a security concern.",
+  "disagreement_analysis": "The disagreement was caused by tool errors, not security concerns. Report 1 (qwen) failed to audit .gitignore due to an HTTP 400 error, resulting in an inconclusive verdict. Report 2 (deepseek) successfully reviewed all files and found them safe. Report 3 (openrouter) is marked as advisory and reviewed upstream source files (build.rs, Cargo.toml) which are outside the AUR threat model. The actual security-relevant files (PKGBUILD, .SRCINFO) were consistently marked safe across all reports.",
+  "coverage_issues": [
+    "Report 1 (qwen) had a tool error (HTTP 400) when auditing .gitignore, preventing a complete verdict",
+    "Report 3 (openrouter) reviewed upstream source files (build.rs, Cargo.toml) which are outside the AUR packaging threat model",
+    "Report 3 (openrouter) skipped a binary file (aurelia-0.1.35.tgz) without explanation"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Tool errors (HTTP failures, parse errors) should not block a verdict when other security-relevant files are clearly safe - implement fallback logic or partial verdicts",
+    "Models should be explicitly instructed not to review upstream source files unless they are directly referenced by PKGBUILD functions or .install scripts",
+    "The audit tool should distinguish between maintainer files (PKGBUILD, .install, .SRCINFO) and upstream source files to avoid scope creep",
+    "Binary files should be handled consistently - either skip with clear rationale or flag for manual review"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 7312,
+    "completion_tokens": 1464,
+    "cost": 0.00421376
+  },
+  "audits_judged": [
+    "20260901-153050-qwen-qwen3-235b-a22b-2507.md",
+    "20260901-153110-deepseek-deepseek-v4-flash.md",
+    "20260826-034102-openrouter-free.md"
+  ]
+}

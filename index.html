@@ -1529,6 +1529,15 @@ function auditRow() {
     const kinds = {};
     for (const pkg of Object.values(DATA.packages || {})) {
         for (const a of pkg.audits || []) {
+            // A community submission names whichever model the contributor
+            // ran, and this diagram is about which models THIS pipeline
+            // gives a seat to. Counting one here counted it as advisory, so
+            // enough submissions naming the paid seat model would push that
+            // model out of the seat row -- the page's own picture of the
+            // deployment, rewritten from outside it. summary.by_model and
+            // summary.week.by_model already exclude submissions, in
+            // bench/generate-dashboard.py; `kinds` is the other half.
+            if (a.source === 'community') continue;
             const k = kinds[a.model] || (kinds[a.model] = {vote: 0, advisory: 0, reaudit: 0});
             k[a.advisory ? 'advisory' : a.reaudit ? 'reaudit' : 'vote']++;
         }
@@ -1804,6 +1813,31 @@ function squareNote(value, type, pkg) {
     return '';
 }
 
+// The hover on a community square: who sent it and how far in they are,
+// both escaped as attribute text because both came from a submission's
+// frontmatter.
+function communityTitle(by, ring) {
+    return 'community — submitted by ' + escapeAttr(by || 'unknown')
+        + ', ring ' + escapeAttr(ring || '?');
+}
+
+// The measurement line under a report: the model, the date, and whatever the
+// report actually MEASURED. A field the report does not carry is omitted, not
+// rendered as a zero. A community submission has no `cost` and no
+// `execution_time` -- bench/ingest-submission.py strips both, because a
+// submission spent none of this deployment's money -- and "$0.0000 · 0s"
+// would put a measurement where there was none, in the same shape as a real
+// audit that genuinely cost nothing. Absence is the honest reading, and this
+// is where it has to survive.
+function reportMeta(fm) {
+    const has = k => fm[k] !== undefined && fm[k] !== null && String(fm[k]).trim() !== '';
+    const parts = [shortModel(fm.model || 'unknown'), String(fm.date || '').split('T')[0]];
+    if (has('files_reviewed')) parts.push(fmtNum(fm.files_reviewed) + ' files');
+    if (has('cost')) parts.push('$' + (parseFloat(fm.cost) || 0).toFixed(4));
+    if (has('execution_time')) parts.push((parseFloat(fm.execution_time) || 0).toFixed(0) + 's');
+    return parts.join(' · ');
+}
+
 function renderSquares(items, type, pkg) {
     if (!items || items.length === 0) return '<span class="dim">—</span>';
     return '<span class="sqs">' + items.map(item => {
@@ -1811,8 +1845,14 @@ function renderSquares(items, type, pkg) {
         const model = shortModel(item.model || 'unknown');
         // An advisory report is information, not a vote: one muted style
         // whatever it said, so a free model's "unsafe" never reads as a flag.
+        // A community submission is advisory too, and gets the same glyph --
+        // but the hover attributes it, because who sent it is the whole of
+        // what it is worth. No new readout and no new count: a title on a
+        // square that was already there.
         if (item.advisory) {
-            return '<span class="sq sq-advisory" title="' + escapeAttr(model + ': ' + value + ' (advisory — informational only, not a vote)') + '"></span>';
+            return '<span class="sq sq-advisory" title="' + (item.source === 'community'
+                ? communityTitle(item.submitted_by, item.submitted_ring)
+                : escapeAttr(model + ': ' + value + ' (advisory — informational only, not a vote)')) + '"></span>';
         }
         const label = item.reaudit ? 'second audit' : type;
         const cls = squareClass(value, type, pkg) + (item.reaudit ? ' sq-reaudit' : '');
@@ -2009,10 +2049,17 @@ function renderDetail(name, data) {
         html += '<div class="detail-section">' + Array.from(findings.values()).map(f => {
             const v = f.v;
             const start = Number(v.evidence_line) || 0;
+            // A verdict with no file of its own did not come from a model
+            // reading one: it is aur-sleuth's own code, which is how an
+            // injection attempt is reported (it cannot be, since a model the
+            // text steered could not be relied on to report it). Crediting it
+            // to the audit model would name a model for a finding it never
+            // made, on a public page.
+            const fromCode = !v.file || v.file === '(package-level)';
             return '<div class="finding"><div class="head">'
-                + '<span class="file">' + escapeHtml(v.file || '') + '</span>'
-                + (start ? '<span class="where">line ' + start + '</span>' : '')
-                + '<span class="tag">flagged by ' + escapeHtml(joinNicely(f.models)) + (judgeSafe ? ', overturned by the judge' : '') + '</span>'
+                + (fromCode ? '' : '<span class="file">' + escapeHtml(v.file) + '</span>')
+                + (start && !fromCode ? '<span class="where">line ' + start + '</span>' : '')
+                + '<span class="tag">' + (fromCode ? 'found by aur-sleuth' : 'flagged by ' + escapeHtml(joinNicely(f.models))) + (judgeSafe ? ', overturned by the judge' : '') + '</span>'
                 + f.summaries.map(s => '<span class="summary">' + escapeHtml(s) + '</span>').join('')
                 + '</div>'
                 + (v.evidence ? renderEvidence(v, state) : '')
@@ -2051,12 +2098,16 @@ function renderDetail(name, data) {
                 const summary = (pkg.audits || []).length === audits.length ? pkg.audits[i] : null;
                 const reaudit = summary ? !!summary.reaudit : !!fm.triggered_by;
                 const advisory = fm.advisory === 'true' || !!(summary && summary.advisory);
+                // A community submission is advisory like any other, and it
+                // gets the same glyph: no new readout, no new count. What is
+                // added is who said it, because that is the whole of what a
+                // submission is worth -- the model name in it is the
+                // contributor's claim, not something the pipeline saw.
+                const community = fm.source === 'community' || !!(summary && summary.source === 'community');
                 const cls = advisory ? 'sq-advisory'
                     : squareClass(result, 'audit', pkg) + (reaudit ? ' sq-reaudit' : '');
                 const bodyId = 'report-' + name.replace(/[^a-zA-Z0-9-]/g, '_') + '-' + i;
-                const meta = [shortModel(fm.model || 'unknown'), String(fm.date || '').split('T')[0],
-                    fmtNum(fm.files_reviewed || 0) + ' files', '$' + (parseFloat(fm.cost) || 0).toFixed(4),
-                    (parseFloat(fm.execution_time) || 0).toFixed(0) + 's'].join(' · ');
+                const meta = reportMeta(fm);
                 let full = '';
                 if (fv.length) {
                     full += '<table class="verdicts"><thead><tr><th>File</th><th>Status</th><th>Summary</th></tr></thead><tbody>'
@@ -2067,10 +2118,15 @@ function renderDetail(name, data) {
                 }
                 full += '<pre class="report-body">' + escapeHtml(a.body || '') + '</pre>';
                 return '<div class="report"><div class="line">'
-                    + '<span class="sq ' + cls + '"></span>'
+                    + '<span class="sq ' + cls + '"'
+                    + (community ? ' title="' + communityTitle(fm.submitted_by, fm.submitted_ring) + '"' : '')
+                    + '></span>'
                     + (advisory
                         ? '<span class="verdict dim">' + escapeHtml(result) + '</span><span class="meta">advisory — informational only, not a vote</span>'
                         : '<span class="verdict result-' + escapeAttr(result) + confirmedCls + '">' + escapeHtml(result) + '</span>')
+                    + (community
+                        ? '<span class="meta">community' + (fm.submitted_by ? ', submitted by ' + escapeHtml(fm.submitted_by) : '') + '</span>'
+                        : '')
                     + (reaudit ? '<span class="meta">second audit</span>' : '')
                     + '<span class="meta">' + escapeHtml(meta) + '</span>'
                     + '<button type="button" class="link-btn" data-toggle="' + escapeAttr(bodyId) + '">Full report</button>'

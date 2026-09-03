@@ -1,0 +1,34 @@
+{
+  "package": "ttf-material-symbols-variable-git",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The only substantive audit (qwen3-235b) correctly identified the package as safe after self-correcting an initial false positive. The _update_version function's curl calls to api.github.com for the declared upstream repository (google/material-design-icons) are a normal AUR maintainer pattern for auto-updating pkgver, not malicious injection. The 11 unpinned sources (sha256sums=SKIP) fetch font files from the declared upstream, which is a packaging hygiene issue but not a supply-chain attack per the threat model. No .install hooks or other executable scripts exist in the repository.",
+  "disagreement_analysis": "The 'disagreement' was caused by tool failures, not substantive analysis. deepseek-v4-flash crashed with an LLM response error, and openrouter/free incorrectly classified PKGBUILD as a binary file. Only qwen3-235b provided a real verdict, and it correctly concluded SAFE after recognizing that GitHub API calls for version checking are standard AUR practice.",
+  "coverage_issues": [
+    "deepseek-v4-flash: LLM response error - no verdict produced",
+    "openrouter/free: Incorrectly skipped PKGBUILD as 'binary file' - tool bug"
+  ],
+  "false_positives": [
+    "qwen3-235b initial assessment flagged _update_version curl calls as unsafe, but correctly self-corrected on second look recognizing this as normal AUR auto-update pattern"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models should recognize curl/wget calls to api.github.com or similar version-checking endpoints during PKGBUILD sourcing as normal AUR maintainer automation, not malicious injection",
+    "Tool errors (LLM response failures, binary file misclassification) should be flagged as coverage_issues rather than contributing to verdict disagreement",
+    "The audit tool should validate file type detection - PKGBUILD is always a text file, never binary",
+    "When only one model provides a substantive verdict and others fail with tool errors, the working model's verdict should stand if its reasoning is sound"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5457,
+    "completion_tokens": 1430,
+    "cost": 0.00357664
+  },
+  "audits_judged": [
+    "20260830-191941-qwen-qwen3-235b-a22b-2507.md",
+    "20260830-192234-deepseek-deepseek-v4-flash.md",
+    "20260824-150657-openrouter-free.md"
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "package": "ttf-material-icons-git",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD uses standard AUR patterns for -git packages: network calls to GitHub API for version detection and direct downloads from the official upstream repository. The curl output is parsed with grep/sed/sort (no eval or execution of fetched content). The undefined $commit_history variable is a bug but not a security risk. SKIP checksums are normal for VCS sources. No malicious code injection, no data exfiltration, no unexpected network destinations.",
+  "disagreement_analysis": "Qwen initially flagged the PKGBUILD as UNSAFE due to network calls during sourcing and potential command injection from API response parsing, but corrected itself on second look to SAFE, recognizing these as normal AUR patterns. The final file verdict was SAFE. The overall INCONCLUSIVE result was only due to an API error when reviewing .SRCINFO, which is metadata-only and doesn't affect security. Deepseek correctly assessed SAFE from the start.",
+  "coverage_issues": [
+    "Qwen had an API error (HTTP 400) when reviewing .SRCINFO, but this is metadata-only and doesn't impact security assessment"
+  ],
+  "false_positives": [
+    "Qwen's initial UNSAFE verdict for PKGBUILD: overreacted to network calls during sourcing and text parsing of API response. These are standard AUR patterns for -git packages with no code execution from fetched content."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models may initially flag network calls during PKGBUILD sourcing as unsafe, even when they're standard AUR patterns for version detection in -git packages. Training/prompts should clarify that fetching metadata (not executing it) from declared upstream domains is acceptable.",
+    "API errors for non-executable files like .SRCINFO should not block a verdict when the PKGBUILD itself is safe. The tool should allow partial verdicts or retry logic.",
+    "The distinction between 'parsing fetched data with text tools' vs 'executing fetched content' needs emphasis in audit prompts to reduce false positives."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 6971,
+    "completion_tokens": 1287,
+    "cost": 0.00387808
+  },
+  "audits_judged": [
+    "20260901-231325-qwen-qwen3-235b-a22b-2507.md",
+    "20260901-231408-deepseek-deepseek-v4-flash.md"
+  ]
+}

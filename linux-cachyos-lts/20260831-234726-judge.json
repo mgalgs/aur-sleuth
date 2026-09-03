@@ -1,0 +1,29 @@
+{
+  "package": "linux-cachyos-lts",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The only valid verdict comes from deepseek-v4-flash, which correctly identified the package as safe. The PKGBUILD follows standard AUR kernel packaging practices: sources are from the project's own upstream (CachyOS GitHub) and official vendors (NVIDIA), GPG signature verification is configured via validpgpkeys, and the eval loop for multi-package functions is a standard AUR pattern. The qwen report is inconclusive solely due to API errors (HTTP 400), carrying no verdict signal. The openrouter/free report is advisory and does not count as a vote. No malicious code execution, data exfiltration, or unauthorized network access was found in the maintainer files.",
+  "disagreement_analysis": "The apparent disagreement (inconclusive vs safe) is not a substantive disagreement on the merits. The qwen model's inconclusive result is entirely due to tool failure (HTTP 400 API errors for all file reviews), not due to finding any security issues. The deepseek model successfully reviewed all files and found no issues. The openrouter/free report is advisory and does not count toward the vote.",
+  "coverage_issues": [
+    "qwen/qwen3-235b-a22b-2507 failed with HTTP 400 BadRequestError for all three file reviews (.SRCINFO, PKGBUILD, config), providing no verdict signal"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "The qwen model experienced HTTP 400 errors during the file-by-file review phase despite succeeding in the initial PKGBUILD audit. The audit tool should implement retry logic or fallback mechanisms for API failures to avoid inconclusive results due to transient errors.",
+    "When a model fails with API errors, the tool should clearly distinguish between 'inconclusive due to analysis uncertainty' and 'inconclusive due to tool failure' in the final verdict, so adjudicators can quickly identify coverage gaps."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 6874,
+    "completion_tokens": 2296,
+    "cost": 0.00513856
+  },
+  "audits_judged": [
+    "20260831-231236-qwen-qwen3-235b-a22b-2507.md",
+    "20260831-231351-deepseek-deepseek-v4-flash.md",
+    "20260831-195739-openrouter-free.md"
+  ]
+}
