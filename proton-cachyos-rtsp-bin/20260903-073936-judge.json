@@ -1,0 +1,27 @@
+{
+  "package": "proton-cachyos-rtsp-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard AUR binary package that downloads a prebuilt tarball from the official GitHub releases with a pinned SHA512 checksum. The PKGBUILD contains no executable code in the global scope, and the package() function only performs standard file extraction and installation. There are no .install hooks, patches, or build scripts. The 'inconclusive' result from one model was solely due to a transient API error when parsing the .SRCINFO metadata file, not a security concern.",
+  "disagreement_analysis": "The disagreement was caused by a transient HTTP 400 API error in the qwen3 model when attempting to audit the .SRCINFO file, resulting in an 'inconclusive' verdict for that file and the overall package. The deepseek model successfully audited all files and correctly identified the package as safe.",
+  "coverage_issues": [],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Transient API errors on non-executable metadata files (like .SRCINFO) should not override a 'safe' verdict on the actual executable packaging scripts (PKGBUILD). The tool should gracefully degrade or ignore .SRCINFO audit failures if the PKGBUILD is already verified safe.",
+    "Since .SRCINFO is auto-generated from PKGBUILD, auditing it for security is largely redundant if the PKGBUILD has already been thoroughly audited and deemed safe. The tool could skip .SRCINFO audits to save tokens and avoid unnecessary API failures."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5907,
+    "completion_tokens": 1590,
+    "cost": 0.0039254400000000005
+  },
+  "audits_judged": [
+    "20260903-071211-qwen-qwen3-235b-a22b-2507.md",
+    "20260903-071226-deepseek-deepseek-v4-flash.md",
+    "20260903-013102-openrouter-free.md"
+  ]
+}

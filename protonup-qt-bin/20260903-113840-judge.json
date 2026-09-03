@@ -1,0 +1,26 @@
+{
+  "package": "protonup-qt-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Both models reviewed the PKGBUILD, wrapper script, and desktop file, finding them to be standard and safe. The only disagreement was caused by a transient API error (HTTP 400) in the qwen model when evaluating the .SRCINFO metadata file. The package is a standard -bin package downloading a verified AppImage from GitHub.",
+  "disagreement_analysis": "The qwen model encountered an HTTP 400 API error when auditing .SRCINFO, resulting in an inconclusive package verdict. The deepseek model successfully audited all files and returned safe.",
+  "coverage_issues": [],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Transient API errors on non-executable metadata files like .SRCINFO should not force an overall inconclusive verdict if the core executable files (PKGBUILD, install scripts) are safely audited. The tool should handle such errors gracefully.",
+    "HTML entity encoding artifacts (e.g., &quot;, &amp;gt;) in file contents can confuse models. The audit tool should decode HTML entities before passing file contents to the LLM to prevent misinterpretation."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5139,
+    "completion_tokens": 1705,
+    "cost": 0.0038268800000000004
+  },
+  "audits_judged": [
+    "20260903-110235-qwen-qwen3-235b-a22b-2507.md",
+    "20260903-110258-deepseek-deepseek-v4-flash.md"
+  ]
+}
