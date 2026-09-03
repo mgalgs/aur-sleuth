@@ -1,0 +1,28 @@
+{
+  "package": "woff2-material-symbols-variable-git",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD fetches version and commit metadata from the package's declared upstream repository (google/material-design-icons) using curl and git ls-remote, and parses it with grep/sed without executing it. This is a standard AUR pattern for -git packages to dynamically resolve sources or versions, and does not constitute a malicious injection. The network calls are to the expected upstream host.",
+  "disagreement_analysis": "Qwen flagged the top-level network calls to the GitHub API as a supply-chain risk because they execute during PKGBUILD sourcing. Deepseek correctly identified this as a normal VCS package pattern that fetches metadata from the declared upstream without executing it. Per the threat model, fetching and parsing metadata from the stated upstream is a normal AUR pattern and not grounds for an unsafe verdict.",
+  "coverage_issues": [],
+  "false_positives": [
+    "Qwen flagged top-level network calls to the upstream GitHub API as unsafe. Fetching metadata from the declared upstream and parsing it without execution is a standard AUR pattern for -git packages, not a malicious injection."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models should be trained to recognize that fetching metadata (e.g., commit hashes, version tags) from a package's declared upstream repository via API or git commands, and parsing it with standard text tools (grep/sed) without executing it, is a safe and common AUR pattern for -git packages.",
+    "Network calls during PKGBUILD sourcing should only be flagged if they target unrelated/malicious hosts or if the fetched content is executed (e.g., via eval or piped to bash). Fetching from the stated upstream for version resolution is not an injection."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5638,
+    "completion_tokens": 1914,
+    "cost": 0.00425408
+  },
+  "audits_judged": [
+    "20260903-004417-qwen-qwen3-235b-a22b-2507.md",
+    "20260903-004451-deepseek-deepseek-v4-flash.md"
+  ]
+}
