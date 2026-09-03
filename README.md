@@ -211,10 +211,10 @@ options:
 ```
 
 What gets read: every file in the package's AUR repository -- the `PKGBUILD`, any
-`.install` hook, patches, local sources, and anything else the maintainer committed. The
-sources makepkg downloads are upstream's and are not downloaded by this tool; the
-`PKGBUILD` review records which sources the build functions invoke without reading them.
-See `CLAUDE.md` for the threat model behind that line.
+`.install` hook, patches, local sources, and anything else the maintainer committed.
+Upstream sources are never downloaded: they are outside the threat model, and what the
+build functions do with them is the `PKGBUILD` review's to describe. See `CLAUDE.md`
+for the threat model behind that line.
 
 Model references may use aliases from `AUR_SLEUTH_MODEL_ALIASES`, whose format is
 `name=model;name=model`. For example, set `final=openai/gpt-5.4` and pass

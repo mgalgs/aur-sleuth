@@ -31,13 +31,17 @@ extension — an attacker chooses both:
   maintainer's code. `bench/synthetics/malicious-deep-payload` is the regression test —
   a clean PKGBUILD whose `prepare()` runs `tools/gen-config.py`, and the payload is in
   the generator.
-- **Everything makepkg downloads is upstream's, and it is never read.** If upstream is
-  malicious, that is not an AUR supply-chain attack, and an AUR maintainer cannot inject
-  into upstream's tree. So the downloaded sources are out of scope by decision: not their
-  functionality, not their vulnerabilities, not their privacy practices, and not a script
-  in them that `prepare()` runs by path. That last case is *recorded* — the PKGBUILD
-  review notes which upstream files the build functions invoke, in code
-  (`find_upstream_invocations()`), as a fact for the reader — and read no further.
+- **Everything `source=` fetches is upstream's, and it is neither downloaded nor read.**
+  If upstream is malicious, that is not an AUR supply-chain attack, and an AUR
+  maintainer cannot inject into upstream's tree. So the upstream sources are out of
+  scope by decision: not their functionality, not their vulnerabilities, not their
+  privacy practices, and not a script in them that `prepare()` runs by path. The audit
+  does not even fetch them — checksum verification at audit time duplicated what the
+  installing user's own makepkg does, against a pin read from the same PKGBUILD under
+  audit, so it authenticated nothing. A build-function invocation of an upstream file
+  is the PKGBUILD review's to describe from the PKGBUILD text; the coded fact that once
+  resolved those paths against an extracted tree (`find_upstream_invocations()`) no
+  longer runs during audits, and the report's `upstream` counts are always zero.
 - **What is left of the upstream concern lives in the `PKGBUILD`, which is read:** is
   the artifact pinned (`find_unpinned_remote_sources()`), where does `source=` fetch
   from, and what do the build functions do with it.
