@@ -1,0 +1,31 @@
+{
+  "package": "linuxqq-appimage",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package follows a standard AppImage packaging pattern where the final binary is pinned via SHA-256 checksums in the PKGBUILD, closing any swap risk. The dynamic URL fetching in download.sh contacts the official upstream vendor (Tencent) and is a normal AUR pattern for vendors without stable URLs. The disagreement stems from Qwen flagging get_latest.bak, which is a maintainer backup script not executed during makepkg and thus entirely out of scope for the end-user build threat model.",
+  "disagreement_analysis": "Qwen flagged get_latest.bak as unsafe due to dynamic JavaScript execution. However, this is a .bak file used for maintainer automation, not referenced or executed by the PKGBUILD during makepkg. Deepseek correctly recognized it as out-of-scope maintainer tooling and marked the package safe.",
+  "coverage_issues": [
+    "Qwen failed to audit get_latest due to an API error, though it is a maintainer script and out of scope for the build process anyway."
+  ],
+  "false_positives": [
+    "get_latest.bak: Flagged by Qwen for executing remote JS, but it is a backup maintainer script not executed during makepkg.",
+    "download.sh: Initially flagged by Qwen for dynamic URL fetching, but it fetches from the official vendor domain and the final artifact is checksummed by makepkg."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models must filter out maintainer tooling, CI scripts, node manifests, and backup files (e.g., .bak, package.json) unless they are explicitly sourced or executed by PKGBUILD functions.",
+    "Dynamic URL fetching in source scripts should not be flagged as a supply-chain risk if the final downloaded artifact is pinned by a checksum in the PKGBUILD, as this closes the swap risk."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 12628,
+    "completion_tokens": 2739,
+    "cost": 0.00754688
+  },
+  "audits_judged": [
+    "20260903-005830-qwen-qwen3-235b-a22b-2507.md",
+    "20260903-010409-deepseek-deepseek-v4-flash.md"
+  ]
+}
