@@ -176,11 +176,12 @@ the trust rule is the whole reason it is safe to have:
   choose the SHA. `bench/test-aur-mirror.sh` pins this against a synthetic mirror whose
   branch is deliberately made to disagree with its canonical counterpart.
 - **Off by default, and every failure degrades to off, never to a hard failure.**
-  `AUR_SLEUTH_MIRROR_DIR` (the pipeline sets it; a bare `git clone --mirror` of
-  `AUR_SLEUTH_MIRROR_URL`, default `https://github.com/archlinux/aur.git`) unset, empty,
-  or naming a path that is not a directory all mean the feature is off --
-  `aur_mirror_dir()` in `aur-sleuth` is where that is decided, in code. A mirror clone
-  that failed, was killed mid-write, or was never run all land in that same "not a
+  `AUR_SLEUTH_MIRROR_DIR` is an operator-set path to a bare `git clone --mirror` of
+  `AUR_SLEUTH_MIRROR_URL` (default `https://github.com/archlinux/aur.git`); nothing in
+  this repository sets it, so a deployment gets the mirror only by setting the variable
+  itself. Unset, empty, or naming a path that is not a directory all mean the feature is
+  off -- `aur_mirror_dir()` in `aur-sleuth` is where that is decided, in code. A mirror
+  clone that failed, was killed mid-write, or was never run all land in that same "not a
   directory" state, so the audit path never has to know which.
 - **`--clone-url` skips it entirely.** That flag names a URL the caller chose on
   purpose; the mirror is keyed by `pkgbase`, which stays unresolved (`None`) whenever an

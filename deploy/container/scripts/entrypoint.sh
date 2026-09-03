@@ -170,10 +170,21 @@ EOF
 # repository on the same persistent volume, and the audit stage that runs
 # arbitrary PKGBUILD build functions can write into it exactly as it could
 # write into $GIT_STORE. Reset it to known-good before any git command runs
-# in it here, in particular before the `fetch` below, which follows whatever
-# remote.origin.url and hooks/ this file holds.
+# in it here, in particular before the usability check and the `fetch` in
+# refresh_aur_mirror(), which follow whatever remote.origin.url and hooks/
+# this file holds.
+#
+# rm -rf, not rm -f, on config: a PKGBUILD run by the audit stage can turn
+# config into something other than a plain file (a directory, in the case
+# this was written for) before this ever runs. `cat >` cannot truncate a
+# directory -- it fails with EISDIR -- and under this script's `set -e` an
+# unguarded failure here would kill the whole prepare stage, which the
+# header above (refresh_aur_mirror) promises never happens on this stage's
+# account. rm -rf removes whatever is there, file or directory, so the
+# `cat >` that follows always lands on a clean slate.
 sanitize_mirror() {
-    rm -rf "$AUR_MIRROR_DIR/hooks" "$AUR_MIRROR_DIR/objects/info/alternates"
+    rm -rf "$AUR_MIRROR_DIR/hooks" "$AUR_MIRROR_DIR/objects/info/alternates" \
+        "$AUR_MIRROR_DIR/config"
     cat > "$AUR_MIRROR_DIR/config" <<EOF
 [core]
 	repositoryformatversion = 0
@@ -246,12 +257,25 @@ internal_string_working_files() {
 refresh_aur_mirror() {
     [[ -n "$AUR_MIRROR_DIR" ]] || return 0
 
+    # Sanitize before anything else touches the directory, including the
+    # usability check right below. A hostile PKGBUILD from a prior audit
+    # stage can write a config this repository will never accept (an
+    # unknown extensions.* key, a bumped repositoryformatversion) as easily
+    # as it can write a hostile remote.origin.url; checking usability first
+    # would read that as "not a usable git repository" and re-clone the
+    # whole multi-GiB mirror every single run, forever, since the same
+    # PKGBUILD runs again before the next prepare. Sanitizing first means
+    # the check below always runs against known-good config.
+    [[ -d "$AUR_MIRROR_DIR" ]] && sanitize_mirror
+
     # A directory that exists but is not a usable git repository -- a clone
     # that was `timeout`-killed or evicted mid-write, before it ever reached a
     # non-zero exit that would have triggered the `rm -rf` below -- must not
     # be mistaken for a mirror to fetch into. Without this check that state is
     # permanent: the existence test below would keep taking the fetch branch
-    # against a repository that can never succeed.
+    # against a repository that can never succeed. sanitize_mirror above only
+    # rewrites config and cannot repair a tree missing objects or refs, so
+    # this check still runs after it.
     if [[ -d "$AUR_MIRROR_DIR" ]] && ! git --git-dir="$AUR_MIRROR_DIR" rev-parse --git-dir &>/dev/null; then
         log "WARNING: $AUR_MIRROR_DIR exists but is not a usable git repository; re-cloning"
         rm -rf "$AUR_MIRROR_DIR"
@@ -268,8 +292,6 @@ refresh_aur_mirror() {
         return 0
     fi
 
-    sanitize_mirror
-
     log "Fetching $AUR_MIRROR_URL into $AUR_MIRROR_DIR"
     if ! timeout "$AUR_MIRROR_TIMEOUT" git --git-dir="$AUR_MIRROR_DIR" fetch --quiet --prune origin; then
         log "WARNING: aur-mirror fetch failed; audits will fall back to a direct clone" \
@@ -280,8 +302,6 @@ refresh_aur_mirror() {
 do_prepare() {
     mkdir -p "$DATA_DIR/pipeline" "$DATA_DIR/bulk-reports" \
              "$DATA_DIR/judge" "$DATA_DIR/bulk-audit"
-
-    refresh_aur_mirror
 
     if [[ ! -d "$GIT_STORE" ]]; then
         log "No object store at $GIT_STORE; cloning $FETCH_URL"
@@ -374,6 +394,19 @@ do_prepare() {
     # race the stages that run next.
     git -c gc.autoDetach=false gc --auto --quiet \
         || log "WARNING: git gc failed; the store keeps accumulating loose objects"
+
+    # Last: it is a bandwidth optimization for the audit stage's clones, not
+    # something anything above depends on, so it must not delay the object
+    # store this stage exists to refresh. `|| log` -- not a bare call -- is
+    # the actual guarantee behind "must never fail on this stage's account"
+    # above: it keeps this script's `set -e` from turning any failure inside
+    # refresh_aur_mirror (a corrupt config, a full disk, anything the
+    # function's own handling did not anticipate) into a killed prepare
+    # stage, which would otherwise take the object store refresh above down
+    # with it.
+    refresh_aur_mirror \
+        || log "WARNING: aur-mirror refresh failed unexpectedly; continuing without it" \
+            "(audits will clone aur.archlinux.org directly)"
 
     log "Ready. Today's spend so far: \$$(spent_today)"
 }

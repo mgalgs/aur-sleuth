@@ -28,7 +28,7 @@ The pipeline runs untrusted code by design. `makepkg --nobuild` sources arbitrar
 | `benchmark` | LLM API key | read-write | **yes** | on demand |
 | `screen` | LLM API key | read-write | **yes** | on demand |
 
-`prepare` creates or refreshes the git object store on the volume and prunes old state. `audit` runs the whole pipeline with `--no-push`, so every commit stays local.
+`prepare` creates or refreshes the git object store on the volume, optionally refreshes a local bare mirror of `archlinux/aur` that lets an audit's clone come from disk instead of the network (`AUR_SLEUTH_MIRROR_DIR` below; unset by default, so off unless you opt in), and prunes old state. `audit` runs the whole pipeline with `--no-push`, so every commit stays local.
 
 `review` answers "is this branch publishable, and what is in it?" without publishing: the path gate and the internal-string check (`AUR_SLEUTH_INTERNAL_STRINGS`) decide its exit status, `bench/review-pending.py` summarises the pending sweep, and a model (`AUR_SLEUTH_REVIEW_MODEL`) reads every generated text for one thing only, a leak of the operator's own details, never an email address on its own. That read is advice for a person, never a gate. `quarantine` is the remedy review names: it rewrites the unpushed commits without the leaky reports, and keeps the old head under `refs/backup/`.
 
@@ -127,7 +127,7 @@ Whatever runs it must provide:
 - **Writers never overlap.** `prepare`, `audit`, `quarantine`, `ingest`, `benchmark` and `screen` write the store, so only one of them runs at a time. `review`, `publish` and `bundle` read a snapshot and may run beside a writer.
 - **Secrets only where needed.** Only `audit`, `benchmark` and `screen` get the LLM key; only `publish` gets the git key; `review` gets the LLM route for its advisory read and nothing else; `prepare`, `quarantine`, `ingest` and `bundle` get none. Create the git key as a deploy key with write access scoped to the one repository that holds the `audit-reports` branch, rather than a broad personal access token.
 - **Restricted egress for the audit stage.** Legitimate AUR sources use http, https and the git protocol, so allow DNS plus outbound TCP on 80, 443 and 9418 to the internet and deny every private range, including link-local. A hostile `PKGBUILD` should reach nothing on your network. If the audit stage talks to a self-hosted model on a private address, add one narrow rule for that host and port rather than widening the exclusions.
-- **Enough disk.** `aur-sleuth` extracts each package's sources under `$DATA_DIR/bulk-reports/`, so a run with `--jobs 4` and two models can hold eight package trees at once. `prepare` removes any tree left behind by a run that died.
+- **Enough disk.** `aur-sleuth` extracts each package's sources under `$DATA_DIR/bulk-reports/`, so a run with `--jobs 4` and two models can hold eight package trees at once. `prepare` removes any tree left behind by a run that died. If you set `AUR_SLEUTH_MIRROR_DIR`, `prepare` also keeps a bare mirror of `archlinux/aur` there -- multiple GiB, on the same volume.
 
 Pass extra pipeline flags as arguments after the verb, for example `audit --daily-budget 1.00 --jobs 4`. Set `GIT_AUTHOR_NAME` and `GIT_AUTHOR_EMAIL` to match the identity already on the `audit-reports` commits, or the archive history gains a second author.
 
@@ -166,6 +166,9 @@ Set as environment variables on the container.
 | `AUR_SLEUTH_SCREEN_SINCE_DAYS` / `_MAX_PRICE` / `_LIMIT` / `_SEATS` | screen | `45` / `2.00` / no limit / from `scout.json` | The window, the price ceiling, a cap on how many models to try, and what counts as a seat to undercut |
 | `AUR_SLEUTH_BUNDLE_PATH` | bundle | `/out/audit-reports.bundle` | Where the bundle is written; its directory must be writable |
 | `AUR_SLEUTH_SPEND_LOG_RETENTION_DAYS` | prepare | `30` | Nothing else prunes the ledger |
+| `AUR_SLEUTH_MIRROR_DIR` | prepare | — | Unset by default, meaning the mirror is off everywhere; `aur-sleuth` reads the same variable and falls back to cloning `aur.archlinux.org` directly whenever it is unset, empty, or not a directory. Set it to a path on the persistent volume to keep a local bare mirror of `archlinux/aur` there, so an audit's clone can come from disk instead of the network. Nothing here decides what gets audited -- see CLAUDE.md's "AUR mirror" section |
+| `AUR_SLEUTH_MIRROR_URL` | prepare | `https://github.com/archlinux/aur.git` | Where the mirror is cloned and fetched from |
+| `AUR_SLEUTH_MIRROR_TIMEOUT` | prepare | `1800` | Seconds the mirror clone or fetch may take before `prepare` gives up on it and falls back to a direct clone per audit |
 | `AUR_SLEUTH_MAKEPKG_TIMEOUT` | audit | `600` | Seconds for one `makepkg` invocation; its download agents have no timeout of their own |
 | `AUR_SLEUTH_LLM_TIMEOUT` | audit | `180` | Seconds for one LLM request |
 | `AUR_SLEUTH_LLM_RETRIES` | audit | `2` | Retries per LLM request |
