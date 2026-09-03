@@ -1,0 +1,30 @@
+{
+  "package": "tunarr-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The disagreement was caused by a tool error in one report (qwen3-235b failed to audit tunarr.conf.d due to an HTTP 400 API error), not by substantive security concerns. The other report (deepseek-v4-flash) successfully reviewed all 8 files including tunarr.conf.d and found them safe. The package is a standard binary AUR package: PKGBUILD downloads a versioned tarball from official GitHub releases with pinned SHA-256 checksums, .install script only performs version checking, and all systemd/sysusers/tmpfiles/conf.d files are standard configuration. No malicious injection patterns detected.",
+  "disagreement_analysis": "The inconclusive verdict from qwen3-235b was due to an LLM API failure (HTTP 400 BadRequestError) when reviewing tunarr.conf.d, not a security finding. deepseek-v4-flash successfully reviewed the same file and found it to be a benign configuration file. This is a coverage gap, not a substantive disagreement.",
+  "coverage_issues": [
+    "qwen3-235b failed to review tunarr.conf.d due to API error (HTTP 400)"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Distinguish between 'inconclusive due to tool error' and 'inconclusive due to ambiguous code' - API failures should trigger retries or fallback, not package-level inconclusive verdicts",
+    "When a simple config file fails audit due to transient API error, the tool should recognize this and either retry or weight other successful audits of the same file more heavily",
+    "Add retry logic for transient API failures (HTTP 400/500) before marking files as inconclusive"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 10565,
+    "completion_tokens": 1212,
+    "cost": 0.0049321600000000005
+  },
+  "audits_judged": [
+    "20260903-111154-qwen-qwen3-235b-a22b-2507.md",
+    "20260903-111427-deepseek-deepseek-v4-flash.md",
+    "20260903-041749-openrouter-free.md"
+  ]
+}
