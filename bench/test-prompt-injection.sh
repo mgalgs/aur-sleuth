@@ -77,7 +77,6 @@ class TUI:
 pkg = (synthetics / "malicious-prompt-injection").resolve()
 sleuth.check_pkgbuild = lambda *_a, **_k: sleuth.AuditResult(
     pkg / "PKGBUILD", pkg, sleuth.SafeStatus.SAFE, "gate says safe")
-sleuth.download_sources = lambda *_a, **_k: False
 sleuth.find_unpinned_remote_sources = lambda *_a: []
 sleuth.audit_files = lambda _tui, _r, _n, _p, files, _d, _c, stage: [
     sleuth.AuditResult(pkg / f, pkg, sleuth.SafeStatus.SAFE, "looks fine")
