@@ -106,6 +106,17 @@ REVIEW_JSON_IN="${AUR_SLEUTH_REVIEW_JSON:-}"
 # place to plant a bomb for whoever parses it next.
 AUR_METADATA_URL="https://aur.archlinux.org/packages-meta-v1.json.gz"
 
+# A local bare mirror of archlinux/aur, refreshed here so an audit's clone can
+# come from disk instead of the network. Empty (the default) means the
+# feature is off everywhere: aur-sleuth itself reads the same variable and
+# falls straight back to cloning aur.archlinux.org directly if it is unset,
+# missing, or stale, so a broken mirror degrades this stage to a no-op rather
+# than failing the run. See CLAUDE.md's AUR mirror section for why the
+# mirror is never trusted with anything but bytes: aur.archlinux.org alone
+# says which commit is genuine.
+AUR_MIRROR_DIR="${AUR_SLEUTH_MIRROR_DIR:-}"
+AUR_MIRROR_URL="${AUR_SLEUTH_MIRROR_URL:-https://github.com/archlinux/aur.git}"
+
 log() { echo "[$(date -u '+%H:%M:%S')] [$MODE] $*"; }
 # The message is kept as well as printed. A stage log is this deployment's;
 # DIE_REASON is what a stage can hand to somebody outside it -- today, the
@@ -202,9 +213,39 @@ internal_string_working_files() {
 
 # --- prepare ------------------------------------------------------------------
 
+# Create or refresh the bare aur-mirror clone this stage keeps on the volume,
+# a bandwidth optimization only: aur-sleuth verifies every mirror-sourced
+# checkout against a SHA it asks aur.archlinux.org for directly, so nothing
+# here ever decides what gets audited. Every failure is a warning -- a
+# network hiccup, a corrupt store, a first run before there is space for one
+# -- because the audit path already has a direct-clone fallback and must
+# never fail on this stage's account.
+refresh_aur_mirror() {
+    [[ -n "$AUR_MIRROR_DIR" ]] || return 0
+
+    if [[ ! -d "$AUR_MIRROR_DIR" ]]; then
+        log "No aur-mirror at $AUR_MIRROR_DIR; cloning $AUR_MIRROR_URL"
+        if git clone --quiet --mirror "$AUR_MIRROR_URL" "$AUR_MIRROR_DIR"; then
+            log "Cloned $(du -sh "$AUR_MIRROR_DIR" 2>/dev/null | cut -f1) into $AUR_MIRROR_DIR"
+        else
+            log "WARNING: aur-mirror clone failed; audits will clone aur.archlinux.org directly"
+            rm -rf "$AUR_MIRROR_DIR"
+        fi
+        return 0
+    fi
+
+    log "Fetching $AUR_MIRROR_URL into $AUR_MIRROR_DIR"
+    if ! git --git-dir="$AUR_MIRROR_DIR" fetch --quiet --prune; then
+        log "WARNING: aur-mirror fetch failed; audits will fall back to a direct clone" \
+            "on whatever branches are stale"
+    fi
+}
+
 do_prepare() {
     mkdir -p "$DATA_DIR/pipeline" "$DATA_DIR/bulk-reports" \
              "$DATA_DIR/judge" "$DATA_DIR/bulk-audit"
+
+    refresh_aur_mirror
 
     if [[ ! -d "$GIT_STORE" ]]; then
         log "No object store at $GIT_STORE; cloning $FETCH_URL"

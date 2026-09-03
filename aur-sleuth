@@ -3421,6 +3421,79 @@ class PackageNotFound(Exception):
         self.clone_url = clone_url
 
 
+def aur_mirror_dir() -> Optional[str]:
+    """Where to find a local bare mirror of archlinux/aur, or None if the
+    feature is off. Unset or empty means off: the default, and the only mode
+    that has ever run in production."""
+    mirror_dir = os.environ.get("AUR_SLEUTH_MIRROR_DIR", "").strip()
+    return mirror_dir or None
+
+
+def git_ls_remote_head(url: str, timeout: int = 15) -> Optional[str]:
+    """Ask a remote what its HEAD commit is, without cloning anything. This is
+    the only question the canonical host (aur.archlinux.org) is ever asked in
+    the mirror path -- the answer is the one fact a local mirror is never
+    trusted to supply on its own. Returns None on any failure (timeout,
+    unreachable host, a repository with no commits) so callers fall back
+    rather than raise."""
+    try:
+        result = subprocess.run(
+            ["git", "ls-remote", url, "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError):
+        return None
+    line = result.stdout.strip().splitlines()[0] if result.stdout.strip() else ""
+    sha = line.split("\t", 1)[0].strip() if line else ""
+    return sha or None
+
+
+def git_head_sha(repo_dir: str) -> Optional[str]:
+    try:
+        result = subprocess.run(
+            ["git", "-C", repo_dir, "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError):
+        return None
+    return result.stdout.strip() or None
+
+
+def materialize_from_mirror(
+    mirror_dir: str, pkgbase: str, canonical_sha: str, dest: str
+) -> bool:
+    """Try to populate dest from the local aur mirror's <pkgbase> branch --
+    in archlinux/aur's layout, each package is a branch of its own in one
+    large repository. Returns True only if the result's HEAD is exactly
+    canonical_sha: not a prefix match, full equality. Every other outcome (no
+    such branch, a clone that fails, a SHA that does not match -- mirror lag
+    or tampering, indistinguishable and both handled the same way) is False,
+    never raised. The caller falls back to a direct clone on False, so a
+    mirror that disagrees with the canonical host can never change what gets
+    audited; it can only cost the bandwidth of a wasted local clone."""
+    try:
+        subprocess.run(
+            [
+                "git", "clone", "--quiet", "--shared",
+                "--single-branch", "--branch", pkgbase,
+                mirror_dir, dest,
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError):
+        return False
+    return git_head_sha(dest) == canonical_sha
+
+
 def download_package_to_tmpdir(
     tui: ConsoleUI,
     tmpdir_parent: Path,
@@ -3436,23 +3509,49 @@ def download_package_to_tmpdir(
     # the AUR does not list, a clone that failed) would leak it into the
     # report directory forever.
     try:
+        pkgbase = None
         if not clone_url:
             pkgbase = resolve_pkgbase(package_name)
             if pkgbase != package_name:
                 tui.finalize_step(f"{package_name} is built from {pkgbase}")
             clone_url = f"https://aur.archlinux.org/{pkgbase}.git"
 
-        # The destination is a temporary path on the machine running the audit, and
-        # this line ends up in the published report. Keep it out of there.
-        logger.info("Cloning %s into %s", package_name, tmpdir)
-        tui.update_status(f"Cloning {clone_url}...")
-        subprocess.run(
-            ["git", "clone", clone_url, tmpdir],
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
+        # The mirror only ever answers "where are the bytes for a SHA the
+        # canonical host already named" -- never "what SHA should be
+        # audited". An explicit --clone-url override skips it entirely: that
+        # flag names a URL the caller chose on purpose, and the mirror has no
+        # branch for it anyway.
+        mirrored = False
+        mirror_dir = aur_mirror_dir() if pkgbase else None
+        if mirror_dir:
+            canonical_sha = git_ls_remote_head(clone_url)
+            if canonical_sha:
+                mirrored = materialize_from_mirror(mirror_dir, pkgbase, canonical_sha, tmpdir)
+            if mirrored:
+                logger.info(
+                    "Materialized %s from mirror %s at %s", package_name, mirror_dir, canonical_sha
+                )
+                tui.update_status(f"Materializing {package_name} from local mirror...")
+            else:
+                # Mirror miss (disabled ls-remote, no such branch, a clone
+                # that failed, or a SHA mismatch): discard whatever the
+                # attempt left, in a fresh directory so no mirror bytes can
+                # survive into the direct clone below.
+                shutil.rmtree(tmpdir, ignore_errors=True)
+                tmpdir = tempfile.mkdtemp(prefix="aur-sleuth-", dir=tmpdir_parent)
+
+        if not mirrored:
+            # The destination is a temporary path on the machine running the audit, and
+            # this line ends up in the published report. Keep it out of there.
+            logger.info("Cloning %s into %s", package_name, tmpdir)
+            tui.update_status(f"Cloning {clone_url}...")
+            subprocess.run(
+                ["git", "clone", clone_url, tmpdir],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
         # git clones a repository with no commits without complaint. An audit of
         # nothing must not proceed to call "nothing" a verdict.
         if not (Path(tmpdir) / "PKGBUILD").is_file():
@@ -3460,7 +3559,9 @@ def download_package_to_tmpdir(
     except BaseException:
         shutil.rmtree(tmpdir, ignore_errors=True)
         raise
-    logger.info("Cloned %s into %s", package_name, tmpdir)
+    logger.info(
+        "%s %s into %s", "Materialized" if mirrored else "Cloned", package_name, tmpdir
+    )
     tui.finalize_step(f"Cloned {package_name}")
     return Path(tmpdir).resolve()
 
