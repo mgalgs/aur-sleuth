@@ -1,0 +1,29 @@
+{
+  "package": "ttf-apple-emoji",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The only valid voting model (deepseek) correctly identified the package as safe. The package is a standard font package that downloads a prebuilt TTF from GitHub releases with pinned SHA512 checksums, installs it, and provides a standard fontconfig XML. The install script only prints informational messages. The inconclusive result from the qwen model was due to API errors (HTTP 400), not a security concern. The openrouter report is advisory and also found it safe.",
+  "disagreement_analysis": "The disagreement was caused by a tool failure in the qwen model, which encountered HTTP 400 BadRequestErrors when attempting to audit the PKGBUILD, .gitignore, and .install files. This resulted in an 'inconclusive' verdict for those files, triggering the overall inconclusive status, rather than a genuine security disagreement.",
+  "coverage_issues": [
+    "qwen model failed to audit PKGBUILD, .gitignore, and ttf-apple-emoji.install due to LLM API HTTP 400 errors."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "The audit tool should handle LLM API errors (like HTTP 400) by retrying or clearly distinguishing between infrastructure failures and actual security inconclusiveness, preventing tool errors from skewing the final package verdict.",
+    "Ensure that when a model fails on critical files like PKGBUILD, the system can either fallback to another model or clearly flag the failure as a coverage issue without defaulting to a global 'inconclusive' security verdict if other valid models have already cleared the package."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 7570,
+    "completion_tokens": 1819,
+    "cost": 0.00475072
+  },
+  "audits_judged": [
+    "20260903-072520-qwen-qwen3-235b-a22b-2507.md",
+    "20260903-072524-deepseek-deepseek-v4-flash.md",
+    "20260903-033340-openrouter-free.md"
+  ]
+}
