@@ -1,0 +1,32 @@
+{
+  "package": "oneleet-agent",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard AUR binary package that downloads prebuilt .deb files from the official Oneleet domain (downloads.oneleet.com) with pinned SHA-512 checksums. The PKGBUILD contains no executable code at global scope, only standard variable assignments. The package() function performs normal extraction and installation operations. The .install file contains only informational messages. The systemd service file is appropriately configured for a security agent with justified capabilities. No injection patterns, suspicious network operations, or supply-chain attack indicators were found in any successfully reviewed file.",
+  "disagreement_analysis": "The disagreement between 'inconclusive' and 'safe' was caused by tool errors, not security concerns. The qwen model failed to review .SRCINFO due to an HTTP 400 API error. The openrouter model (advisory-only) failed to parse the response for oneleet-agent.install. The deepseek model successfully reviewed all 8 files and found them safe. When the tools worked correctly, they consistently found no security issues.",
+  "coverage_issues": [
+    "qwen model: .SRCINFO review failed with HTTP 400 BadRequestError",
+    "openrouter model: oneleet-agent.install response could not be parsed"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Tool errors (HTTP failures, parsing errors) should not trigger 'inconclusive' verdicts when other models successfully complete the audit - implement fallback logic to use successful reviews",
+    "When multiple models are used, prioritize complete successful reviews over partial failures caused by transient API issues",
+    "Implement retry logic for transient HTTP errors (400, 500, timeouts) before marking files as inconclusive",
+    "Consider implementing response validation and retry for parsing failures before escalating to inconclusive"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 10370,
+    "completion_tokens": 1283,
+    "cost": 0.0049606400000000005
+  },
+  "audits_judged": [
+    "20260903-071102-qwen-qwen3-235b-a22b-2507.md",
+    "20260903-071127-deepseek-deepseek-v4-flash.md",
+    "20260903-013117-openrouter-free.md"
+  ]
+}
