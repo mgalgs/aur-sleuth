@@ -116,6 +116,10 @@ AUR_METADATA_URL="https://aur.archlinux.org/packages-meta-v1.json.gz"
 # says which commit is genuine.
 AUR_MIRROR_DIR="${AUR_SLEUTH_MIRROR_DIR:-}"
 AUR_MIRROR_URL="${AUR_SLEUTH_MIRROR_URL:-https://github.com/archlinux/aur.git}"
+# archlinux/aur is multiple GiB. A stalled connection must not hang this stage
+# forever, and a `timeout`-killed clone must not leave a directory that looks
+# usable -- see the repair check in refresh_aur_mirror().
+AUR_MIRROR_TIMEOUT="${AUR_SLEUTH_MIRROR_TIMEOUT:-1800}"
 
 log() { echo "[$(date -u '+%H:%M:%S')] [$MODE] $*"; }
 # The message is kept as well as printed. A stage log is this deployment's;
@@ -159,6 +163,25 @@ sanitize_store() {
 [remote "origin"]
 	url = $FETCH_URL
 	fetch = +refs/heads/*:refs/remotes/origin/*
+EOF
+}
+
+# The same reset as sanitize_store, for the aur-mirror clone: it is a second
+# repository on the same persistent volume, and the audit stage that runs
+# arbitrary PKGBUILD build functions can write into it exactly as it could
+# write into $GIT_STORE. Reset it to known-good before any git command runs
+# in it here, in particular before the `fetch` below, which follows whatever
+# remote.origin.url and hooks/ this file holds.
+sanitize_mirror() {
+    rm -rf "$AUR_MIRROR_DIR/hooks" "$AUR_MIRROR_DIR/objects/info/alternates"
+    cat > "$AUR_MIRROR_DIR/config" <<EOF
+[core]
+	repositoryformatversion = 0
+	bare = true
+[remote "origin"]
+	url = $AUR_MIRROR_URL
+	fetch = +refs/*:refs/*
+	mirror = true
 EOF
 }
 
@@ -223,9 +246,20 @@ internal_string_working_files() {
 refresh_aur_mirror() {
     [[ -n "$AUR_MIRROR_DIR" ]] || return 0
 
+    # A directory that exists but is not a usable git repository -- a clone
+    # that was `timeout`-killed or evicted mid-write, before it ever reached a
+    # non-zero exit that would have triggered the `rm -rf` below -- must not
+    # be mistaken for a mirror to fetch into. Without this check that state is
+    # permanent: the existence test below would keep taking the fetch branch
+    # against a repository that can never succeed.
+    if [[ -d "$AUR_MIRROR_DIR" ]] && ! git --git-dir="$AUR_MIRROR_DIR" rev-parse --git-dir &>/dev/null; then
+        log "WARNING: $AUR_MIRROR_DIR exists but is not a usable git repository; re-cloning"
+        rm -rf "$AUR_MIRROR_DIR"
+    fi
+
     if [[ ! -d "$AUR_MIRROR_DIR" ]]; then
         log "No aur-mirror at $AUR_MIRROR_DIR; cloning $AUR_MIRROR_URL"
-        if git clone --quiet --mirror "$AUR_MIRROR_URL" "$AUR_MIRROR_DIR"; then
+        if timeout "$AUR_MIRROR_TIMEOUT" git clone --quiet --mirror "$AUR_MIRROR_URL" "$AUR_MIRROR_DIR"; then
             log "Cloned $(du -sh "$AUR_MIRROR_DIR" 2>/dev/null | cut -f1) into $AUR_MIRROR_DIR"
         else
             log "WARNING: aur-mirror clone failed; audits will clone aur.archlinux.org directly"
@@ -234,8 +268,10 @@ refresh_aur_mirror() {
         return 0
     fi
 
+    sanitize_mirror
+
     log "Fetching $AUR_MIRROR_URL into $AUR_MIRROR_DIR"
-    if ! git --git-dir="$AUR_MIRROR_DIR" fetch --quiet --prune; then
+    if ! timeout "$AUR_MIRROR_TIMEOUT" git --git-dir="$AUR_MIRROR_DIR" fetch --quiet --prune origin; then
         log "WARNING: aur-mirror fetch failed; audits will fall back to a direct clone" \
             "on whatever branches are stale"
     fi

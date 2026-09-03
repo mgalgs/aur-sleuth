@@ -3423,10 +3423,15 @@ class PackageNotFound(Exception):
 
 def aur_mirror_dir() -> Optional[str]:
     """Where to find a local bare mirror of archlinux/aur, or None if the
-    feature is off. Unset or empty means off: the default, and the only mode
-    that has ever run in production."""
+    feature is off. Unset, empty, or naming a path that is not a directory
+    means off: the default, and the state a mirror clone that failed or was
+    never run leaves behind. A missing directory must not reach
+    materialize_from_mirror() -- a failed `git clone --shared` there would
+    cost the same round trips a caller could have skipped by never trying."""
     mirror_dir = os.environ.get("AUR_SLEUTH_MIRROR_DIR", "").strip()
-    return mirror_dir or None
+    if not mirror_dir or not os.path.isdir(mirror_dir):
+        return None
+    return mirror_dir
 
 
 def git_ls_remote_head(url: str, timeout: int = 15) -> Optional[str]:
@@ -3526,12 +3531,12 @@ def download_package_to_tmpdir(
         if mirror_dir:
             canonical_sha = git_ls_remote_head(clone_url)
             if canonical_sha:
+                tui.update_status(f"Materializing {package_name} from local mirror...")
                 mirrored = materialize_from_mirror(mirror_dir, pkgbase, canonical_sha, tmpdir)
             if mirrored:
                 logger.info(
                     "Materialized %s from mirror %s at %s", package_name, mirror_dir, canonical_sha
                 )
-                tui.update_status(f"Materializing {package_name} from local mirror...")
             else:
                 # Mirror miss (disabled ls-remote, no such branch, a clone
                 # that failed, or a SHA mismatch): discard whatever the
@@ -3562,7 +3567,7 @@ def download_package_to_tmpdir(
     logger.info(
         "%s %s into %s", "Materialized" if mirrored else "Cloned", package_name, tmpdir
     )
-    tui.finalize_step(f"Cloned {package_name}")
+    tui.finalize_step(f"{'Materialized' if mirrored else 'Cloned'} {package_name}")
     return Path(tmpdir).resolve()
 
 

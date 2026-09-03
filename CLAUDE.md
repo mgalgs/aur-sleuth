@@ -157,6 +157,47 @@ Three constraints on any change here:
 out of the `<file>` wrapper — structural escape only. Its docstring once claimed to
 prevent prompt injection, which it never did.
 
+## AUR mirror
+
+`deploy/container/scripts/entrypoint.sh`'s `prepare` stage keeps a local bare mirror of
+`archlinux/aur` on the persistent volume, and `download_package_to_tmpdir()` in
+`aur-sleuth` tries it before falling back to a direct clone of
+`aur.archlinux.org/<pkgbase>.git`. This is a bandwidth optimization, nothing more, and
+the trust rule is the whole reason it is safe to have:
+
+- **The mirror never decides what gets audited.** `git_ls_remote_head()` asks
+  `aur.archlinux.org` directly what the package's current HEAD is -- that is the only
+  question the canonical host is ever asked, and it is asked every time, mirror or no
+  mirror. `materialize_from_mirror()` then clones the mirror's `<pkgbase>` branch (each
+  AUR package is a branch of one large repository) and keeps the result only if its HEAD
+  is *exactly* that SHA. A stale branch, a missing branch, or a branch an attacker
+  tampered with all fail the same equality check and fall back to a direct clone; the
+  mirror can only ever supply bytes for a SHA the canonical host already named, never
+  choose the SHA. `bench/test-aur-mirror.sh` pins this against a synthetic mirror whose
+  branch is deliberately made to disagree with its canonical counterpart.
+- **Off by default, and every failure degrades to off, never to a hard failure.**
+  `AUR_SLEUTH_MIRROR_DIR` (the pipeline sets it; a bare `git clone --mirror` of
+  `AUR_SLEUTH_MIRROR_URL`, default `https://github.com/archlinux/aur.git`) unset, empty,
+  or naming a path that is not a directory all mean the feature is off --
+  `aur_mirror_dir()` in `aur-sleuth` is where that is decided, in code. A mirror clone
+  that failed, was killed mid-write, or was never run all land in that same "not a
+  directory" state, so the audit path never has to know which.
+- **`--clone-url` skips it entirely.** That flag names a URL the caller chose on
+  purpose; the mirror is keyed by `pkgbase`, which stays unresolved (`None`) whenever an
+  explicit clone URL is given, so the mirror lookup that guards on `pkgbase` never fires.
+  `bench/test-aur-mirror.sh` pins this specifically, because the property is a single
+  `if not clone_url:` in `download_package_to_tmpdir()` and an ordinary-looking cleanup
+  that hoists the `pkgbase` resolution out of it would silently start consulting the
+  mirror for a caller-chosen URL.
+- **The mirror clone is a second repository on the same persistent volume the `audit`
+  stage writes untrusted output to**, exactly like `$GIT_STORE`. `sanitize_mirror()` in
+  `entrypoint.sh` resets its `config` and removes `hooks/` before any trusted git command
+  runs against it, for the same reason `sanitize_store()` does for `$GIT_STORE`: a
+  previous `audit` stage's PKGBUILD could otherwise plant a hostile
+  `remote.origin.url` or a ref-update hook that the next `prepare` stage's `git fetch`
+  would then execute, in a stage the header describes as needing no secret and running
+  no untrusted code.
+
 ## Prompt invariant
 
 `SYSTEM_PROMPTS` in `aur-sleuth` is the canonical expression of the threat model above.
@@ -273,6 +314,9 @@ SAFE verdicts, and do not let it run without the malicious fixtures in the gate.
   first, within a budget: the synthetic fixtures alone, cents a model, which is what
   makes the shortlist worth reading. `bench/test-scout.sh` and `bench/test-screen.sh`
   cover both offline.
+- `bench/test-aur-mirror.sh` — offline checks for the AUR mirror pre-fetch:
+  `aur_mirror_dir()`, `git_ls_remote_head()`, `materialize_from_mirror()`, and
+  `download_package_to_tmpdir()`'s wiring of all three. See "AUR mirror" above.
 - `.claude/skills/self-improve/` — the audit-review-improve loop.
 - `docs/PIPELINE.md` — the machinery, end to end; `docs/ROADMAP.md` — queued
   improvements, so intent survives the chat it came from.

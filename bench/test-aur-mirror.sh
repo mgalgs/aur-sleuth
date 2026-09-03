@@ -109,7 +109,7 @@ class FakeTui:
     def finalize_step(self, *a, **kw):
         pass
 
-def fetch(package_name, canonical_repo, mirror_dir=None):
+def fetch(package_name, canonical_repo, mirror_dir=None, clone_url=None):
     """Call the real download_package_to_tmpdir() with the canonical URL
     redirected to canonical_repo and AUR_SLEUTH_MIRROR_DIR set (or unset) as
     given. Returns the resulting package directory."""
@@ -122,7 +122,7 @@ def fetch(package_name, canonical_repo, mirror_dir=None):
     subprocess.run = _redirecting_run
     sleuth.resolve_pkgbase = lambda name: name
     try:
-        return sleuth.download_package_to_tmpdir(FakeTui(), work, package_name)
+        return sleuth.download_package_to_tmpdir(FakeTui(), work, package_name, clone_url=clone_url)
     finally:
         subprocess.run = _real_run
 
@@ -208,14 +208,40 @@ check("disabled: no alternates (a plain direct clone)",
 shutil.rmtree(pkgdir)
 
 # =============================================================================
+# Scenario E: --clone-url given -- the mirror must be skipped even though a
+# working mirror_dir is configured. This rests on pkgbase staying None when
+# clone_url is supplied (download_package_to_tmpdir only resolves pkgbase in
+# the `if not clone_url:` branch); if that resolution were ever hoisted out of
+# the branch, the mirror would silently start being consulted for a
+# caller-chosen URL, which the mirror has no branch keyed for. Reuses the
+# _boom guard from Scenario D.
+# =============================================================================
+canonical_e = make_bare("canonical-e")
+content_e = "pkgname=pkg-explicit-url\npkgver=5\n"
+seed(content_e, [(canonical_e, "master")])
+
+sleuth.materialize_from_mirror = _boom
+try:
+    pkgdir = fetch("pkg-explicit-url", canonical_e, mirror_dir=mirror, clone_url=str(canonical_e))
+finally:
+    sleuth.materialize_from_mirror = _real_materialize
+check("--clone-url: direct-clone content is correct",
+      (pkgdir / "PKGBUILD").read_text() == content_e)
+check("--clone-url: no alternates (mirror was never consulted)",
+      not has_alternates(pkgdir))
+shutil.rmtree(pkgdir)
+
+# =============================================================================
 # Small direct checks of the helpers, cheap and worth pinning on their own.
 # =============================================================================
 os.environ.pop("AUR_SLEUTH_MIRROR_DIR", None)
 check("aur_mirror_dir(): unset means off", sleuth.aur_mirror_dir() is None)
 os.environ["AUR_SLEUTH_MIRROR_DIR"] = "   "
 check("aur_mirror_dir(): whitespace-only means off", sleuth.aur_mirror_dir() is None)
-os.environ["AUR_SLEUTH_MIRROR_DIR"] = "/some/dir"
-check("aur_mirror_dir(): a real value passes through", sleuth.aur_mirror_dir() == "/some/dir")
+os.environ["AUR_SLEUTH_MIRROR_DIR"] = str(root / "does-not-exist")
+check("aur_mirror_dir(): a path that is not a directory means off", sleuth.aur_mirror_dir() is None)
+os.environ["AUR_SLEUTH_MIRROR_DIR"] = str(mirror)
+check("aur_mirror_dir(): a real directory passes through", sleuth.aur_mirror_dir() == str(mirror))
 os.environ.pop("AUR_SLEUTH_MIRROR_DIR", None)
 
 check("git_ls_remote_head(): a path with no repository returns None",
