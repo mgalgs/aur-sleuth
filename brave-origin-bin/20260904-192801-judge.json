@@ -1,0 +1,28 @@
+{
+  "package": "brave-origin-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The disagreement was caused by an API error (HTTP 400) in the first model when processing the .SRCINFO file, resulting in an inconclusive verdict. The second model successfully reviewed .SRCINFO and found it safe. Both models correctly identified the PKGBUILD, wrapper script, and desktop file as standard, safe packaging for a pre-built binary browser with no malicious injections.",
+  "disagreement_analysis": "The first model encountered an API error (BadRequestError) when auditing .SRCINFO, forcing an inconclusive result. The second model processed the same file without issue and correctly identified it as safe metadata.",
+  "coverage_issues": [
+    "qwen3-235b-a22b-2507 failed to review .SRCINFO due to an LLM API error (HTTP 400)."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "API errors on non-executable metadata files like .SRCINFO should not force an overall 'inconclusive' verdict; the tool should either retry or gracefully degrade to a verdict based on the executable files (PKGBUILD, scripts).",
+    ".SRCINFO is auto-generated from PKGBUILD and contains no executable code; its failure should be weighted lower than PKGBUILD failures."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5061,
+    "completion_tokens": 1196,
+    "cost": 0.0031504000000000002
+  },
+  "audits_judged": [
+    "20260904-190117-qwen-qwen3-235b-a22b-2507.md",
+    "20260904-190136-deepseek-deepseek-v4-flash.md"
+  ]
+}
