@@ -1,0 +1,30 @@
+{
+  "package": "koharu-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard AUR binary package (-bin) that downloads a pre-built .deb file from a GitHub release, verifies it with a pinned SHA-256 checksum, and extracts it using bsdtar. There are no install hooks, no top-level code execution in the PKGBUILD, and no suspicious network activity. The 'inconclusive' results from two models were solely due to transient API errors when processing harmless metadata files (.gitignore and .SRCINFO), not actual security concerns.",
+  "disagreement_analysis": "There is no substantive security disagreement. All models that successfully processed the PKGBUILD correctly identified it as safe. The overall 'inconclusive' package verdicts were caused by tool-level API failures on non-executable files (.gitignore for Qwen, .SRCINFO for DeepSeek), not by conflicting security assessments.",
+  "coverage_issues": [
+    "Qwen model failed to audit .gitignore due to an HTTP 400 API error.",
+    "DeepSeek model failed to audit .SRCINFO due to an empty LLM response error."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "The audit tool should differentiate between critical files (PKGBUILD, .install, patches) and harmless metadata (.SRCINFO, .gitignore) when handling API errors. A failure to audit a .gitignore should not force the entire package verdict to 'inconclusive' if the PKGBUILD is verified safe.",
+    "Implement automatic retries for transient API errors (like HTTP 400 or empty responses) before marking a file or package as inconclusive."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5764,
+    "completion_tokens": 1597,
+    "cost": 0.0038886400000000005
+  },
+  "audits_judged": [
+    "20260904-030942-qwen-qwen3-235b-a22b-2507.md",
+    "20260904-031026-deepseek-deepseek-v4-flash.md",
+    "20260903-012227-openrouter-free.md"
+  ]
+}
