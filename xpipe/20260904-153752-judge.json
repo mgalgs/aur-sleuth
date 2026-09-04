@@ -1,0 +1,27 @@
+{
+  "package": "xpipe",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard AUR wrapper for pre-built binaries from the official upstream GitHub repository. The PKGBUILD uses PGP signature verification, and the use of SKIP checksums for .asc files is expected and safe. No malicious code, install hooks, or suspicious network activity is present. The inconclusive verdicts from other models were solely due to transient LLM API errors on low-risk metadata files (.SRCINFO, .desktop), not actual security concerns.",
+  "disagreement_analysis": "The disagreement is purely an artifact of tool execution errors. The qwen model encountered HTTP 400 errors when auditing .SRCINFO and xpipe.desktop, forcing an inconclusive verdict. The deepseek model successfully audited all files and correctly identified the package as safe. The openrouter report is advisory and also suffered a parsing error on .SRCINFO. There is no substantive security disagreement.",
+  "coverage_issues": [],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Transient API errors (e.g., HTTP 400) on non-executable metadata files like .SRCINFO or .desktop should not force a global 'inconclusive' verdict if the core PKGBUILD is successfully audited and found safe. The tool should gracefully degrade or override the verdict when the failure is strictly a tooling/LLM parsing issue on benign files.",
+    "Models correctly recognize that SKIP checksums on .asc (PGP signature) files are standard and safe when validpgpkeys is used. No further prompt tuning is needed for this specific AUR pattern."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 10867,
+    "completion_tokens": 2225,
+    "cost": 0.00632544
+  },
+  "audits_judged": [
+    "20260904-152408-qwen-qwen3-235b-a22b-2507.md",
+    "20260904-152349-deepseek-deepseek-v4-flash.md",
+    "20260904-074304-openrouter-free.md"
+  ]
+}

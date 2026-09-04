@@ -1,0 +1,30 @@
+{
+  "package": "agentty-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard binary AUR package that downloads prebuilt binaries from the official GitHub releases page (https://github.com/1ay1/agentty/releases) with pinned SHA256 checksums. The PKGBUILD contains only variable assignments and a simple package() function that installs the binary to /usr/bin. No install hooks, no suspicious scripts, no code execution at global scope. The 'disagreement' was caused by a tool error (HTTP 400 API failure) in the qwen3-235b report, not a genuine security concern. The deepseek-v4-flash model successfully audited both files and found them safe.",
+  "disagreement_analysis": "The inconclusive verdict from qwen3-235b-a22b-2507 was caused by an API error (HTTP 400 BadRequestError) during the full PKGBUILD audit, not by any security finding. The initial --printsrcinfo check passed. The deepseek-v4-flash model successfully completed the audit of both PKGBUILD and .SRCINFO, finding standard binary packaging with pinned checksums. The openrouter/free report is advisory-only and does not count as a vote.",
+  "coverage_issues": [
+    "qwen3-235b-a22b-2507: PKGBUILD full audit failed due to HTTP 400 API error (tool failure)"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Tool errors (API failures, timeouts) should not produce 'inconclusive' verdicts that trigger escalation - they should be retried automatically or excluded from verdict calculation",
+    "When one model fails due to tool error and another succeeds on the same files, the successful audit should be weighted appropriately rather than treated as a disagreement",
+    "The initial --printsrcinfo safety check provides partial evidence that could be used when full audit fails due to tool errors"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 4887,
+    "completion_tokens": 1437,
+    "cost": 0.0034032
+  },
+  "audits_judged": [
+    "20260904-071053-qwen-qwen3-235b-a22b-2507.md",
+    "20260904-071050-deepseek-deepseek-v4-flash.md",
+    "20260903-033236-openrouter-free.md"
+  ]
+}
