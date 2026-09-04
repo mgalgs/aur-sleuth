@@ -1,0 +1,120 @@
+---
+package: ckan
+pkgver: 1.36.4
+pkgrel: 1
+result: safe
+model: deepseek/deepseek-v4-flash
+provider: custom
+aur_sleuth_rev: 171a316e053e9c4b28731ccb1aa63b1168550d3a
+prompt_tokens: 11470
+completion_tokens: 1647
+total_tokens: 13117
+cost: 0.0012918500
+execution_time: 37.77
+files_reviewed: 4
+files_skipped: 0
+maintainer_files: 4
+source_fetch: not_attempted
+upstream_files: 0
+upstream_named_files: 0
+unpinned_sources: 0
+injection_attempts: 0
+date: 2026-09-04T23:06:37Z
+file_verdicts:
+  - file: .gitignore
+    status: safe
+    summary: Standard .gitignore with no security concerns.
+  - file: .SRCINFO
+    status: safe
+    summary: Standard AUR metadata file, no malicious content.
+  - file: .nvchecker.toml
+    status: safe
+    summary: Standard nvchecker config for CKAN package.
+  - file: PKGBUILD
+    status: safe
+    summary: Standard AUR package; no security threats.
+---
+
+Materializing ckan from local mirror...
+Materialized ckan
+Analyzing ckan AUR package with deepseek/deepseek-v4-flash
+Performing initial audit of PKGBUILD to ensure that we can safely run `makepkg`
+LLM auditresponse for PKGBUILD:
+<security_assessment>
+<decision>SAFE</decision>
+<details>
+The PKGBUILD contains only standard variable assignments (pkgname, pkgver, etc.) and function definitions (build, package). There is no top-level command substitution, backtick execution, or any other code that would execute during the sourcing step of `makepkg --printsrcinfo`. All values are static strings or simple variable expansions. No danger is present.
+</details>
+<evidence></evidence>
+<summary>No malicious code in global scope.</summary>
+</security_assessment>
+
++ Initial PKGBUILD audit complete -- No malicious code in global scope.
+Reviewing the 4 file(s) in the AUR repository.
+Reviewing the AUR repository's files...
+[0/4] Reviewing .SRCINFO...
+[0/4] Reviewing .SRCINFO, .gitignore...
+[0/4] Reviewing .SRCINFO, .gitignore, .nvchecker.toml...
+LLM auditresponse for .gitignore:
+<security_assessment>
+<decision>SAFE</decision>
+<details>
+The file is a standard `.gitignore` for a package build environment. It ignores the `pkg/` and `src/` directories as well as `.deb` and `.pkg.tar` files, which are typical build artifacts. There is no executable code, no network requests, no obfuscation, and no indication of any malicious behavior. This file poses no security risk.
+</details>
+<evidence></evidence>
+<summary>Standard .gitignore with no security concerns.</summary>
+</security_assessment>
+
+[0/4] Reviewing .SRCINFO, .gitignore, .nvchecker.toml, PKGBUILD...
+[1/4] Reviewing .SRCINFO, .nvchecker.toml, PKGBUILD...
++ Reviewed .gitignore. Status: SAFE -- Standard .gitignore with no security concerns.
+LLM auditresponse for .SRCINFO:
+<security_assessment>
+<decision>SAFE</decision>
+<details>
+The .SRCINFO file is a standard AUR package metadata file. It declares the package name, version, description, dependencies, and a source tarball from the official upstream GitHub repository with a pinned version and a SHA256 checksum. There is no executable code, no suspicious network requests, no obfuscation, and no deviation from normal packaging practices. The content is purely declarative and poses no supply-chain attack vector.
+</details>
+<evidence></evidence>
+<summary>Standard AUR metadata file, no malicious content.</summary>
+</security_assessment>
+
+[2/4] Reviewing .nvchecker.toml, PKGBUILD...
++ Reviewed .SRCINFO. Status: SAFE -- Standard AUR metadata file, no malicious content.
+LLM auditresponse for .nvchecker.toml:
+<security_assessment>
+<decision>SAFE</decision>
+<details>
+The file is a standard `.nvchecker.toml` configuration for the `ckan` package. It defines how to check for new versions by querying the official GitHub releases of the KSP-CKAN/CKAN repository with a version prefix `v`. There are no commands, network requests beyond standard nvchecker behavior, or any obfuscated or dangerous content. It is a benign configuration file used for version tracking in AUR packaging workflows.
+</details>
+<evidence></evidence>
+<summary>Standard nvchecker config for CKAN package.</summary>
+</security_assessment>
+
+[3/4] Reviewing PKGBUILD...
++ Reviewed .nvchecker.toml. Status: SAFE -- Standard nvchecker config for CKAN package.
+LLM auditresponse for PKGBUILD:
+<security_assessment>
+<decision>SAFE</decision>
+<details>
+The PKGBUILD follows standard Arch packaging practices. It downloads a tarball from the official GitHub repository (KSP-CKAN/CKAN) with a pinned SHA-256 checksum, ensuring integrity. The build step invokes the upstream `build.sh` script, and the package step installs binaries, a desktop file, icons, a man page, and a copyright file—all expected behaviors for distributing an application. There are no obfuscated commands, no unexpected network requests, no execution of external code outside the upstream source, and no data exfiltration. The file is clean and contains no evidence of a supply-chain attack.
+</details>
+<evidence></evidence>
+<summary>Standard AUR package; no security threats.</summary>
+</security_assessment>
+
+[4/4] Reviewing ...
++ Reviewed PKGBUILD. Status: SAFE -- Standard AUR package; no security threats.
+Reviewed all the AUR repository's files.
+Audit complete! Result: No issues found
+API Usage Summary
+  Models: deepseek/deepseek-v4-flash
+  Prompt Tokens: 11,470
+  Completion Tokens: 1,647
+  Total Tokens: 13,117
+  Total Cost: $0.001292
+  Execution Time: 37.77 seconds
+
+Final Status: SAFE
+
+
+No issues found.
