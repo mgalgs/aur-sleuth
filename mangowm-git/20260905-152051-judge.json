@@ -1,0 +1,29 @@
+{
+  "package": "mangowm-git",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Both models reviewed the same 3 files (PKGBUILD, .SRCINFO, LICENSE) and found standard AUR packaging for a -git package. The PKGBUILD uses a git source from the declared upstream GitHub repository, standard meson/ninja build tooling, and contains no suspicious commands, network requests to unrelated hosts, or code execution of fetched content. The .SRCINFO matches the PKGBUILD metadata. The LICENSE is standard legal text. The disagreement is purely due to a tool error (HTTP 400 API failure) in the qwen model's review of .SRCINFO, not a security concern.",
+  "disagreement_analysis": "The disagreement was caused by a tool error (HTTP 400 BadRequestError) when the qwen model attempted to audit .SRCINFO, resulting in an inconclusive verdict. The deepseek model successfully reviewed all files and found them safe. Both models agreed on the safety of PKGBUILD and LICENSE. This is not a genuine security disagreement but a coverage failure due to API issues.",
+  "coverage_issues": [
+    "qwen model failed to review .SRCINFO due to API error (HTTP 400 BadRequestError)"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Tool errors (API failures, timeouts) should be handled gracefully to avoid marking entire audits as inconclusive when the error affects only one file",
+    "When a tool error causes inconclusive results on non-critical files (like .SRCINFO metadata), the audit system should consider whether other successfully-reviewed files provide sufficient coverage to render a verdict",
+    "Models correctly identify standard AUR -git packaging patterns (git sources, SKIP checksums, meson/ninja builds) without flagging them as suspicious"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 4326,
+    "completion_tokens": 1104,
+    "cost": 0.00279744
+  },
+  "audits_judged": [
+    "20260905-151651-qwen-qwen3-235b-a22b-2507.md",
+    "20260905-151647-deepseek-deepseek-v4-flash.md"
+  ]
+}
