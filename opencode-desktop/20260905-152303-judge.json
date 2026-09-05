@@ -1,0 +1,28 @@
+{
+  "package": "opencode-desktop",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The disagreement stems entirely from a tool error in the qwen model (HTTP 400 when auditing opencode-desktop.sh), not from substantive security concerns. The deepseek model successfully reviewed all 5 files including opencode-desktop.sh, finding it to be a minimal launcher script with standard Electron execution. All other files (PKGBUILD, .SRCINFO, .gitignore, enable-pacman-target.patch) were reviewed by both models and found to contain standard AUR packaging patterns with no malicious indicators. The PKGBUILD uses normal VCS source patterns with pinned git tags, and the sed replacements in build/package functions are routine packaging adjustments for Electron applications.",
+  "disagreement_analysis": "The qwen model encountered an API error (HTTP 400 BadRequestError) when attempting to audit opencode-desktop.sh, resulting in an inconclusive verdict. The deepseek model successfully reviewed the same file and found it safe. This is a tool failure, not a substantive disagreement about security.",
+  "coverage_issues": [
+    "qwen model failed to audit opencode-desktop.sh due to API error (HTTP 400)"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "When a model encounters a tool error on a specific file, the audit system should either retry with the same model or immediately escalate to a different model for that file, rather than marking the entire package inconclusive",
+    "Launcher scripts (opencode-desktop.sh) are common in AUR packages and should be prioritized for review since they execute at runtime, though they are typically simple wrappers"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5618,
+    "completion_tokens": 950,
+    "cost": 0.00301376
+  },
+  "audits_judged": [
+    "20260905-150855-qwen-qwen3-235b-a22b-2507.md",
+    "20260905-150944-deepseek-deepseek-v4-flash.md"
+  ]
+}
