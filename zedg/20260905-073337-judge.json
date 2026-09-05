@@ -1,0 +1,28 @@
+{
+  "package": "zedg",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The deepseek report provides a thorough and accurate analysis: the PKGBUILD is a standard pre-built binary package that fetches from the project's own GitHub releases with pinned SHA-256 checksums, and the package() function merely copies files and sets permissions. No code injection, no suspicious network requests, no execution of fetched content. The qwen report failed entirely due to HTTP 400 API errors on both file verdicts, providing no usable signal. The initial PKGBUILD sourcing check from qwen (which succeeded before the errors) also confirmed no dangerous top-level code. This is a clean, conventional AUR binary package.",
+  "disagreement_analysis": "The disagreement is not substantive\u2014it is a tool failure. The qwen model encountered HTTP 400 BadRequestError on both file-level audits, rendering its verdict inconclusive. The deepseek model completed successfully and found no issues. There is no actual disagreement about the package content; one model simply failed to produce a verdict.",
+  "coverage_issues": [
+    "qwen/qwen3-235b-a22b-2507: Both file verdicts (PKGBUILD, .SRCINFO) failed with HTTP 400 API errors, producing no usable audit signal"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "When an LLM API call fails with a hard error (HTTP 400, timeout, crash), the tool should mark the report as 'tool_error' rather than 'inconclusive', so adjudication can immediately discount it without parsing failed reasoning",
+    "The initial PKGBUILD sourcing check from qwen succeeded and produced a valid SAFE verdict, but this was overridden by the subsequent file-level API failures. The tool should preserve and surface partial successes rather than letting later failures erase earlier valid assessments"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 3448,
+    "completion_tokens": 1050,
+    "cost": 0.00244736
+  },
+  "audits_judged": [
+    "20260905-070802-qwen-qwen3-235b-a22b-2507.md",
+    "20260905-070823-deepseek-deepseek-v4-flash.md"
+  ]
+}
