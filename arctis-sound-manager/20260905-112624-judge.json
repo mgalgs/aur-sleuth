@@ -1,0 +1,32 @@
+{
+  "package": "arctis-sound-manager",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The .install script auto-installs 'yay-bin' from the official AUR (aur.archlinux.org) and suggests a 'curl | bash' command in an echo statement. While these are poor packaging practices and intrusive, they do not constitute a malicious injection under the threat model. The script fetches from the official AUR host (which the package has a stated relationship with) and does not execute arbitrary untrusted code. Deepseek correctly identified this as intrusive convenience rather than a security violation, while Qwen falsely flagged it as malicious.",
+  "disagreement_analysis": "Qwen flagged the automatic installation of the 'yay-bin' AUR helper as a critical security violation due to lack of user consent and execution of 'makepkg'. Deepseek correctly recognized this as an intrusive convenience and bad packaging practice, but not a supply-chain injection, since it fetches from the official AUR repository. Qwen conflated poor packaging hygiene with malicious intent.",
+  "coverage_issues": [
+    "openrouter/free (advisory) failed to parse the model response for arctis-sound-manager.install, resulting in an inconclusive verdict for that file."
+  ],
+  "false_positives": [
+    "Qwen's flag on auto-installing 'yay-bin': This is a violation of packaging best practices (auto-installing a package manager without consent), but it fetches from the official AUR (aur.archlinux.org) and does not represent a malicious injection or supply chain compromise.",
+    "Qwen's flag on the 'curl | bash' echo statement: Printing a command for the user to run manually is not executing fetched content and poses no injection risk."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models must be explicitly instructed to differentiate between 'intrusive/bad packaging practices' (e.g., auto-installing AUR helpers, echoing curl|bash commands) and 'actual malicious injections' (e.g., fetching from untrusted hosts, executing obfuscated payloads).",
+    "Reinforce that fetching from official ecosystem repositories (like aur.archlinux.org) or the declared upstream (GitHub) is trusted, and maintainer overreach does not equal a supply-chain attack."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 8015,
+    "completion_tokens": 2446,
+    "cost": 0.00569568
+  },
+  "audits_judged": [
+    "20260905-112325-qwen-qwen3-235b-a22b-2507.md",
+    "20260905-112303-deepseek-deepseek-v4-flash.md",
+    "20260905-073724-openrouter-free.md"
+  ]
+}
