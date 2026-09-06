@@ -1,0 +1,31 @@
+{
+  "package": "t3code-nightly-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard AppImage packaging for t3code from the official pingdotgg/t3code GitHub repository. Sources are pinned with SHA-256 checksums, the prepare() function extracts the AppImage using its built-in functionality, and package() installs to /opt with standard symlinks and desktop entries. No suspicious patterns (eval, base64, curl|bash, external network requests) are present. The SUID bit on chrome-sandbox is normal for Electron applications. The 'inconclusive' verdict from qwen3-235b was due to an API error on .SRCINFO (a metadata-only file), not a security concern. The deepseek-v4-flash report correctly identified the package as safe.",
+  "disagreement_analysis": "The disagreement was caused by a tool error (HTTP 400 API failure) when qwen3-235b attempted to audit .SRCINFO, not by any security concern. The PKGBUILD was successfully reviewed and found safe by both models that processed it. The openrouter/free report is advisory-only and also failed due to a parse error.",
+  "coverage_issues": [
+    "qwen3-235b: API error (HTTP 400) when auditing .SRCINFO",
+    "openrouter/free: Parse error on PKGBUILD audit (advisory report, does not count)"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Tool errors (API failures, parse errors) on non-executable metadata files like .SRCINFO should not override a successful PKGBUILD audit that found no issues",
+    "Consider implementing retry logic or fallback models when API errors occur, rather than marking the entire audit as inconclusive",
+    ".SRCINFO is declarative metadata only and poses no execution risk; failures auditing it should be noted but not block a verdict when PKGBUILD is successfully reviewed"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 4480,
+    "completion_tokens": 1162,
+    "cost": 0.0029209600000000002
+  },
+  "audits_judged": [
+    "20260906-150120-qwen-qwen3-235b-a22b-2507.md",
+    "20260906-150121-deepseek-deepseek-v4-flash.md",
+    "20260906-074854-openrouter-free.md"
+  ]
+}
