@@ -1,0 +1,31 @@
+{
+  "package": "fcitx5-vinput-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard binary AUR package with a pinned SHA-256 checksum for the upstream source. The PKGBUILD and .install script contain no malicious code or unexpected network/file operations. The upstream.sh script is a maintainer helper not executed during makepkg. The deepseek model successfully audited all files and found them safe, while the other models failed due to API or parsing errors and provided no valid verdict signal.",
+  "disagreement_analysis": "The apparent disagreement is an artifact of tool failures rather than analytical differences. The qwen model encountered HTTP 400 errors and failed to audit 3 of 4 files, carrying no verdict signal. The openrouter/free model is advisory and also failed to parse its output for upstream.sh. Only the deepseek model provided a complete and valid audit, correctly identifying the package as safe.",
+  "coverage_issues": [
+    "qwen model failed to review PKGBUILD, fcitx5-vinput-bin.install, and upstream.sh due to HTTP 400 API errors.",
+    "openrouter/free model failed to parse the decision for upstream.sh due to non-standard output format."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Implement retry logic or fallback mechanisms for LLM API errors (e.g., HTTP 400) to prevent entire audits from failing or marking files as inconclusive.",
+    "Improve output parsing robustness to handle models that ignore XML formatting instructions and output raw text classifications (e.g., 'User Safety: unsafe').",
+    "Ensure the audit tool clearly distinguishes between maintainer helper scripts (like upstream.sh) that are not sourced by the PKGBUILD and actual build-time injection risks."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 6154,
+    "completion_tokens": 2408,
+    "cost": 0.00505152
+  },
+  "audits_judged": [
+    "20260906-152337-qwen-qwen3-235b-a22b-2507.md",
+    "20260906-152434-deepseek-deepseek-v4-flash.md",
+    "20260906-114637-openrouter-free.md"
+  ]
+}
