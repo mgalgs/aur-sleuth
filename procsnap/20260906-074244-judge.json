@@ -1,0 +1,30 @@
+{
+  "package": "procsnap",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard AUR PKGBUILD for a C program that downloads a pinned source tarball from GitHub and builds it with make. There are no malicious patterns, no execution of fetched content, and no suspicious network requests. The 'inconclusive' verdict from qwen was caused by HTTP 400 API errors during the batch file review, not by any security concerns. The deepseek model correctly identified the package as safe.",
+  "disagreement_analysis": "The disagreement stems from tool failures rather than security analysis. The qwen model encountered HTTP 400 BadRequestErrors when reviewing .SRCINFO, .gitignore, and PKGBUILD, forcing an inconclusive result. The openrouter/free model (advisory) failed to parse the .nvchecker.toml response due to the model outputting a raw safety classification instead of the expected XML. The deepseek model successfully reviewed all files and found them safe.",
+  "coverage_issues": [
+    "qwen/qwen3-235b-a22b-2507 failed to audit .SRCINFO, .gitignore, and PKGBUILD due to HTTP 400 API errors.",
+    "openrouter/free failed to parse the decision for .nvchecker.toml due to unexpected model output format."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Implement retry logic or graceful degradation for HTTP 400 errors during batch file reviews so that transient API issues do not force an inconclusive verdict when the initial PKGBUILD gate passed.",
+    "Add robust output parsing or fallback prompts for free-tier models that may ignore XML formatting instructions and output raw safety classifications instead."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 6238,
+    "completion_tokens": 1915,
+    "cost": 0.00444736
+  },
+  "audits_judged": [
+    "20260906-072643-qwen-qwen3-235b-a22b-2507.md",
+    "20260906-072706-deepseek-deepseek-v4-flash.md",
+    "20260906-033053-openrouter-free.md"
+  ]
+}
