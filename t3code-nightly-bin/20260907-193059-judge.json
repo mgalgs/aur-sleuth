@@ -1,0 +1,30 @@
+{
+  "package": "t3code-nightly-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The only valid audit (deepseek-v4-flash) successfully reviewed both the PKGBUILD and .SRCINFO, identifying standard binary packaging with pinned SHA-256 checksums and no malicious code execution or exfiltration. The other reports resulted in 'inconclusive' solely due to tool failures (API and parsing errors), not actual security concerns.",
+  "disagreement_analysis": "The disagreement was triggered by tool failures rather than differing security assessments. The qwen model encountered an HTTP 400 API error, and the openrouter model (which is also marked as advisory and thus does not count as a vote) failed to parse its own output. The deepseek model correctly evaluated the package as safe.",
+  "coverage_issues": [
+    "qwen/qwen3-235b-a22b-2507 failed to audit the PKGBUILD due to an HTTP 400 API error.",
+    "openrouter/free failed to parse the model response for the PKGBUILD."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Implement retry logic or fallback models for transient API errors (e.g., HTTP 400) to prevent them from causing 'inconclusive' verdicts that trigger unnecessary escalations.",
+    "Improve response parsing robustness to gracefully handle models that output plain text (e.g., 'User Safety: safe') instead of the expected structured XML/JSON format."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 4512,
+    "completion_tokens": 2172,
+    "cost": 0.004224
+  },
+  "audits_judged": [
+    "20260907-190228-qwen-qwen3-235b-a22b-2507.md",
+    "20260907-190252-deepseek-deepseek-v4-flash.md",
+    "20260906-074854-openrouter-free.md"
+  ]
+}
