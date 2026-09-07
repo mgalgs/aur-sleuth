@@ -1,0 +1,30 @@
+{
+  "package": "cataclysm-tlg-git",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard AUR VCS package for a game (Cataclysm: The Last Generation). The PKGBUILD fetches source from the official GitHub repository, uses SKIP checksums (normal for VCS packages), and the pkgver() function queries GitHub's public API for versioning. Build and install functions use standard make commands with no suspicious network calls, code execution, or exfiltration. The only disagreement was caused by a tool error in the qwen model (HTTP 400 on .SRCINFO), which per policy carries no verdict signal. The deepseek model completed successfully and found no issues. The openrouter/free report is advisory-only and doesn't count toward the verdict.",
+  "disagreement_analysis": "The disagreement was triggered by qwen's inconclusive verdict, which resulted from an API error (HTTP 400 BadRequestError) when auditing .SRCINFO, not from any security concern. Per policy, tool errors carry no verdict signal and should be treated as missing. The only valid verdict is deepseek's 'safe', which is well-reasoned and accurate.",
+  "coverage_issues": [
+    "qwen model failed to audit .SRCINFO due to HTTP 400 API error, resulting in inconclusive verdict"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Tool errors (API failures, timeouts) should not trigger disagreement escalations - they should be automatically retried or excluded from verdict calculations",
+    ".SRCINFO is auto-generated metadata from PKGBUILD and poses no execution risk; models should recognize this and not fail the entire audit if .SRCINFO analysis fails",
+    "VCS packages with SKIP checksums are a common source of false positive concerns; models should be trained to recognize this as standard practice when the source URL points to the legitimate upstream repository"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 9428,
+    "completion_tokens": 1128,
+    "cost": 0.0044608
+  },
+  "audits_judged": [
+    "20260907-150632-qwen-qwen3-235b-a22b-2507.md",
+    "20260907-150725-deepseek-deepseek-v4-flash.md",
+    "20260907-114120-openrouter-free.md"
+  ]
+}
