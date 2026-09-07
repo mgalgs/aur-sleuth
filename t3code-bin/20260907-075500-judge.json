@@ -1,0 +1,28 @@
+{
+  "package": "t3code-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The only valid report (deepseek) correctly identified the package as safe. The PKGBUILD uses standard AppImage extraction and sets the setuid bit on the chrome-sandbox, which is a normal requirement for Electron/Chromium applications. Sources are pinned with SHA-256 checksums, preventing upstream artifact swapping. The other report (qwen) resulted in an inconclusive verdict due to API errors, which carries no verdict signal per the judging rules.",
+  "disagreement_analysis": "The disagreement was caused by a tool error in the qwen model, which failed with HTTP 400 API errors during the final file review phase, resulting in an inconclusive verdict. The deepseek model successfully reviewed the files and found them safe.",
+  "coverage_issues": [
+    "qwen model failed to produce final file verdicts due to HTTP 400 API errors, resulting in an inconclusive overall status."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Tool errors such as API failures should be explicitly flagged in the report frontmatter so the judge can immediately discard the report without parsing the failed output.",
+    "Models should be trained to recognize standard Electron/Chromium setuid sandbox permissions as a normal application requirement rather than a potential privilege escalation risk."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 3611,
+    "completion_tokens": 1561,
+    "cost": 0.0031536000000000003
+  },
+  "audits_judged": [
+    "20260907-070632-qwen-qwen3-235b-a22b-2507.md",
+    "20260907-070650-deepseek-deepseek-v4-flash.md"
+  ]
+}
