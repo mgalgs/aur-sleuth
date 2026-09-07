@@ -1,0 +1,28 @@
+{
+  "package": "linux-mainline-docs",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard Linux kernel documentation build. The PKGBUILD, install hooks, and maintainer scripts contain no malicious code, network exfiltration, or unverified upstream swaps. The disagreement was solely due to an API error in the Qwen model when processing the kernel config file, which the Deepseek model successfully reviewed and confirmed as safe.",
+  "disagreement_analysis": "The Qwen model failed to audit `config.x86_64` due to an HTTP 400 API error, resulting in an inconclusive package verdict. The Deepseek model successfully audited the file and found it to be a standard, safe kernel configuration. There is no actual security disagreement between the models.",
+  "coverage_issues": [
+    "Qwen model failed to audit config.x86_64 due to an API error (HTTP 400 BadRequestError)."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "The orchestration layer should handle individual file API errors by retrying or falling back to another model's result for that specific file, rather than marking the entire package audit as inconclusive.",
+    "Large declarative files like kernel configs can sometimes cause API errors or timeouts; models should be prompted to quickly identify and pass non-executable configuration files to save context and avoid errors."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 6685,
+    "completion_tokens": 1910,
+    "cost": 0.0045839999999999995
+  },
+  "audits_judged": [
+    "20260907-031022-qwen-qwen3-235b-a22b-2507.md",
+    "20260907-031332-deepseek-deepseek-v4-flash.md"
+  ]
+}
