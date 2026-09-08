@@ -1,0 +1,31 @@
+{
+  "package": "firefox-nightly-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The disagreement stems from qwen3 flagging `get_latest_version.sh` as unsafe because it uses HTTP to fetch version metadata and injects it into the PKGBUILD. However, per the threat model, maintainer helper scripts that are not executed during `makepkg` (build, package, prepare, check) or via .install hooks are out of scope. This script is development tooling used by the maintainer to bump versions for nightly builds, a standard AUR pattern. The actual PKGBUILD pins checksums for the downloaded binaries, closing the swap risk. The HTTP usage and dynamic version resolution are packaging hygiene issues, not injection risks.",
+  "disagreement_analysis": "qwen3-235b flagged `get_latest_version.sh` for using unencrypted HTTP and modifying the PKGBUILD with remote data. deepseek-v4-flash correctly identified it as a standard AUR version-bump helper that is not executed during package installation. The disagreement is a classic false positive where a model flags maintainer tooling and packaging style rather than actual build/install-time injection.",
+  "coverage_issues": [
+    "qwen3-235b failed to review .SRCINFO due to an LLM API error (HTTP 400)."
+  ],
+  "false_positives": [
+    "get_latest_version.sh flagged by qwen3-235b: This is a maintainer helper script, not executed during makepkg. Fetching version metadata via HTTP from the official Mozilla FTP and updating the PKGBUILD is a normal AUR pattern for nightly/rolling packages. It does not constitute an injection risk during package build or installation."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models must be explicitly instructed to ignore maintainer helper scripts (e.g., get_latest_version.sh, update.sh) unless they are sourced or executed by PKGBUILD functions or .install scripts. These are development tooling, not build-time code.",
+    "Models should not flag HTTP vs HTTPS for fetching metadata or version resolution as 'unsafe' when it is part of standard AUR packaging patterns for nightly builds, especially when the actual downloaded artifacts are verified via checksums or GPG signatures. This is a packaging hygiene issue, not an injection risk."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 9807,
+    "completion_tokens": 1537,
+    "cost": 0.0051056
+  },
+  "audits_judged": [
+    "20260908-190926-qwen-qwen3-235b-a22b-2507.md",
+    "20260908-190911-deepseek-deepseek-v4-flash.md",
+    "20260906-195226-openrouter-free.md"
+  ]
+}
