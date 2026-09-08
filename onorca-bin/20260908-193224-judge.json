@@ -1,0 +1,28 @@
+{
+  "package": "onorca-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard AUR binary package for an Electron application. It downloads a .deb file from the official upstream GitHub repository with pinned SHA256 checksums, extracts it using bsdtar, and sets the setuid bit on chrome-sandbox, which is a normal requirement for Chromium-based applications. There are no install hooks, dynamic downloads, or malicious scripts. The disagreement was solely due to a transient API error in one of the models.",
+  "disagreement_analysis": "The qwen model returned 'inconclusive' because it encountered an HTTP 400 error when attempting to audit .SRCINFO. The deepseek model successfully audited all files and returned 'safe'. The openrouter model (advisory) also returned 'safe'. There is no actual security disagreement; the inconclusive result is an artifact of an API failure.",
+  "coverage_issues": [
+    "qwen model failed to audit .SRCINFO due to an HTTP 400 API error."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Transient API errors (e.g., HTTP 400) during file audits should be retried or handled gracefully to prevent cascading 'inconclusive' verdicts for the entire package when critical executable files like PKGBUILD are successfully verified as safe."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5896,
+    "completion_tokens": 1639,
+    "cost": 0.00398464
+  },
+  "audits_judged": [
+    "20260908-190556-qwen-qwen3-235b-a22b-2507.md",
+    "20260908-190632-deepseek-deepseek-v4-flash.md",
+    "20260903-041051-openrouter-free.md"
+  ]
+}
