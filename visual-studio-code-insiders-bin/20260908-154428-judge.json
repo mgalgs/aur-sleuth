@@ -1,0 +1,31 @@
+{
+  "package": "visual-studio-code-insiders-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The deepseek model successfully reviewed all 5 files and found them to be standard AUR packaging for a binary package. The PKGBUILD fetches pre-built VS Code Insiders binaries from Microsoft's official CDN with pinned SHA256 checksums, the package() function extracts and installs the deb normally, the .install script only contains informational message functions, and the launcher script is a standard wrapper reading user config. No malicious code, no unexpected network operations, no supply-chain attack indicators. The other reports' inconclusive verdicts were due to API errors (qwen: HTTP 400) and parse failures (openrouter/free), not security findings.",
+  "disagreement_analysis": "Disagreement caused by tool failures, not security analysis. qwen model encountered HTTP 400 errors when auditing PKGBUILD and .install files. openrouter/free model (advisory only) failed to parse its own output for .gitignore and PKGBUILD. deepseek successfully completed all file reviews and found no issues.",
+  "coverage_issues": [
+    "qwen model failed to audit PKGBUILD and visual-studio-code-insiders-bin.install due to HTTP 400 API errors",
+    "openrouter/free model failed to parse decisions for .gitignore and PKGBUILD"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "API errors and parse failures should trigger automatic retries rather than marking files as inconclusive",
+    "When multiple models are used, tool failures in one model should not block verdict determination if another model successfully completed the audit",
+    "The openrouter/free router had output format issues - models behind routers may need stricter output validation or fallback parsing"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 7743,
+    "completion_tokens": 1406,
+    "cost": 0.00427744
+  },
+  "audits_judged": [
+    "20260908-150601-qwen-qwen3-235b-a22b-2507.md",
+    "20260908-150652-deepseek-deepseek-v4-flash.md",
+    "20260904-232905-openrouter-free.md"
+  ]
+}
