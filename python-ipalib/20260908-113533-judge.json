@@ -1,0 +1,32 @@
+{
+  "package": "python-ipalib",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Report 1 (qwen3-235b) returned inconclusive due to LLM API failures (HTTP 400 errors) when auditing PKGBUILD and .SRCINFO - this is a tool error, not a security finding. Report 2 (deepseek-v4-flash) successfully audited all text files and found them safe, with detailed analysis showing standard AUR packaging practices: PKGBUILD has no malicious top-level code, sources are fetched from official Codeberg upstream, the SKIP checksum is for a detached .asc signature (normal practice), freeipa-client.install performs legitimate IPA client system integration, and nis-domainname.service is a standard systemd unit. Report 3 (openrouter/free, advisory) corroborates these findings. No injection patterns, no execution of untrusted content, no exfiltration - all code serves the package's stated purpose of packaging FreeIPA.",
+  "disagreement_analysis": "The disagreement stems from Report 1 experiencing API failures (HTTP 400 BadRequestError) when attempting to audit PKGBUILD and .SRCINFO, resulting in an inconclusive verdict. This is a tool/infrastructure failure, not a genuine security disagreement. Report 2 successfully completed the audit and found no issues.",
+  "coverage_issues": [
+    "Report 1 failed to audit PKGBUILD and .SRCINFO due to LLM API errors (HTTP 400)",
+    "All reports skipped ipaplatform.tar.gz (binary file) - acceptable as it's a declared source with checksum verification",
+    "No source_fetch attempted - upstream verification not performed"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "API failures should be clearly distinguished from security findings in verdict aggregation - a tool error causing 'inconclusive' should not trigger disagreement escalation when other models successfully complete the audit",
+    "When one model fails due to infrastructure errors and another succeeds with thorough analysis, the successful analysis should carry the verdict",
+    "Binary file skipping (tarballs, PGP keys) is appropriate when they are declared sources with checksum verification in the PKGBUILD"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 12413,
+    "completion_tokens": 1505,
+    "cost": 0.00589856
+  },
+  "audits_judged": [
+    "20260908-112143-qwen-qwen3-235b-a22b-2507.md",
+    "20260908-112157-deepseek-deepseek-v4-flash.md",
+    "20260907-154706-openrouter-free.md"
+  ]
+}
