@@ -1,0 +1,28 @@
+{
+  "package": "cockpit-tools-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD is a standard prebuilt binary package that downloads a .deb from the official GitHub releases with a pinned SHA256 checksum. There is no top-level code execution, no .install script, and no suspicious network operations. The only disagreement stems from a transient API error (HTTP 400) in the qwen model when reviewing the non-executable .SRCINFO file, which does not indicate a security risk.",
+  "disagreement_analysis": "The qwen model returned 'inconclusive' solely because it encountered an HTTP 400 error while auditing .SRCINFO. The deepseek model successfully audited all files and returned 'safe'. The openrouter report is advisory. There is no actual security disagreement; the inconclusive result is an artifact of a tool/API failure.",
+  "coverage_issues": [
+    "qwen model failed to review .SRCINFO due to an HTTP 400 BadRequestError."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Transient API errors (e.g., HTTP 400) on non-executable metadata files like .SRCINFO should not force an 'inconclusive' package verdict if the executable PKGBUILD is successfully audited and deemed safe. The tool should handle partial audit failures gracefully, retry the failed file, or default to the successful verdicts for non-executable metadata."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5981,
+    "completion_tokens": 1989,
+    "cost": 0.00445984
+  },
+  "audits_judged": [
+    "20260908-071425-qwen-qwen3-235b-a22b-2507.md",
+    "20260908-071821-deepseek-deepseek-v4-flash.md",
+    "20260907-232656-openrouter-free.md"
+  ]
+}
