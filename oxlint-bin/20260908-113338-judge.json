@@ -1,0 +1,30 @@
+{
+  "package": "oxlint-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "This is a standard binary package (-bin) that downloads prebuilt binaries from the official oxc-project/oxc GitHub repository with proper SHA256 checksums. The PKGBUILD contains only standard variable assignments and a package() function that installs binaries and documentation to conventional locations. No injection patterns, unexpected network endpoints, or code execution outside normal packaging operations were found. The 'disagreement' was caused by a tool error (API failure on .SRCINFO in the qwen model), not a security concern.",
+  "disagreement_analysis": "The qwen model returned 'inconclusive' due to an HTTP 400 API error when reviewing .SRCINFO, not due to any security finding. The deepseek model successfully reviewed all 4 files including .SRCINFO and found them safe. The openrouter/free report is advisory-only and does not count as a vote. There is no genuine security disagreement.",
+  "coverage_issues": [
+    "qwen model failed to review .SRCINFO due to API error (HTTP 400 BadRequestError), resulting in an inconclusive verdict"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Tool errors (API failures, timeouts) should be distinguished from security inconclusive verdicts. When a model fails to review a file due to infrastructure issues, the system should either retry or recognize that another model successfully reviewed the same file.",
+    "When one model's inconclusive result is caused by a tool error on a specific file, and another model successfully reviewed that same file without issues, the system should not escalate to a full re-audit.",
+    "For binary packages (-bin), the audit should verify that source URLs point to legitimate upstream release assets and that checksums are present for all downloaded files."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 6700,
+    "completion_tokens": 1249,
+    "cost": 0.00374272
+  },
+  "audits_judged": [
+    "20260908-111952-qwen-qwen3-235b-a22b-2507.md",
+    "20260908-112003-deepseek-deepseek-v4-flash.md",
+    "20260907-233319-openrouter-free.md"
+  ]
+}
