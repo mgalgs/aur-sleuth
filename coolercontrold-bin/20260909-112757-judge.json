@@ -1,0 +1,29 @@
+{
+  "package": "coolercontrold-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The only valid vote (deepseek-v4-flash) correctly identified the package as safe. The qwen model's inconclusive result was due to an API error on .SRCINFO, which is a tool failure and carries no verdict signal. The package uses pinned SHA-256 checksums for pre-compiled binaries fetched from the official upstream GitLab repository, closing the swap risk. No malicious top-level code or install hooks are present.",
+  "disagreement_analysis": "The apparent disagreement was caused by a tool error (HTTP 400 API failure) in the qwen model when reviewing .SRCINFO, leading to an inconclusive overall result. The deepseek model successfully reviewed all files and found no issues. The openrouter model was advisory only and does not count as a vote.",
+  "coverage_issues": [
+    "qwen model failed to review .SRCINFO due to an API error (HTTP 400), resulting in an inconclusive verdict and treated as missing."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Handle partial API failures gracefully: an error on a metadata file like .SRCINFO should not force an overall inconclusive verdict if the primary executable file (PKGBUILD) is successfully audited and found safe.",
+    "Models correctly recognize that -bin packages with pinned checksums from official sources do not require upstream binary fetching, as the checksum pins the artifact and closes the swap risk."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5008,
+    "completion_tokens": 2371,
+    "cost": 0.0046374400000000005
+  },
+  "audits_judged": [
+    "20260909-112119-qwen-qwen3-235b-a22b-2507.md",
+    "20260909-112128-deepseek-deepseek-v4-flash.md",
+    "20260909-073032-openrouter-free.md"
+  ]
+}
