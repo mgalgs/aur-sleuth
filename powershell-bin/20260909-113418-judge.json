@@ -1,0 +1,29 @@
+{
+  "package": "powershell-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard binary packaging of PowerShell from official GitHub releases with pinned SHA256 checksums. The install script performs standard /etc/shells registration. The only disagreement was caused by a transient API error (HTTP 400) in the qwen model when auditing powershell.install, rendering its verdict void. The deepseek model successfully audited all files and found them safe.",
+  "disagreement_analysis": "The qwen model failed to audit powershell.install due to an LLM API error (HTTP 400), resulting in an inconclusive package verdict. The deepseek model successfully audited the same file and found it safe. The openrouter report is marked as advisory and does not count as a vote.",
+  "coverage_issues": [
+    "qwen/qwen3-235b-a22b-2507 failed to audit powershell.install due to an LLM API error (HTTP 400 BadRequestError)."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Transient API errors (e.g., HTTP 400) during individual file audits should trigger automatic retries before marking the entire package audit as inconclusive.",
+    "The tool's logic to invalidate verdicts from models that experienced tool errors and to ignore advisory models is working correctly and prevented a false inconclusive verdict."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 7426,
+    "completion_tokens": 1953,
+    "cost": 0.00487616
+  },
+  "audits_judged": [
+    "20260909-112015-qwen-qwen3-235b-a22b-2507.md",
+    "20260909-112031-deepseek-deepseek-v4-flash.md",
+    "20260909-072844-openrouter-free.md"
+  ]
+}
