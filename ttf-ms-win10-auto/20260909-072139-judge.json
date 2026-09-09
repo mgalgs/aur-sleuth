@@ -1,0 +1,28 @@
+{
+  "package": "ttf-ms-win10-auto",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package extracts Windows 10 fonts from an official Microsoft evaluation ISO. Although the ISO source itself uses a SKIP checksum, the actual extracted font files are strictly verified against a hardcoded list of BLAKE2 checksums, effectively pinning the payload and preventing substitution attacks. The PKGBUILD logic is standard for this type of package, with no malicious execution, obfuscation, or exfiltration. Deepseek successfully audited all files and correctly identified the package as safe, while Qwen's inconclusive result was solely due to API errors on non-executable metadata files.",
+  "disagreement_analysis": "The disagreement is an artifact of a tool failure rather than a difference in security analysis. Qwen encountered HTTP 400 errors when attempting to audit the LICENSE and .SRCINFO files, resulting in an inconclusive package verdict. Deepseek successfully audited all files and correctly identified the package as safe.",
+  "coverage_issues": [
+    "qwen/qwen3-235b-a22b-2507 failed to review LICENSE and .SRCINFO due to LLM API HTTP 400 errors."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Implement retry logic or graceful degradation for LLM API errors (e.g., HTTP 400) so that a failure on a single non-critical file (like LICENSE) does not force an inconclusive verdict for the entire package when the executable PKGBUILD is already deemed safe.",
+    "Ensure models are explicitly prompted to recognize 'payload pinning' patterns, where a large source (like an ISO) uses SKIP checksums but the actual installed files are verified with strict checksums, to prevent unnecessary flagging of unpinned sources."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 4542,
+    "completion_tokens": 1828,
+    "cost": 0.0037932800000000004
+  },
+  "audits_judged": [
+    "20260909-070728-qwen-qwen3-235b-a22b-2507.md",
+    "20260909-070802-deepseek-deepseek-v4-flash.md"
+  ]
+}
