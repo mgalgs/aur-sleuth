@@ -1,0 +1,29 @@
+{
+  "package": "beeper-v4-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The _update_version function fetches version info from api.beeper.com (Beeper's official API) to auto-update the package version. This is a normal AUR pattern for -bin packages tracking upstream releases without stable URLs. The fetch serves the package's stated purpose, contacts the project's own upstream, and does not execute fetched content. The SKIP checksum is a packaging hygiene issue (noted in instructions as not grounds for unsafe), not an injection. The sed modification to app.asar is a legitimate packaging refinement to prevent default handler registration.",
+  "disagreement_analysis": "Qwen flagged the global-scope network fetch during sourcing as a supply-chain risk, citing potential command injection via curl output in command substitution. This overreacts to a normal AUR auto-update pattern. The fetch targets the package's own declared upstream API (api.beeper.com), serves the stated purpose of version tracking, and does not execute the response. Deepseek correctly identified this as standard practice for -bin packages and noted the SKIP checksum is a quality issue, not malice. Qwen conflated packaging hygiene with injection risk.",
+  "coverage_issues": [],
+  "false_positives": [
+    "Qwen's 'unsafe' verdict: global-scope curl to api.beeper.com for version resolution is a normal AUR pattern for vendors without stable URLs. The fetch serves the package's stated purpose, contacts the project's own upstream, and does not execute fetched content. This is packaging style, not injection."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models should distinguish between 'network fetch during sourcing' (normal for auto-updating -bin packages) and 'executing fetched content' (actual injection). The threat model test is: does the fetch serve the package's stated purpose and contact the project's own upstream?",
+    "Command substitution capturing curl output for version/URL extraction is a common AUR pattern and should not be flagged as command injection risk unless the output is eval'd or passed to shell interpreters unsanitized.",
+    "SKIP checksums should be noted as packaging quality issues but never counted toward an unsafe verdict per the threat model boundaries."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 4648,
+    "completion_tokens": 1392,
+    "cost": 0.0032691200000000004
+  },
+  "audits_judged": [
+    "20260909-190943-qwen-qwen3-235b-a22b-2507.md",
+    "20260909-191636-deepseek-deepseek-v4-flash.md"
+  ]
+}
