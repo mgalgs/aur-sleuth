@@ -1,0 +1,30 @@
+{
+  "package": "clash-party-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Only one valid vote exists (deepseek-v4-flash), which correctly identified the package as safe. The PKGBUILD downloads prebuilt RPMs from the official upstream GitHub repository with pinned SHA256 checksums, and the launcher script is a standard Electron wrapper. The other reports were invalidated by tool errors (HTTP 400) or parse failures, not security concerns. No malicious injection patterns were found in the packaging.",
+  "disagreement_analysis": "The disagreement was caused by tool failures rather than divergent security analysis. The qwen model crashed with HTTP 400 errors on all files, and the openrouter model failed to parse the .SRCINFO file. The deepseek model successfully reviewed all files and found no issues, correctly applying the threat model to standard AUR packaging practices.",
+  "coverage_issues": [
+    "qwen/qwen3-235b-a22b-2507 failed with HTTP 400 BadRequestError on all 3 files, resulting in no verdict signal.",
+    "openrouter/free failed to parse a decision from the model response for .SRCINFO, leaving it inconclusive."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Implement automatic retries or fallback mechanisms for transient API errors (e.g., HTTP 400) to prevent entire audits from failing when an initial check might have passed.",
+    "Improve output parsing robustness for simple metadata files like .SRCINFO to avoid inconclusive verdicts due to minor formatting variations in model responses."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5332,
+    "completion_tokens": 2016,
+    "cost": 0.00428672
+  },
+  "audits_judged": [
+    "20260909-191917-qwen-qwen3-235b-a22b-2507.md",
+    "20260909-191928-deepseek-deepseek-v4-flash.md",
+    "20260909-114349-openrouter-free.md"
+  ]
+}
