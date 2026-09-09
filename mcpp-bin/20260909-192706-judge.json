@@ -1,0 +1,32 @@
+{
+  "package": "mcpp-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The deepseek-v4-flash model successfully audited all three files (PKGBUILD, .SRCINFO, mcpp.sh) and found them safe. The package is a standard prebuilt binary distribution: PKGBUILD downloads pinned tarballs from the official GitHub releases with SHA256 checksums, installs to /opt/mcpp, and places a simple wrapper script on PATH. The mcpp.sh script is a benign launcher that sets environment variables and execs the binary with no network access or suspicious operations. The other two reports were inconclusive due to tool errors (API failure in qwen, parsing failure in openrouter/free), not security concerns. The openrouter/free report is also marked advisory:true and doesn't count as a vote. No injection patterns, no execution of fetched content, no fetching from unrelated hosts.",
+  "disagreement_analysis": "The disagreement was caused by tool failures, not security analysis. The qwen model encountered an HTTP 400 error when auditing mcpp.sh, and the openrouter/free model failed to parse its own PKGBUILD response. Only deepseek-v4-flash completed a full audit successfully. This is a case of incomplete coverage creating apparent disagreement, not genuine analytical divergence.",
+  "coverage_issues": [
+    "qwen/qwen3-235b-a22b-2507: API error (HTTP 400) prevented audit of mcpp.sh",
+    "openrouter/free: Could not parse decision from model response for PKGBUILD"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Tool errors (API failures, parsing failures) should be distinguished from security findings - they indicate infrastructure problems, not package risks",
+    "When one model completes a full audit successfully while others fail due to tool errors, the successful audit should carry decisive weight",
+    "Advisory reports (advisory:true) correctly don't count as votes, but their tool failures should still be noted in coverage_issues for transparency",
+    "Standard prebuilt binary packages with pinned checksums and simple wrapper scripts are common AUR patterns that models should recognize quickly without hesitation"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 6018,
+    "completion_tokens": 1355,
+    "cost": 0.00366016
+  },
+  "audits_judged": [
+    "20260909-192049-qwen-qwen3-235b-a22b-2507.md",
+    "20260909-192028-deepseek-deepseek-v4-flash.md",
+    "20260909-114703-openrouter-free.md"
+  ]
+}
