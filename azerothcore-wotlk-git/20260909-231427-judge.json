@@ -1,0 +1,30 @@
+{
+  "package": "azerothcore-wotlk-git",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package consists of standard AUR packaging files and local administrative helper scripts for a game server. The first model's initial UNSAFE flag on acore_mod was a false positive, which it self-corrected. The second model successfully reviewed all files, including those the first model missed due to API errors, and correctly identified them as safe. There is no evidence of malicious injection in the PKGBUILD, install hooks, or patches.",
+  "disagreement_analysis": "The first model returned 'inconclusive' due to transient API errors preventing the review of two files, and initially flagged acore_mod as unsafe before self-correcting. The second model successfully reviewed all files and correctly assessed them as safe.",
+  "coverage_issues": [
+    "qwen3-235b-a22b-2507 failed to review acore-world-server.service and acore_setup due to HTTP 400 API errors."
+  ],
+  "false_positives": [
+    "qwen3-235b-a22b-2507 initially flagged acore_mod as UNSAFE due to its use of sudo and deployment of modules from /usr/src/acore-modules. This is a legitimate admin helper script for a complex game server, not an AUR packaging injection."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models may falsely flag legitimate local admin/setup scripts that use sudo and modify /etc as supply-chain attacks. Better context is needed to distinguish between AUR build-time injection and post-install administrative tooling.",
+    "Transient API errors in one model should not force an inconclusive verdict if another model successfully covers the missing files and provides a sound assessment."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 8990,
+    "completion_tokens": 2108,
+    "cost": 0.00557504
+  },
+  "audits_judged": [
+    "20260909-230427-qwen-qwen3-235b-a22b-2507.md",
+    "20260909-230753-deepseek-deepseek-v4-flash.md"
+  ]
+}
