@@ -1,0 +1,30 @@
+{
+  "package": "linux-lqxcjk-headers",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The only valid report (deepseek-v4-flash) thoroughly reviewed all three maintainer files (PKGBUILD, .SRCINFO, linux-lqx.install) and found no injection risks. The PKGBUILD contains standard kernel packaging patterns with pinned checksums and PGP verification. The .install file legitimately disables irqbalance as part of Liquorix kernel tuning. The qwen report failed due to API errors and carries no verdict signal. The openrouter report is advisory-only. No malicious code execution, no unverified remote content execution, and no supply-chain injection patterns were identified.",
+  "disagreement_analysis": "The apparent disagreement stems from the qwen model experiencing HTTP 400 API errors on all file reviews, resulting in an inconclusive verdict. This is a tool failure, not a substantive disagreement. The deepseek model (the only valid vote) correctly identified the package as safe with thorough reasoning.",
+  "coverage_issues": [
+    "qwen/qwen3-235b-a22b-2507 report failed with HTTP 400 BadRequestError on all three file reviews, providing no verdict signal"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "API failures (HTTP 400) should trigger automatic retry or fallback to prevent inconclusive results from valid packages",
+    "Models correctly distinguish between supply-chain hygiene concerns (proxy usage, SKIP on .tar.sign) and actual injection risks - this distinction should be reinforced in prompts",
+    "The eval/declare-f pattern for split-package function definitions is common in kernel PKGBUILDs and should be recognized as safe when no user-controlled strings are injected"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 6322,
+    "completion_tokens": 1535,
+    "cost": 0.00398784
+  },
+  "audits_judged": [
+    "20260910-071451-qwen-qwen3-235b-a22b-2507.md",
+    "20260910-071533-deepseek-deepseek-v4-flash.md",
+    "20260903-012911-openrouter-free.md"
+  ]
+}
