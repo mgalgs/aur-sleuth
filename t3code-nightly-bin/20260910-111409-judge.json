@@ -1,0 +1,32 @@
+{
+  "package": "t3code-nightly-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Only one report (deepseek/deepseek-v4-flash) produced a valid verdict. It thoroughly reviewed both PKGBUILD and .SRCINFO, finding standard -bin packaging: AppImage downloaded from official GitHub repository with pinned sha256 checksums, normal extraction in prepare(), standard installation in package() including setuid chrome-sandbox (expected for Electron apps). No malicious code, no suspicious network destinations, no exfiltration. The other two reports failed due to tool errors (API failure and parsing failure), not substantive concerns.",
+  "disagreement_analysis": "No actual disagreement. Two reports failed with tool errors (HTTP 400 API failure for qwen, parsing failure for openrouter/free). The openrouter/free report was also marked advisory:true, so it carries no vote. Only deepseek/deepseek-v4-flash produced a valid verdict, which was SAFE with comprehensive reasoning.",
+  "coverage_issues": [
+    "qwen/qwen3-235b-a22b-2507: PKGBUILD review failed with HTTP 400 BadRequestError - tool error, no verdict signal",
+    "openrouter/free: PKGBUILD review failed with parsing error (model output 'User Safety: safe' instead of expected format) - tool error, no verdict signal",
+    "openrouter/free: Only reviewed 1 of 2 files before failing"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Tool errors (API failures, parsing failures) should be clearly distinguished from substantive inconclusive verdicts in the final report - these carry no verdict signal and should not trigger disagreement escalations",
+    "Advisory reports (advisory:true) should be excluded from disagreement calculations entirely, as they are context-only and don't earn a vote",
+    "The deepseek model demonstrated strong analysis of AppImage packaging patterns, correctly identifying setuid chrome-sandbox as standard for Electron apps rather than flagging it as suspicious"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 4449,
+    "completion_tokens": 1155,
+    "cost": 0.00290208
+  },
+  "audits_judged": [
+    "20260910-110117-qwen-qwen3-235b-a22b-2507.md",
+    "20260910-110119-deepseek-deepseek-v4-flash.md",
+    "20260906-074854-openrouter-free.md"
+  ]
+}
