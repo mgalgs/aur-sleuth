@@ -1,0 +1,32 @@
+{
+  "package": "jellypilot",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD follows standard AUR practices: git source pinned to tag v$pkgver with SKIP checksum (normal for VCS sources), straightforward build using bun to install dependencies and compile the application, and standard installation of binaries/assets. No malicious code, obfuscated commands, or suspicious network operations detected. The build process fetching npm dependencies via bun is expected for a JavaScript project, not an injection. All reviewed files (LICENSE, .SRCINFO, PKGBUILD, REUSE.toml, desktop entry) contain only standard metadata or benign content.",
+  "disagreement_analysis": "Disagreements were caused by tool errors, not security concerns. Report 1 (qwen) had an HTTP 400 API error on LICENSE (though it was re-reviewed successfully), Report 3 (openrouter, advisory-only) had a parsing error on PKGBUILD when the model returned an unparseable format. Report 2 (deepseek) provided a clear, well-reasoned safe verdict. The underlying security analysis across all models found no injection risks.",
+  "coverage_issues": [
+    "LICENSE file appears to be queued for review twice (tool bug visible in logs)",
+    "API errors and parsing failures caused false inconclusive verdicts despite successful security analysis"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Tool errors (API failures, parsing errors) should be distinguished from actual security concerns and not trigger inconclusive verdicts when the security analysis itself succeeded",
+    "Fix duplicate file review bug where LICENSE files are queued multiple times",
+    "Improve error handling to gracefully handle unparseable model responses without marking files as inconclusive",
+    "Advisory reports with tool errors should not contribute to disagreement calculations"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 8258,
+    "completion_tokens": 2157,
+    "cost": 0.00540352
+  },
+  "audits_judged": [
+    "20260911-071158-qwen-qwen3-235b-a22b-2507.md",
+    "20260911-071202-deepseek-deepseek-v4-flash.md",
+    "20260910-192500-openrouter-free.md"
+  ]
+}
