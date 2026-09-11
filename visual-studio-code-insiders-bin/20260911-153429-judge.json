@@ -1,0 +1,30 @@
+{
+  "package": "visual-studio-code-insiders-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard binary AUR package for VS Code Insiders. All 5 files were successfully reviewed by deepseek-v4-flash and found safe: PKGBUILD downloads from official Microsoft domain (vscode.download.prss.microsoft.com) with pinned SHA256 checksums, uses standard bsdtar extraction, and performs normal packaging operations. The .install script only prints informational messages. The launcher script reads user config and executes the binary. No injection attempts, no suspicious network activity, no execution of fetched content. The qwen model's inconclusive result was caused by HTTP 400 API errors on 2 files, not security concerns.",
+  "disagreement_analysis": "The disagreement was triggered by qwen3-235b returning 'inconclusive' due to API failures (HTTP 400 BadRequestError) when reviewing .SRCINFO and visual-studio-code-insiders-bin.install. This is a tool error, not a security disagreement. The deepseek-v4-flash model successfully reviewed all 5 files including those two, finding them safe. The openrouter/free report is advisory-only and doesn't count as a vote.",
+  "coverage_issues": [
+    "qwen3-235b failed to review .SRCINFO and visual-studio-code-insiders-bin.install due to HTTP 400 API errors, leaving 2 of 5 files unreviewed"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Tool errors (API failures) should trigger automatic retry or fallback to a different model for the failed files, rather than marking the entire audit as inconclusive",
+    "When one model has tool errors and another successfully reviews all files, the successful review should be weighted more heavily in the adjudication logic",
+    "The disagreement detection system should distinguish between 'inconclusive due to tool errors' vs 'inconclusive due to genuine security uncertainty' - these require different handling"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 7645,
+    "completion_tokens": 1422,
+    "cost": 0.00426656
+  },
+  "audits_judged": [
+    "20260911-151257-qwen-qwen3-235b-a22b-2507.md",
+    "20260911-151412-deepseek-deepseek-v4-flash.md",
+    "20260909-032149-openrouter-free.md"
+  ]
+}
