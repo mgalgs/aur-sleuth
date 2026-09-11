@@ -1,0 +1,29 @@
+{
+  "package": "beeper-v4-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The _update_version function performs a network call to api.beeper.com (the package's own declared upstream) to resolve the download URL and version. This is explicitly described as a 'normal AUR pattern for vendors without stable URLs' in the threat model. The curl request only fetches metadata (filename/version via byte-range request and redirect parsing), not executable code. The actual AppImage download occurs through makepkg's standard source array. The qwen model's concerns about 'untrusted network calls during PKGBUILD sourcing' and 'unvalidated parsing' overreact to a standard packaging pattern. No code is executed from the network response\u2014only grep/sed extraction of a filename string. This serves the legitimate purpose of version resolution for a -bin package tracking upstream releases.",
+  "disagreement_analysis": "The qwen model flagged the _update_version function's curl call to api.beeper.com as 'genuinely malicious behavior' and a 'supply-chain risk' because it executes network I/O at parse time. This is a false positive: the threat model explicitly states that 'A PKGBUILD that resolves its download URL by fetching the package's own declared upstream page, parsing it with grep/sed and executing none of it, is a normal AUR pattern.' The deepseek model correctly identified this as a common pattern for -bin packages and noted no malicious indicators. The qwen model conflated 'unconventional packaging' with 'malicious injection' and failed to apply the threat model's explicit exception for upstream URL resolution.",
+  "coverage_issues": [],
+  "false_positives": [
+    "qwen model's 'Top-level network call in _update_version' finding: The curl to api.beeper.com is the package's own declared upstream, used only to resolve the download URL/version. This is explicitly a normal AUR pattern per the threat model. The model overreacted to network I/O at parse time without recognizing it serves a legitimate packaging purpose and doesn't execute fetched content."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models need stronger grounding on the threat model's explicit exception: 'A PKGBUILD that resolves its download URL by fetching the package's own declared upstream page, parsing it with grep/sed and executing none of it, is a normal AUR pattern.' The qwen model violated this by flagging exactly this pattern.",
+    "Audit prompts should emphasize the distinction between 'fetching metadata to resolve URLs' (safe) vs 'fetching and executing content' (unsafe). Models conflate any network call during sourcing with supply-chain risk.",
+    "The phrase 'untrusted network calls' in model reasoning should be challenged: if the URL is the package's own declared upstream (api.beeper.com for a Beeper package), it is not 'untrusted' in the threat model's sense\u2014it's the expected source."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5582,
+    "completion_tokens": 1492,
+    "cost": 0.0036960000000000005
+  },
+  "audits_judged": [
+    "20260911-151612-qwen-qwen3-235b-a22b-2507.md",
+    "20260911-151855-deepseek-deepseek-v4-flash.md"
+  ]
+}
