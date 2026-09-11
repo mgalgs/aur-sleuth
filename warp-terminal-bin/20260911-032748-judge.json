@@ -1,0 +1,29 @@
+{
+  "package": "warp-terminal-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard AUR binary package (-bin) that downloads precompiled binaries from the official upstream domain (releases.warp.dev) with pinned SHA256 checksums. The PKGBUILD contains no dangerous top-level code, and the package() function performs standard extraction and installation steps. The only valid voting model correctly identified it as safe. The other models either suffered tool errors or were marked as advisory.",
+  "disagreement_analysis": "The apparent disagreement stems from qwen/qwen3-235b-a22b-2507 returning 'inconclusive' due to HTTP 400 API errors when auditing the PKGBUILD and .gitignore, rather than a genuine security concern. openrouter/free is marked as advisory and does not count as a vote. deepseek/deepseek-v4-flash is the sole valid vote and correctly assessed the package as safe.",
+  "coverage_issues": [
+    "qwen/qwen3-235b-a22b-2507 failed to audit .gitignore and PKGBUILD due to HTTP 400 BadRequestError, resulting in an inconclusive verdict."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "The audit tool should differentiate between LLM API failures (tool errors) and genuine security inconclusiveness. A tool error on critical files like PKGBUILD should trigger a retry or be flagged as a coverage failure rather than an inconclusive security verdict.",
+    "Ensure advisory models and tool-error models are correctly excluded from the final verdict aggregation to prevent false disagreements."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 6411,
+    "completion_tokens": 1652,
+    "cost": 0.004166080000000001
+  },
+  "audits_judged": [
+    "20260911-030106-qwen-qwen3-235b-a22b-2507.md",
+    "20260911-030409-deepseek-deepseek-v4-flash.md",
+    "20260904-031836-openrouter-free.md"
+  ]
+}
