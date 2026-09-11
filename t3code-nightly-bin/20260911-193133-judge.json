@@ -1,0 +1,32 @@
+{
+  "package": "t3code-nightly-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The only successful and complete audit (deepseek/deepseek-v4-flash) thoroughly reviewed both .SRCINFO and PKGBUILD, finding standard AppImage packaging: HTTPS sources from the official GitHub repository (pingdotgg/t3code), pinned SHA256 checksums, extraction and installation to /opt, standard chrome-sandbox setuid permissions (4755) required for Electron, and inline-generated wrapper scripts. No command substitution, eval, or execution of untrusted code exists in the global scope or build functions. The other two reports failed due to tool errors (HTTP 400 and parse failure), not substantive security concerns.",
+  "disagreement_analysis": "The disagreement is entirely due to tool/infrastructure failures, not substantive security analysis. The qwen model's full file review failed with HTTP 400 errors (though its initial PKGBUILD audit succeeded and found it safe). The openrouter/free model failed to produce parseable output and only reviewed 1 of 2 files. Only deepseek/deepseek-v4-flash completed successfully, providing a thorough and accurate assessment.",
+  "coverage_issues": [
+    "qwen/qwen3-235b-a22b-2507: Full file review failed with HTTP 400 errors for both .SRCINFO and PKGBUILD, despite initial PKGBUILD audit succeeding",
+    "openrouter/free: Failed to parse model response and only reviewed PKGBUILD (1 of 2 files), marked as advisory"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Implement retry logic or fallback models when LLM API requests fail with HTTP 400 errors",
+    "Enforce strict output format validation for models to prevent parse failures (e.g., require XML tags in response)",
+    "Ensure all maintainer files are reviewed even if initial checks pass - the openrouter model skipped .SRCINFO",
+    "The initial PKGBUILD audit pattern is valuable - it provides early safety signals before full review, and should be preserved even when subsequent reviews fail"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 4225,
+    "completion_tokens": 1341,
+    "cost": 0.00306848
+  },
+  "audits_judged": [
+    "20260911-190656-qwen-qwen3-235b-a22b-2507.md",
+    "20260911-190826-deepseek-deepseek-v4-flash.md",
+    "20260906-074854-openrouter-free.md"
+  ]
+}
