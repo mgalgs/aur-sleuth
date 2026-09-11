@@ -1,0 +1,30 @@
+{
+  "package": "visual-studio-code-insiders-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard binary redistribution of VS Code Insiders from Microsoft's official CDN. The PKGBUILD downloads pinned .deb archives with SHA256 checksums, extracts them, installs a launcher wrapper, and performs standard post-install operations (symlinks, desktop entry adjustments, removing setuid from chrome-sandbox). The .install script only prints informational notes. The launcher script reads user config flags and execs the binary. No evidence of injected malicious code, unauthorized network requests, or execution of fetched content. The disagreement stems from Report 1's API failures (HTTP 400 errors) preventing it from auditing PKGBUILD and .install files, not from actual security concerns.",
+  "disagreement_analysis": "Report 1 (qwen3-235b) returned inconclusive due to LLM API errors (HTTP 400 BadRequestError) when attempting to audit PKGBUILD and visual-studio-code-insiders-bin.install. Report 2 (deepseek-v4-flash) successfully reviewed all files and found them safe. Report 3 (openrouter/free) is advisory-only and does not count as a vote. The disagreement is a tool failure, not a substantive security disagreement.",
+  "coverage_issues": [
+    "Report 1 failed to audit PKGBUILD and visual-studio-code-insiders-bin.install due to HTTP 400 API errors, leaving critical files unaudited"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "When LLM API calls fail for critical files (PKGBUILD, .install), the audit tool should retry or escalate rather than marking the entire audit inconclusive",
+    "Inconclusive verdicts due to tool errors should be distinguished from inconclusive verdicts due to genuine security uncertainty",
+    "API error handling should allow partial audit results to contribute to the final verdict when other models have successfully audited the same files"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 7587,
+    "completion_tokens": 1485,
+    "cost": 0.00432864
+  },
+  "audits_judged": [
+    "20260911-111533-qwen-qwen3-235b-a22b-2507.md",
+    "20260911-111737-deepseek-deepseek-v4-flash.md",
+    "20260909-032149-openrouter-free.md"
+  ]
+}
