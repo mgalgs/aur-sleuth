@@ -1,0 +1,30 @@
+{
+  "package": "firefox-nightly-i18n-zh-cn",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Two independent models (deepseek-v4-flash and openrouter/free) reviewed both PKGBUILD and .SRCINFO and found no security issues. The package is a standard Firefox Nightly language pack that downloads an XPI from Mozilla's official FTP server with a pinned SHA256 checksum and installs it without extraction or execution. The third model (qwen3-235b) returned inconclusive solely due to an HTTP 400 API error during the full PKGBUILD review, not due to any security concern. Its initial pre-review scan also found no dangerous top-level code. There is no evidence of injected code, untrusted network requests, or supply-chain risk.",
+  "disagreement_analysis": "The disagreement was caused by a tool failure (HTTP 400 BadRequestError) in the qwen3-235b model when attempting to fully audit the PKGBUILD, not by any substantive security concern. The other two models successfully reviewed the same file and found it safe. The inconclusive verdict was a mechanical failure, not a reflection of ambiguous evidence.",
+  "coverage_issues": [
+    "qwen3-235b-a22b-2507: PKGBUILD full review failed due to LLM API HTTP 400 error, resulting in inconclusive verdict despite successful initial pre-review scan"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "When a model's inconclusive verdict is caused by a tool/API error rather than substantive security analysis, the audit system should not treat it as a genuine disagreement requiring escalation. The system should distinguish between 'I found ambiguous evidence' and 'I crashed while looking.'",
+    "For simple, well-structured packages (like language packs with pinned checksums from official sources), consistent SAFE verdicts from multiple models should override a single tool-failure inconclusive, especially when the failed model's initial scan also found no issues.",
+    "Consider implementing automatic retry logic for transient API errors (HTTP 400/500) before marking a file as inconclusive, to avoid unnecessary escalations."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 4980,
+    "completion_tokens": 1234,
+    "cost": 0.00317312
+  },
+  "audits_judged": [
+    "20260911-191841-qwen-qwen3-235b-a22b-2507.md",
+    "20260911-191958-deepseek-deepseek-v4-flash.md",
+    "20260909-114610-openrouter-free.md"
+  ]
+}
