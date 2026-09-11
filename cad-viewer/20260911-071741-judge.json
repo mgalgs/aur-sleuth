@@ -1,0 +1,29 @@
+{
+  "package": "cad-viewer",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package consists of standard AUR packaging files for an Electron application. The PKGBUILD and .SRCINFO use pinned checksums for upstream sources, mitigating swap risks. The auxiliary files (cad-viewer-main.js, cad-viewer.desktop, cad-viewer.sh) contain no malicious injections. The HTML entity encoding issue in cad-viewer.sh is a packaging bug that breaks the script's argument passing, but it is not a security vulnerability or malicious injection. The deepseek model correctly assessed all files as safe.",
+  "disagreement_analysis": "The qwen model returned 'inconclusive' due to an API error (HTTP 400 BadRequestError) when attempting to audit cad-viewer-main.js and cad-viewer.desktop. The deepseek model successfully audited all files and correctly returned 'safe'. The openrouter/free model (advisory) also returned 'safe' and correctly identified the HTML entity bug in cad-viewer.sh as a non-malicious packaging error.",
+  "coverage_issues": [
+    "qwen model failed to review cad-viewer-main.js and cad-viewer.desktop due to an LLM API error (HTTP 400)."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "The audit tool should handle LLM API errors (like HTTP 400) by retrying or clearly separating file-level errors from the overall package verdict, rather than defaulting the entire package to 'inconclusive' when the successfully reviewed files are safe.",
+    "Models should be prompted to explicitly distinguish between packaging bugs (e.g., HTML entity encoding breaking a shell script) and actual security injections, ensuring that broken but benign scripts are correctly classified as safe."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 7805,
+    "completion_tokens": 2243,
+    "cost": 0.00536864
+  },
+  "audits_judged": [
+    "20260911-071315-qwen-qwen3-235b-a22b-2507.md",
+    "20260911-071324-deepseek-deepseek-v4-flash.md",
+    "20260910-153536-openrouter-free.md"
+  ]
+}
