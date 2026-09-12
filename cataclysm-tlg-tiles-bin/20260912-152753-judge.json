@@ -1,0 +1,30 @@
+{
+  "package": "cataclysm-tlg-tiles-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The only valid voting report (deepseek-v4-flash) correctly assessed the PKGBUILD and all metadata files as safe. The package downloads pinned binaries from the official upstream GitHub repository and uses standard AUR packaging practices. The 'disagreement' is purely an artifact of tool errors: the qwen model encountered HTTP 400 errors on benign files (.SRCINFO, LICENSE), and the openrouter model (which is advisory-only and does not count as a vote) failed to parse responses for LICENSE and REUSE.toml. Neither error indicates a security risk.",
+  "disagreement_analysis": "The disagreement stems from LLM API failures and parsing errors on non-executable files (LICENSE, .SRCINFO, REUSE.toml) in the qwen and openrouter reports, forcing an 'inconclusive' status. There is no actual security disagreement among the models that successfully evaluated the executable packaging logic.",
+  "coverage_issues": [
+    "qwen/qwen3-235b-a22b-2507 failed to audit .SRCINFO and LICENSE due to HTTP 400 API errors.",
+    "openrouter/free failed to parse model responses for REUSE.toml and LICENSE."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Transient LLM API errors or parsing failures on non-executable metadata files (like LICENSE or .SRCINFO) should not block the final verdict if the critical executable files (PKGBUILD, .install) are successfully audited and deemed safe.",
+    "The audit tool should gracefully degrade or retry on API errors for benign files rather than marking the entire package audit as inconclusive."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 8949,
+    "completion_tokens": 2327,
+    "cost": 0.00584224
+  },
+  "audits_judged": [
+    "20260912-151341-qwen-qwen3-235b-a22b-2507.md",
+    "20260912-151420-deepseek-deepseek-v4-flash.md",
+    "20260909-032442-openrouter-free.md"
+  ]
+}
