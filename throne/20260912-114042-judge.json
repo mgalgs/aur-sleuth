@@ -1,0 +1,28 @@
+{
+  "package": "throne",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package contains no malicious injections. The PKGBUILD includes poor packaging practices (disabling Go module checksum verification, using unpinned @latest for build tools, and a branch-based git source), but these are build workarounds and hygiene issues, not malicious code injected by the maintainer. The disagreement was caused by a transient API error in the first model, not a security finding.",
+  "disagreement_analysis": "The qwen model returned 'inconclusive' solely because it encountered an HTTP 400 API error when attempting to review the PKGBUILD during the full file review phase. The deepseek model successfully reviewed the PKGBUILD and correctly identified that the questionable build practices are workarounds, not malicious injections.",
+  "coverage_issues": [
+    "qwen model failed to review the PKGBUILD in the full audit pass due to an LLM API error (HTTP 400)."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Transient LLM API errors during the full file review phase should trigger a retry or fallback, rather than immediately failing the entire audit with an 'inconclusive' verdict, especially when the initial sourcing safety check passed.",
+    "Models should be explicitly prompted to distinguish between poor packaging hygiene (e.g., disabling checksums, using unpinned build tools) and actual malicious injections, ensuring the former does not skew the verdict."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 4363,
+    "completion_tokens": 2114,
+    "cost": 0.00410208
+  },
+  "audits_judged": [
+    "20260912-111202-qwen-qwen3-235b-a22b-2507.md",
+    "20260912-111209-deepseek-deepseek-v4-flash.md"
+  ]
+}
