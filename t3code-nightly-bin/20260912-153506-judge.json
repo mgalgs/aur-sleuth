@@ -1,0 +1,30 @@
+{
+  "package": "t3code-nightly-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard AppImage binary distribution. The PKGBUILD fetches from the official upstream GitHub repository with pinned SHA-256 checksums, extracts the AppImage in prepare(), and installs it in package(). The setuid bit on chrome-sandbox is expected for Electron apps. No malicious code, eval, or unexpected network calls are present. The deepseek model correctly identified this as safe.",
+  "disagreement_analysis": "The disagreement was caused by tool failures rather than security concerns. The qwen model returned 'inconclusive' solely because of an HTTP 400 API error when reviewing .SRCINFO. The openrouter model (advisory) failed to parse its own output. The deepseek model successfully reviewed all files and correctly determined the package is safe.",
+  "coverage_issues": [
+    "qwen model failed to review .SRCINFO due to an LLM API error (HTTP 400).",
+    "openrouter model failed to review PKGBUILD due to a parsing error."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Distinguish between 'inconclusive due to security ambiguity' and 'inconclusive due to tool/API failure'. A tool error on a metadata file like .SRCINFO should not block a 'safe' verdict if the executable PKGBUILD is verified safe.",
+    "Implement retry logic or fallback parsing for models that fail to output the expected decision format."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 4542,
+    "completion_tokens": 1705,
+    "cost": 0.0036358400000000004
+  },
+  "audits_judged": [
+    "20260912-150228-qwen-qwen3-235b-a22b-2507.md",
+    "20260912-150227-deepseek-deepseek-v4-flash.md",
+    "20260906-074854-openrouter-free.md"
+  ]
+}

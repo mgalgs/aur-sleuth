@@ -1,0 +1,27 @@
+{
+  "package": "patchsplit-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard binary package that downloads a prebuilt release from the official GitHub repository with a pinned SHA256 checksum. The PKGBUILD contains no executable code outside of standard installation functions, and there are no .install hooks or patches. Both models correctly identified the PKGBUILD as safe. The only discrepancy was a transient API error in the qwen3 model when auditing the .SRCINFO file, which is a non-executable metadata file and poses no security risk.",
+  "disagreement_analysis": "The disagreement is purely due to a tooling failure (HTTP 400 API error) in the qwen3 model when attempting to audit the .SRCINFO file, causing it to return an 'inconclusive' verdict. The deepseek model successfully audited all files and correctly returned 'safe'.",
+  "coverage_issues": [
+    "qwen3 model failed to audit .SRCINFO due to an API error (HTTP 400)."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Transient API errors on non-executable metadata files (like .SRCINFO) should not force an overall 'inconclusive' verdict if the critical executable files (PKGBUILD, .install) are successfully audited and found safe. The audit tool should gracefully degrade or ignore metadata file failures."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 4161,
+    "completion_tokens": 846,
+    "cost": 0.0024144
+  },
+  "audits_judged": [
+    "20260912-070824-qwen-qwen3-235b-a22b-2507.md",
+    "20260912-070816-deepseek-deepseek-v4-flash.md"
+  ]
+}

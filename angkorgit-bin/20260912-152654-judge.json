@@ -1,0 +1,29 @@
+{
+  "package": "angkorgit-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard AUR binary package that downloads a .deb file from its official GitHub repository with pinned SHA256 checksums. The PKGBUILD contains no executable code in the global scope, and the package() function safely extracts and installs the files. The disagreement was caused entirely by API errors in one model, not by any security concerns.",
+  "disagreement_analysis": "The qwen model returned an 'inconclusive' verdict because it encountered HTTP 400 API errors when attempting to audit .nvchecker.toml, .gitignore, and .SRCINFO. The deepseek model successfully audited all four files and correctly identified them as safe. The openrouter model (advisory) also confirmed the package is safe.",
+  "coverage_issues": [
+    "The qwen model failed to audit .nvchecker.toml, .gitignore, and .SRCINFO due to HTTP 400 API errors, leaving those files unaudited in its report."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "The audit tool should implement retry logic or fallback mechanisms for API errors (like HTTP 400) to prevent incomplete audits.",
+    "The adjudication logic should recognize when an 'inconclusive' verdict is caused by tool/API failures rather than actual security ambiguity, and defer to successful audits from other models that cover the missing files."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 6279,
+    "completion_tokens": 1748,
+    "cost": 0.004246720000000001
+  },
+  "audits_judged": [
+    "20260912-152245-qwen-qwen3-235b-a22b-2507.md",
+    "20260912-152218-deepseek-deepseek-v4-flash.md",
+    "20260907-232917-openrouter-free.md"
+  ]
+}

@@ -1,0 +1,96 @@
+---
+package: psysonic-bin
+pkgver: 1.52.0
+pkgrel: 1
+result: safe
+model: deepseek/deepseek-v4-flash
+provider: custom
+aur_sleuth_rev: 171a316e053e9c4b28731ccb1aa63b1168550d3a
+prompt_tokens: 7885
+completion_tokens: 1545
+total_tokens: 9430
+cost: 0.00072061850
+execution_time: 23.23
+files_reviewed: 2
+files_skipped: 0
+maintainer_files: 2
+source_fetch: not_attempted
+upstream_files: 0
+upstream_named_files: 0
+unpinned_sources: 0
+injection_attempts: 0
+date: 2026-09-12T19:04:52Z
+file_verdicts:
+  - file: .SRCINFO
+    status: safe
+    summary: Standard metadata file, no security issues.
+  - file: PKGBUILD
+    status: safe
+    summary: Standard AUR bin package with pinned checksum and no malicious behavior.
+---
+
+Materializing psysonic-bin from local mirror...
+Materialized psysonic-bin
+Analyzing psysonic-bin AUR package with deepseek/deepseek-v4-flash
+Performing initial audit of PKGBUILD to ensure that we can safely run `makepkg`
+LLM auditresponse for PKGBUILD:
+<security_assessment>
+<decision>SAFE</decision>
+<details>
+Running `makepkg --printsrcinfo` sources only the top-level scope of this PKGBUILD. The top-level content consists solely of standard metadata variable assignments (`pkgname`, `pkgver`, `arch`, `source`, `sha256sums`, etc.) and an ordinary `package()` function definition. There are no top-level command substitutions, external downloads, `eval`, `base64`, `curl|bash`, or other executable statements that would run during sourcing/parsing.
+
+The `package()` function body contains file manipulation and a wrapper-script generation, but those commands only execute during the packaging stage, not during `makepkg --printsrcinfo`. Therefore, this narrow gate is safe. Any deeper audit of `package()` and the upstream binary artifact can be handled separately, but nothing in the global scope poses an execution risk at this step.
+</details>
+<evidence>
+</evidence>
+<summary>
+Top-level scope only defines metadata; no dangerous code executes during printsrcinfo.
+</summary>
+</security_assessment>
+
++ Initial PKGBUILD audit complete -- Top-level scope only defines metadata; no dangerous code executes during printsrcinfo.
+Reviewing the 2 file(s) in the AUR repository.
+Reviewing the AUR repository's files...
+[0/2] Reviewing .SRCINFO...
+[0/2] Reviewing .SRCINFO, PKGBUILD...
+LLM auditresponse for .SRCINFO:
+<security_assessment>
+<decision>SAFE</decision>
+<details>
+The <code>.SRCINFO</code> file is a standard metadata file for an AUR binary package. It describes a desktop music player for Subsonic API-compatible servers. The source is an HTTPS URL from the project's own GitHub releases page, and a SHA-256 checksum is provided (not SKIP). Dependencies are typical for a GTK/webkit application. No scripts, commands, or suspicious content are present. There is no evidence of supply-chain attacks, data exfiltration, or obfuscated code. The file is benign and follows normal packaging practices.
+</details>
+<evidence></evidence>
+<summary>Standard metadata file, no security issues.</summary>
+</security_assessment>
+
+[1/2] Reviewing PKGBUILD...
++ Reviewed .SRCINFO. Status: SAFE -- Standard metadata file, no security issues.
+LLM auditresponse for PKGBUILD:
+<security_assessment>
+<decision>SAFE</decision>
+<details>
+This PKGBUILD is a standard prebuilt-binary AUR package. It downloads a `.deb` release artifact from the project&#39;s own GitHub repository, verifies it with a pinned SHA-256 checksum, extracts the contents with `bsdtar`, and copies the packaged files into the package directory. The wrapper script that is generated simply execs the renamed binary with the user&#39;s arguments, which is normal packaging behavior for providing a renamed executable.
+</details>
+<evidence>
+</evidence>
+<summary>
+Standard AUR bin package with pinned checksum and no malicious behavior.
+</summary>
+</security_assessment>
+
+[2/2] Reviewing ...
++ Reviewed PKGBUILD. Status: SAFE -- Standard AUR bin package with pinned checksum and no malicious behavior.
+Reviewed all the AUR repository's files.
+Audit complete! Result: No issues found
+API Usage Summary
+  Models: deepseek/deepseek-v4-flash
+  Prompt Tokens: 7,885
+  Completion Tokens: 1,545
+  Total Tokens: 9,430
+  Total Cost: $0.000721
+  Execution Time: 23.23 seconds
+
+Final Status: SAFE
+
+
+No issues found.
