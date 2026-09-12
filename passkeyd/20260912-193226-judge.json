@@ -1,0 +1,28 @@
+{
+  "package": "passkeyd",
+  "correct_verdict": "unsafe",
+  "confidence": "high",
+  "reasoning": "The passkeyd.install script, which is part of the AUR packaging and executes with root privileges during install/upgrade, contains a _send_telemetry function that uses curl to POST data to a third-party PostHog server. This is a network request to a host the package has no stated relationship with, and it serves no purpose the package claims. This matches the injection pattern of executing network requests to unrelated hosts from packaging scripts.",
+  "disagreement_analysis": "The qwen model correctly identified the telemetry in the .install script as an unsafe injection. The deepseek and openrouter models recognized the telemetry but incorrectly dismissed it as 'application behavior' or 'standard practice'. They failed to distinguish between upstream application code and AUR packaging code (.install scripts), and failed to apply the test that network requests to unrelated hosts from install hooks serve no claimed purpose and constitute an injection.",
+  "coverage_issues": [],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models must distinguish between upstream application behavior and AUR packaging behavior. Code in .install scripts is maintained by the AUR maintainer and executes with root privileges; it is not 'application behavior'.",
+    "Models should strictly apply the test: 'does this network request serve a purpose the package claims?' Telemetry in an install hook does not, making it an injection.",
+    "Network requests to third-party analytics hosts from privileged install hooks should be flagged as unsafe, regardless of whether the exfiltrated data is deemed 'non-sensitive'."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 8159,
+    "completion_tokens": 2841,
+    "cost": 0.00624736
+  },
+  "audits_judged": [
+    "20260912-192507-qwen-qwen3-235b-a22b-2507.md",
+    "20260912-192452-deepseek-deepseek-v4-flash.md",
+    "20260903-153523-openrouter-free.md"
+  ]
+}
