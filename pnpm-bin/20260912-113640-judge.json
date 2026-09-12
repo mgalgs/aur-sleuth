@@ -1,0 +1,31 @@
+{
+  "package": "pnpm-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard binary distribution (-bin) that downloads prebuilt pnpm releases from the official GitHub repository with pinned SHA-256 checksums. The PKGBUILD contains only variable definitions and a standard package() function with no dangerous top-level code. The pkgbuild_helper.py is a maintainer automation script that only interacts with the declared upstream GitHub API and does not execute during makepkg. No .install hooks or patches are present. The only completed full analysis (deepseek) found no security issues, and the other reports' inconclusive results were due to tool errors (API failures, parse errors), not security findings.",
+  "disagreement_analysis": "The disagreement was caused by tool errors, not substantive security concerns. The qwen model encountered an HTTP 400 error when reviewing the PKGBUILD, and the openrouter model (advisory) had a parse error on pkgbuild_helper.py. The deepseek model successfully completed all reviews and found the package safe. All models reviewed the same files with no coverage gaps.",
+  "coverage_issues": [
+    "qwen model: API error (HTTP 400) prevented full PKGBUILD review",
+    "openrouter model: Parse error on pkgbuild_helper.py response"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Tool errors (API failures, parse errors) should be distinguished from security findings when determining disagreement",
+    "Maintainer helper scripts that are not executed during makepkg should be clearly categorized as out-of-scope for injection risk",
+    "Models should be prompted to handle malformed responses gracefully rather than failing the entire audit"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 6740,
+    "completion_tokens": 1164,
+    "cost": 0.00364672
+  },
+  "audits_judged": [
+    "20260912-111807-qwen-qwen3-235b-a22b-2507.md",
+    "20260912-111840-deepseek-deepseek-v4-flash.md",
+    "20260905-153334-openrouter-free.md"
+  ]
+}
