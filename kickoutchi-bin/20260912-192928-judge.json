@@ -1,0 +1,28 @@
+{
+  "package": "kickoutchi-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package consists of only a PKGBUILD and .SRCINFO. The PKGBUILD downloads prebuilt binaries from the official GitHub releases with pinned SHA256 checksums and installs them in the package() function. There are no install hooks, patches, or suspicious network requests. The checksums prevent upstream artifact swapping. The only disagreement was due to an API error in the qwen model, not a security finding.",
+  "disagreement_analysis": "The qwen model returned an inconclusive verdict due to HTTP 400 API errors during the file review phase, while the deepseek model successfully reviewed the files and found them safe. The disagreement is purely a tool failure, not a difference in security analysis.",
+  "coverage_issues": [
+    "qwen model failed to review PKGBUILD and .SRCINFO due to HTTP 400 API errors."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "API errors (like HTTP 400) should be caught and retried or clearly distinguished from actual security inconclusiveness to avoid triggering unnecessary escalation audits.",
+    "For simple -bin packages with pinned checksums and no install hooks, a single successful audit from a capable model is sufficient to establish safety."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 3410,
+    "completion_tokens": 1617,
+    "cost": 0.00316096
+  },
+  "audits_judged": [
+    "20260912-191605-qwen-qwen3-235b-a22b-2507.md",
+    "20260912-191723-deepseek-deepseek-v4-flash.md"
+  ]
+}
