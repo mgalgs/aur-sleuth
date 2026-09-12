@@ -1,0 +1,29 @@
+{
+  "package": "emutastic-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard AUR -bin package. The main binary tarball is pinned with a SHA256 checksum. The unpinned sources (SKIP) are a LICENSE file and a PNG logo fetched from the same upstream GitHub repository, which poses no execution risk. The only voting report that completed successfully (deepseek) correctly identified these facts and ruled it safe. The other voting report (qwen) was inconclusive solely due to LLM API errors (HTTP 400), which carries no verdict signal. No malicious code, install hooks, or suspicious network activity were found.",
+  "disagreement_analysis": "The initial trigger for disagreement was the qwen model returning 'inconclusive' while deepseek returned 'safe'. However, the qwen model's inconclusive result was caused by LLM API failures (HTTP 400 BadRequestError) when processing the PKGBUILD and .gitignore, not by any detected security issues. Thus, there is no actual security disagreement; the qwen report is a tool failure.",
+  "coverage_issues": [
+    "qwen model failed to audit PKGBUILD and .gitignore due to LLM API errors (HTTP 400), resulting in an incomplete audit."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Implement retry logic for LLM API calls to handle transient HTTP 400/500 errors, preventing incomplete audits from skewing the final verdict.",
+    "Distinguish between 'inconclusive due to security ambiguity' and 'inconclusive due to tool failure' in the audit pipeline to avoid triggering unnecessary escalation audits."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 6058,
+    "completion_tokens": 2100,
+    "cost": 0.00462656
+  },
+  "audits_judged": [
+    "20260908-111544-qwen-qwen3-235b-a22b-2507.md",
+    "20260908-111628-deepseek-deepseek-v4-flash.md",
+    "20260907-194035-openrouter-free.md"
+  ]
+}

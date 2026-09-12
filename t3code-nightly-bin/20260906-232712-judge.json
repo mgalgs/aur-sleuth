@@ -1,0 +1,32 @@
+{
+  "package": "t3code-nightly-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Only one report (deepseek/deepseek-v4-flash) produced a valid verdict. It found the PKGBUILD contains standard AUR packaging for a prebuilt AppImage from the official GitHub repository, with pinned sources and valid SHA256 checksums. The prepare() and package() functions perform standard operations: extracting the AppImage, installing to /opt, creating a wrapper script, and setting setuid on chrome-sandbox (standard for Chromium-based apps). No command substitutions, obfuscated code, unexpected network requests, or data exfiltration patterns were found. The other two reports failed due to tool errors (HTTP 400 API failures and parse failures), not security concerns.",
+  "disagreement_analysis": "The disagreement was caused by tool failures, not substantive security analysis. The qwen model experienced HTTP 400 errors during file review (though its initial PKGBUILD audit succeeded and found it safe). The openrouter/free model failed to parse the decision from the model response. Only deepseek/deepseek-v4-flash completed successfully and found the package safe with standard AUR packaging patterns.",
+  "coverage_issues": [
+    "qwen/qwen3-235b-a22b-2507: HTTP 400 BadRequestError during file review phase prevented completion",
+    "openrouter/free: Failed to parse decision from model response, preventing verdict"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Implement retry logic with exponential backoff for HTTP 400 errors to handle transient API failures",
+    "Add fallback parsing strategies when models don't return expected XML/JSON format (e.g., regex extraction of decision keywords)",
+    "Log the raw model response when parsing fails to enable debugging of format issues",
+    "Consider the initial PKGBUILD audit as a valid signal even if subsequent file review fails, since it already assessed the most critical file"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 4270,
+    "completion_tokens": 1068,
+    "cost": 0.00273344
+  },
+  "audits_judged": [
+    "20260906-230306-qwen-qwen3-235b-a22b-2507.md",
+    "20260906-230539-deepseek-deepseek-v4-flash.md",
+    "20260906-074854-openrouter-free.md"
+  ]
+}

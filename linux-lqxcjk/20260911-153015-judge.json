@@ -1,0 +1,30 @@
+{
+  "package": "linux-lqxcjk",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard custom Linux kernel build. The PKGBUILD uses standard patterns like eval for multi-package function generation and date for versioning, with no malicious top-level execution. The .install script legitimately disables the irqbalance service, which is expected for the Liquorix kernel. All downloaded sources (patches, kernel tarball) are pinned with checksums, except for the PGP signature which is standardly skipped. The disagreements and inconclusive results are purely due to transient tool errors (API 400, parse failures) rather than actual security concerns.",
+  "disagreement_analysis": "The disagreement stems from tool errors rather than security findings. qwen3-235b failed with an HTTP 400 error when reviewing .SRCINFO, and openrouter/free failed to parse the PKGBUILD decision. deepseek-v4-flash successfully reviewed all files and correctly identified the package as safe.",
+  "coverage_issues": [
+    "qwen3-235b failed to review .SRCINFO due to an HTTP 400 API error.",
+    "openrouter/free failed to parse the PKGBUILD decision, resulting in an inconclusive status for that file."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Transient tool errors (API timeouts, HTTP 400s, regex parse failures) should not force an 'inconclusive' package verdict if other models have successfully audited the same files and found them safe. The adjudicator should recognize tool failures as missing data rather than security ambiguity.",
+    "Models should be explicitly prompted that 'eval' used to dynamically generate package functions (e.g., for kernel headers/subpackages) from static arrays is a standard AUR pattern and not an injection vector, to prevent future false positives."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 6143,
+    "completion_tokens": 1868,
+    "cost": 0.0043568
+  },
+  "audits_judged": [
+    "20260911-152431-qwen-qwen3-235b-a22b-2507.md",
+    "20260911-152402-deepseek-deepseek-v4-flash.md",
+    "20260903-012948-openrouter-free.md"
+  ]
+}

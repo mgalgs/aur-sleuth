@@ -1,0 +1,29 @@
+{
+  "package": "command-code",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The only valid voting model (deepseek) correctly identified the package as safe. The fallback Node.js download from nodejs.org is a packaging hygiene issue (missing checksum/source array entry) but not a malicious injection, as it fetches from the official vendor for the required runtime. The other voting model (qwen) failed due to an API error, and the third model (openrouter) was advisory only.",
+  "disagreement_analysis": "The disagreement was caused by a tool error in the qwen model, which returned an HTTP 400 error when auditing the PKGBUILD, resulting in an inconclusive verdict. The deepseek model successfully audited the PKGBUILD and correctly classified the hygiene issue as safe.",
+  "coverage_issues": [
+    "qwen/qwen3-235b-a22b-2507 failed to audit the PKGBUILD due to an LLM API error (HTTP 400)."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "The audit tool should implement retries or fallback mechanisms for transient LLM API errors (e.g., HTTP 400) to prevent a single file failure from causing an inconclusive package verdict.",
+    "Models should be prompted to explicitly separate packaging hygiene violations (like unpinned fallback downloads from official sources) from actual supply-chain injections to avoid false positives."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5823,
+    "completion_tokens": 1894,
+    "cost": 0.00428768
+  },
+  "audits_judged": [
+    "20260910-150428-qwen-qwen3-235b-a22b-2507.md",
+    "20260910-150448-deepseek-deepseek-v4-flash.md",
+    "20260906-233739-openrouter-free.md"
+  ]
+}

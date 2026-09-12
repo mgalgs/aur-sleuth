@@ -1,0 +1,28 @@
+{
+  "package": "unreal-engine-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard binary distribution of Unreal Engine using a manual download protocol with pinned checksums. The .install script creates a directory with 777 permissions, which is poor security hygiene but not a malicious injection. The only disagreement stems from a transient API error in the Qwen model when reviewing a standard MIME XML file, which Deepseek correctly assessed as safe.",
+  "disagreement_analysis": "Qwen returned 'inconclusive' solely due to an HTTP 400 API error when attempting to audit 'unreal-engine.xml'. Deepseek successfully audited the same file and correctly identified it as a benign MIME type definition. There is no substantive disagreement on security risks.",
+  "coverage_issues": [
+    "Qwen model failed to review 'unreal-engine.xml' due to an LLM API error (HTTP 400)."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Transient API errors on individual non-executable files (like XML or desktop entries) should not force an overall 'inconclusive' package verdict if the file is easily identifiable as benign metadata.",
+    "Models are correctly distinguishing between poor packaging hygiene (e.g., 777 permissions in .install) and actual malicious supply-chain injections, avoiding false positives on upstream behavior or style choices."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 7292,
+    "completion_tokens": 1219,
+    "cost": 0.00389376
+  },
+  "audits_judged": [
+    "20260906-111708-qwen-qwen3-235b-a22b-2507.md",
+    "20260906-111825-deepseek-deepseek-v4-flash.md"
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "package": "cjsh-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard -bin package that fetches precompiled binaries and documentation from its official GitHub repository with pinned SHA256 checksums. The install script correctly manages /etc/shells, with a minor non-malicious typo noted by the models. The only disagreement stems from an API failure in the qwen model, not a genuine security concern.",
+  "disagreement_analysis": "The disagreement was triggered by the qwen model returning 'inconclusive' due to HTTP 400 API errors when auditing PKGBUILD and cjsh.install during the file review phase, while the deepseek model successfully audited all files and returned 'safe'. This is a tool/API failure, not a substantive security disagreement.",
+  "coverage_issues": [
+    "qwen/qwen3-235b-a22b-2507 failed to audit PKGBUILD and cjsh.install due to LLM API errors (HTTP 400), resulting in an inconclusive verdict."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "LLM API errors (e.g., HTTP 400) should be caught and retried or handled as tool failures rather than propagating as 'inconclusive' security verdicts that trigger unnecessary escalation audits.",
+    "Models correctly distinguished between a packaging bug (missing leading slash in /etc/shells path in cjsh.install) and a security injection, demonstrating good adherence to the threat model by ignoring hygiene issues."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 7790,
+    "completion_tokens": 1696,
+    "cost": 0.00466368
+  },
+  "audits_judged": [
+    "20260910-070500-qwen-qwen3-235b-a22b-2507.md",
+    "20260910-070536-deepseek-deepseek-v4-flash.md",
+    "20260909-232714-openrouter-free.md"
+  ]
+}

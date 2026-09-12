@@ -1,0 +1,28 @@
+{
+  "package": "helium-browser-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The disagreement is purely due to transient API errors in the first model, which failed to review three files. The second model successfully reviewed all files, including the PKGBUILD and patches, and found no evidence of AUR injection. The use of `eval` in the wrapper patch is a standard application-level configuration pattern for browser wrappers, not a supply-chain injection.",
+  "disagreement_analysis": "The first model returned 'inconclusive' because it encountered HTTP 400 errors when auditing .SRCINFO, LICENSE, and 0001-update-wrapper-arch.patch. The second model completed the audit of all files and correctly determined the package is safe.",
+  "coverage_issues": [
+    "qwen/qwen3-235b-a22b-2507 failed to review .SRCINFO, LICENSE, and 0001-update-wrapper-arch.patch due to HTTP 400 API errors."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "The audit tool should handle partial API failures more gracefully, perhaps by automatically retrying failed file audits before concluding the overall package status.",
+    "Models are generally good at distinguishing between application-level design choices (like using eval for config parsing in a browser wrapper) and actual AUR supply-chain injections, which prevents false positives on standard packaging patterns."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 6610,
+    "completion_tokens": 2065,
+    "cost": 0.0047584
+  },
+  "audits_judged": [
+    "20260909-110129-qwen-qwen3-235b-a22b-2507.md",
+    "20260909-110152-deepseek-deepseek-v4-flash.md"
+  ]
+}

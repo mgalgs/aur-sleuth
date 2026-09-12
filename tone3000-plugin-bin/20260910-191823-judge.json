@@ -1,0 +1,34 @@
+{
+  "package": "tone3000-plugin-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Only one model (deepseek-v4-flash) successfully completed a full review of both PKGBUILD and .SRCINFO, finding standard -bin packaging: pinned GitHub release sources with SHA256 checksums, and a package() function that only extracts and installs files. The other two reports were inconclusive due to API errors (HTTP 400 and parse failure), not security findings. The openrouter model's 'unsafe' classification appears to be a content safety filter trigger (categories: 'Malware, Political/Misinformation/Conspiracy') rather than an actual security analysis, and it's marked advisory anyway. No .install hooks, patches, or suspicious network operations were identified.",
+  "disagreement_analysis": "The disagreement is caused by tool failures, not substantive security analysis. Qwen3-235b failed with HTTP 400 on the PKGBUILD review. Openrouter/free failed to parse its own response after a content safety filter triggered on the PKGBUILD. Only deepseek-v4-flash completed successfully and found standard packaging practices with no malicious behavior.",
+  "coverage_issues": [
+    "No upstream source fetching was attempted by any model (source_fetch: not_attempted), though this is acceptable for -bin packages with pinned checksums",
+    "Qwen3-235b API failed on PKGBUILD review (HTTP 400 BadRequestError)",
+    "Openrouter/free model response could not be parsed after content safety filter triggered"
+  ],
+  "false_positives": [
+    "Openrouter/free flagged PKGBUILD as 'unsafe' with categories 'Malware, Political/Misinformation/Conspiracy' - this is a content safety filter misfire, not a security finding. The model's own initial assessment said SAFE."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Content safety filters in some models (openrouter/free) can trigger on benign packaging scripts, producing unparseable responses that look like security findings. The audit tool should detect and flag content filter triggers separately from security analysis.",
+    "API errors (HTTP 400) should be retried or escalated rather than marking the entire audit inconclusive when the initial parse-time check passed.",
+    "For -bin packages with pinned checksums from official sources, upstream source fetching is less critical since the checksum pins the artifact. Models correctly identified this pattern."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5101,
+    "completion_tokens": 1187,
+    "cost": 0.00315168
+  },
+  "audits_judged": [
+    "20260910-190219-qwen-qwen3-235b-a22b-2507.md",
+    "20260910-190243-deepseek-deepseek-v4-flash.md",
+    "20260904-194347-openrouter-free.md"
+  ]
+}

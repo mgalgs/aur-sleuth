@@ -1,0 +1,31 @@
+{
+  "package": "t3code-nightly-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Both models that successfully completed their reviews (qwen and deepseek) found the PKGBUILD safe. The package follows standard AUR patterns for distributing a prebuilt AppImage: it fetches from the official upstream GitHub repository (pingdotgg/t3code) with pinned SHA256 checksums, performs standard AppImage extraction in prepare()/package(), and installs to /opt with appropriate permissions. No executable code exists at global scope, no suspicious network requests or data exfiltration patterns are present, and all operations are confined to build/package directories. The qwen 'inconclusive' result was due to an API error on .SRCINFO (not a security concern), and the openrouter/free report is advisory-only with a parsing failure.",
+  "disagreement_analysis": "The disagreement was caused by tool failures, not security concerns. The qwen model encountered an HTTP 400 error when reviewing .SRCINFO, resulting in an inconclusive verdict despite finding the PKGBUILD safe. The openrouter/free model (advisory-only) failed to parse its own response. The deepseek model successfully reviewed both files and correctly identified standard, safe packaging practices.",
+  "coverage_issues": [
+    "qwen model: API error (HTTP 400) prevented review of .SRCINFO",
+    "openrouter/free model: parsing failure prevented any verdict"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "API errors should be distinguished from security findings - an HTTP 400 on a metadata file should not override a successful PKGBUILD review",
+    "Models should be validated for response format compliance before accepting verdicts",
+    "Advisory-only reports with tool errors should be excluded from disagreement calculations"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 4368,
+    "completion_tokens": 1060,
+    "cost": 0.00275456
+  },
+  "audits_judged": [
+    "20260911-030529-qwen-qwen3-235b-a22b-2507.md",
+    "20260911-030717-deepseek-deepseek-v4-flash.md",
+    "20260906-074854-openrouter-free.md"
+  ]
+}

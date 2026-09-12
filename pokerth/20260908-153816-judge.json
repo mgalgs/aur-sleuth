@@ -1,0 +1,30 @@
+{
+  "package": "pokerth",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The AUR package consists of standard metadata (.SRCINFO), a conventional PKGBUILD with pinned GitHub sources and checksums, and maintainer helper scripts (refresh.sh, srcinfo). No malicious code, suspicious network requests, or injection patterns were identified. The inconclusive results from other models were strictly due to API failures and parsing errors, not actual security risks.",
+  "disagreement_analysis": "The disagreement stems entirely from tool and model failures rather than security findings. Qwen3 encountered HTTP 400 errors when auditing the PKGBUILD and srcinfo. Openrouter/free's underlying model failed to generate the required XML schema for srcinfo, instead outputting a hallucinated safety warning. Deepseek successfully audited all files and correctly identified them as safe.",
+  "coverage_issues": [
+    "Qwen3 failed to audit PKGBUILD and srcinfo due to HTTP 400 API errors.",
+    "Openrouter/free failed to parse the response for srcinfo due to schema violation."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Implement retry logic or fallback models when primary LLM APIs return HTTP 400 errors to prevent incomplete audits.",
+    "Add strict schema validation and fallback parsing for model outputs to handle cases where smaller models hallucinate or ignore XML formatting instructions."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 6543,
+    "completion_tokens": 1913,
+    "cost": 0.0045424
+  },
+  "audits_judged": [
+    "20260908-151641-qwen-qwen3-235b-a22b-2507.md",
+    "20260908-151626-deepseek-deepseek-v4-flash.md",
+    "20260903-033002-openrouter-free.md"
+  ]
+}

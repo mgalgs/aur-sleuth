@@ -1,0 +1,30 @@
+{
+  "package": "visual-studio-code-insiders-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The deepseek model successfully reviewed all 5 files and found no malicious code. The PKGBUILD downloads pinned binaries from official Microsoft domains, the .install script only prints informational messages, and the .sh launcher safely passes user-defined flags. The inconclusive results from the other models were caused by transient API and parsing errors, not actual security findings.",
+  "disagreement_analysis": "The disagreement is entirely due to tool and API failures in the qwen and openrouter models (HTTP 400 errors and output parsing failures), rather than differing security assessments. The deepseek model completed the audit successfully and found the package safe.",
+  "coverage_issues": [
+    "qwen model failed to audit visual-studio-code-insiders-bin.install and visual-studio-code-insiders-bin.sh due to HTTP 400 API errors.",
+    "openrouter model failed to parse decisions for .gitignore and PKGBUILD due to non-standard output formatting."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Implement retry logic or graceful fallback for LLM API errors (e.g., HTTP 400) instead of immediately marking files as inconclusive.",
+    "Improve output parsing robustness to handle models that return non-standard safety classifications or fail to wrap responses in the expected XML/JSON tags."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 7756,
+    "completion_tokens": 1412,
+    "cost": 0.0042892799999999995
+  },
+  "audits_judged": [
+    "20260907-110327-qwen-qwen3-235b-a22b-2507.md",
+    "20260907-110354-deepseek-deepseek-v4-flash.md",
+    "20260904-232905-openrouter-free.md"
+  ]
+}

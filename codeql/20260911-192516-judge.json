@@ -1,0 +1,28 @@
+{
+  "package": "codeql",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD is a standard wrapper for GitHub's prebuilt CodeQL CLI binaries, fetching from official GitHub releases with pinned checksums. No malicious code, network exfiltration, or unexpected execution is present. The disagreement was solely due to a transient API error in one model.",
+  "disagreement_analysis": "The qwen model returned 'inconclusive' because it encountered an HTTP 400 API error while auditing .SRCINFO. The deepseek model successfully audited all files and returned 'safe'. The openrouter report is advisory. There is no actual security disagreement.",
+  "coverage_issues": [
+    "qwen model failed to audit .SRCINFO due to an LLM API error (HTTP 400)."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "The audit tool should not mark the entire package as 'inconclusive' if a transient API error occurs on a non-executable metadata file like .SRCINFO, provided the executable files (PKGBUILD, .install) were successfully audited and found safe."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 6421,
+    "completion_tokens": 1601,
+    "cost": 0.004104
+  },
+  "audits_judged": [
+    "20260911-191052-qwen-qwen3-235b-a22b-2507.md",
+    "20260911-191113-deepseek-deepseek-v4-flash.md",
+    "20260909-072954-openrouter-free.md"
+  ]
+}

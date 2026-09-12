@@ -1,0 +1,30 @@
+{
+  "package": "kytyps5-nightly-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The sole valid, error-free audit (deepseek-v4-flash) reviewed all files and found no malicious injections. The PKGBUILD uses standard, checksummed upstream sources, and the wrapper script behavior is a normal pattern for applications requiring runtime write access. The 'inconclusive' results from the other models were solely due to transient API and parsing errors, not substantive security concerns.",
+  "disagreement_analysis": "The disagreement was an artifact of transient API failures (HTTP 400) and parsing errors in the qwen and openrouter models, which prevented them from completing their audits. There was no substantive security disagreement among the models that successfully analyzed the code.",
+  "coverage_issues": [
+    "qwen model failed to audit .gitignore and .gitlab-ci.yml due to HTTP 400 API errors.",
+    "openrouter model failed to parse the decision for kytyps5.desktop."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Implement retry logic for transient LLM API errors (e.g., HTTP 400) to prevent individual file failures from cascading into an inconclusive package verdict.",
+    "Deprioritize or skip files outside the makepkg execution threat model (such as .gitlab-ci.yml and .gitignore) to reduce token consumption and the surface area for API errors."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 8719,
+    "completion_tokens": 2509,
+    "cost": 0.0060016
+  },
+  "audits_judged": [
+    "20260908-191257-qwen-qwen3-235b-a22b-2507.md",
+    "20260908-191323-deepseek-deepseek-v4-flash.md",
+    "20260904-194259-openrouter-free.md"
+  ]
+}

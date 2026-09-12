@@ -1,0 +1,29 @@
+{
+  "package": "goverlay-git",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The disagreement stems from a transient API error (HTTP 400) in the qwen model when attempting to audit .SRCINFO, which forced an 'inconclusive' verdict. The deepseek model successfully audited .SRCINFO and correctly identified it as standard, safe AUR metadata. The PKGBUILD is a standard VCS package with no top-level execution, no malicious injections, and no suspicious network requests. The package is safe.",
+  "disagreement_analysis": "The qwen model failed to audit .SRCINFO due to an HTTP 400 API error, resulting in an inconclusive package verdict. The deepseek model successfully audited the same file and found it safe. The disagreement is purely a tool failure, not a difference in security assessment.",
+  "coverage_issues": [
+    "qwen model failed to audit .SRCINFO due to an API error (HTTP 400 BadRequestError)."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Transient API errors (e.g., HTTP 400) should be retried or handled gracefully by the orchestration layer to prevent a single file's tool failure from forcing an inconclusive package verdict.",
+    "The audit tool should distinguish between 'inconclusive due to security ambiguity' and 'inconclusive due to tool/API error' to avoid triggering unnecessary escalation audits."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 6705,
+    "completion_tokens": 2190,
+    "cost": 0.0049488
+  },
+  "audits_judged": [
+    "20260906-151649-qwen-qwen3-235b-a22b-2507.md",
+    "20260906-151645-deepseek-deepseek-v4-flash.md",
+    "20260905-193511-openrouter-free.md"
+  ]
+}

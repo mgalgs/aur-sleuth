@@ -1,0 +1,31 @@
+{
+  "package": "win10fonts-auto",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD downloads a Windows 10 ISO from archive.org with a pinned SHA-256 checksum, then extracts fonts using 7z. The source is integrity-verified, preventing artifact substitution. No code is executed from the ISO\u2014only font files are extracted, which is the package's stated purpose. There is no evidence of malicious code injection in the PKGBUILD or .SRCINFO. Legal/licensing concerns about font redistribution do not constitute a security risk under the threat model.",
+  "disagreement_analysis": "The qwen model initially flagged the PKGBUILD as UNSAFE due to sourcing from archive.org (not an official Microsoft source) and extracting system files from an ISO, but correctly self-corrected to SAFE in a second assessment after recognizing the source is pinned with a checksum and no code is executed. The qwen report ended INCONCLUSIVE due to an API error on .SRCINFO, while deepseek correctly assessed both files as SAFE. The disagreement was caused by the qwen model's initial overreaction to unofficial sourcing and legal concerns, which it later corrected.",
+  "coverage_issues": [
+    "qwen model had an API error (HTTP 400) when reviewing .SRCINFO, resulting in INCONCLUSIVE status for that file"
+  ],
+  "false_positives": [
+    "qwen's initial UNSAFE assessment of PKGBUILD: flagged sourcing from archive.org and extracting system files as supply-chain risk, but the source is pinned with a SHA-256 checksum (preventing substitution) and no code is executed from the ISO. Legal/licensing concerns about font redistribution are not security issues."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models may initially flag packages sourcing from unofficial mirrors (e.g., archive.org) as unsafe even when pinned with checksums. The audit prompt should emphasize that pinned sources with valid checksums close the swap risk and are not supply-chain attacks.",
+    "Legal/licensing concerns (e.g., font redistribution EULA violations) should be explicitly excluded from security assessments to prevent false positives.",
+    "API errors on non-executable metadata files (.SRCINFO) should not override a SAFE verdict on executable files (PKGBUILD) when the metadata file contains no code execution risk."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 4316,
+    "completion_tokens": 1678,
+    "cost": 0.0035289600000000003
+  },
+  "audits_judged": [
+    "20260907-230531-qwen-qwen3-235b-a22b-2507.md",
+    "20260907-230444-deepseek-deepseek-v4-flash.md"
+  ]
+}

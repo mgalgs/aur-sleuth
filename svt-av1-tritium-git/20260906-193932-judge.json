@@ -1,0 +1,28 @@
+{
+  "package": "svt-av1-tritium-git",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The disagreement centers on the `prepare()` function's `git fetch --all && git reset --hard origin/main`. This pattern fetches from the exact same upstream repository declared in the `source` array. For a `-git` package without a pinned commit, this is a common (if sloppy) packaging pattern to ensure the latest upstream code is built, bypassing local cache staleness. It does not fetch from an unexpected host or execute arbitrary external code. Per the threat model, 'violates packaging best practices' or 'reduces reproducibility' is not grounds for an unsafe verdict unless it constitutes an actual injection (e.g., fetching from an undeclared host). Deepseek correctly identified this as a reproducibility concern rather than a malicious injection.",
+  "disagreement_analysis": "Qwen flagged `git reset --hard origin/main` as a supply-chain risk because it bypasses the source array's integrity. However, since the source is a VCS package with `SKIP` checksums and the fetch targets the declared upstream repo, this is merely a packaging hygiene issue (widens the supply chain window, reduces reproducibility) rather than an injection of malicious code by the maintainer. Deepseek correctly classified it as safe with a minor reproducibility concern.",
+  "coverage_issues": [],
+  "false_positives": [
+    "Qwen's flag on `git reset --hard origin/main` in `prepare()`: Fetching from the declared upstream repository for a `-git` package is a packaging style choice, not a malicious injection. It does not serve a purpose contrary to the package's claims (building the latest upstream code)."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models must distinguish between 'fetching from the declared upstream' (packaging hygiene/style) and 'fetching from an undeclared/suspicious host' (actual injection). For VCS packages, resetting to a branch head is a common pattern to avoid stale local clones and is not inherently malicious.",
+    "Reinforce that 'reduces reproducibility' or 'violates best practices' for `-git` packages without pinned commits does not meet the threshold for 'unsafe' under the injection threat model."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5658,
+    "completion_tokens": 2469,
+    "cost": 0.0049708800000000004
+  },
+  "audits_judged": [
+    "20260906-192308-qwen-qwen3-235b-a22b-2507.md",
+    "20260906-192634-deepseek-deepseek-v4-flash.md"
+  ]
+}

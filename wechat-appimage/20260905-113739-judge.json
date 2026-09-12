@@ -1,0 +1,34 @@
+{
+  "package": "wechat-appimage",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "All successfully reviewed files show standard AUR packaging patterns with no malicious injection. The PKGBUILD downloads AppImages from Tencent's official domain (dldir1v6.qq.com) with SHA256 checksums, uses standard eval for architecture-dependent variable indirection (not code execution), and performs expected AppImage extraction. The update script is a standard AUR maintainer helper that fetches timestamps from the legitimate upstream. The wechat launcher script sets environment variables and executes the AppImage. No evidence of injected code, unauthorized network calls, or supply-chain tampering.",
+  "disagreement_analysis": "Models did not actually disagree on files they successfully reviewed. All three reports resulted in 'inconclusive' due to tool failures (HTTP 400 errors, empty LLM responses, parsing failures), not conflicting security assessments. Report 3's unparsed 'unsafe' flag on the update script appears to be a false positive from a content safety filter rather than a genuine security finding.",
+  "coverage_issues": [
+    "Report 1 (qwen3-235b) failed to review .SRCINFO, LICENSE, and update due to HTTP 400 errors",
+    "Report 2 (deepseek-v4-flash) failed to review PKGBUILD due to empty LLM response",
+    "Report 3 (openrouter/free) failed to review .SRCINFO, PKGBUILD, and update due to parsing failures"
+  ],
+  "false_positives": [
+    "Report 3 flagged update script as 'unsafe/Malware' but this was unparsed and likely a false positive from content safety filtering on standard AUR update patterns"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "API reliability issues (HTTP 400, empty responses) are causing coverage gaps that force inconclusive verdicts even when available evidence is sufficient",
+    "Content safety filters in some models may flag standard AUR maintainer scripts (update, PKGBUILD with eval) as suspicious, requiring better parsing or filtering of these false positives",
+    "When multiple models fail on different files but the successfully reviewed files show consistent safety patterns, the tool should be able to render a verdict rather than defaulting to inconclusive"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 9107,
+    "completion_tokens": 1551,
+    "cost": 0.00489952
+  },
+  "audits_judged": [
+    "20260905-112437-qwen-qwen3-235b-a22b-2507.md",
+    "20260905-112453-deepseek-deepseek-v4-flash.md",
+    "20260904-154253-openrouter-free.md"
+  ]
+}

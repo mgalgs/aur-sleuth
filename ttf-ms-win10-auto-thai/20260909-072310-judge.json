@@ -1,0 +1,29 @@
+{
+  "package": "ttf-ms-win10-auto-thai",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Both models reviewed the PKGBUILD and .SRCINFO and found them safe. The PKGBUILD performs legitimate font extraction from an official Microsoft Windows 10 evaluation ISO using standard tools (7zip, rclone, udf-http-range-proxy). All network activity targets microsoft.com domains. The 'inconclusive' verdict from qwen3-235b was caused entirely by an API error (HTTP 400) when auditing the LICENSE file, not a security concern. Deepseek successfully reviewed the LICENSE file and confirmed it contains only license text with no executable content. The SKIP checksums are a packaging hygiene concern, not evidence of injection.",
+  "disagreement_analysis": "The disagreement was caused by a tool error in qwen3-235b's audit of the LICENSE file (HTTP 400 BadRequestError), which resulted in an inconclusive verdict for that file and thus the overall package. This is not a genuine security disagreement - both models agreed the PKGBUILD and .SRCINFO were safe. The LICENSE file is benign license text, as confirmed by deepseek's successful review.",
+  "coverage_issues": [
+    "qwen3-235b failed to audit LICENSE due to API error (HTTP 400 BadRequestError), causing false inconclusive verdict"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Tool errors (API failures, timeouts) should not propagate to package-level inconclusive verdicts when the failed file is non-executable (LICENSE, README, etc.)",
+    "Implement retry logic for transient API errors before marking files as inconclusive",
+    "When a file fails to audit due to tool error, the system should attempt to determine if the file type is inherently non-executable and downgrade the impact on the overall verdict"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5097,
+    "completion_tokens": 1087,
+    "cost": 0.0030224
+  },
+  "audits_judged": [
+    "20260909-071311-qwen-qwen3-235b-a22b-2507.md",
+    "20260909-071424-deepseek-deepseek-v4-flash.md"
+  ]
+}
