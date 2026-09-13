@@ -1,0 +1,32 @@
+{
+  "package": "jackett-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard -bin AUR package that downloads pre-built binaries from the official Jackett GitHub releases (github.com/Jackett/Jackett) with pinned SHA256 checksums. The PKGBUILD contains no executable code at global scope, and the package() function only copies binaries and installs standard systemd integration files (service, sysusers, tmpfiles). All maintainer files follow normal AUR packaging patterns with no injection indicators. The 'inconclusive' result from qwen3-235b was caused by an API error (HTTP 400) when auditing jackett.sysusers, not a security finding. The deepseek-v4-flash model successfully audited all 7 files including jackett.sysusers and found it to be a standard sysusers.d snippet creating a daemon user. The openrouter/free report is advisory-only and does not count as a vote.",
+  "disagreement_analysis": "The disagreement stems from a tool error in the qwen3-235b model, which failed to audit jackett.sysusers due to an HTTP 400 BadRequestError from the LLM API. This is not a security disagreement but an infrastructure failure. The deepseek-v4-flash model reviewed the same file successfully and found it to be a standard systemd sysusers configuration. The openrouter/free report also reviewed all files successfully but is marked advisory: true and does not count toward the verdict.",
+  "coverage_issues": [
+    "qwen3-235b model failed to audit jackett.sysusers due to API error (HTTP 400 BadRequestError)",
+    "No upstream files were reviewed by any model (source_fetch: not_attempted)",
+    "Report from openrouter/free is for pkgver 0.24.2572 while other reports are for 0.24.2581"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "API errors during file audit should be retried or escalated rather than marking the entire package inconclusive when only one file failed",
+    "For -bin packages with pinned checksums from official upstream sources, the primary security guarantee comes from checksum verification; models should explicitly confirm checksums are present and non-SKIP",
+    "Tool infrastructure should distinguish between 'file could not be audited due to error' and 'file was audited and found suspicious' when computing final verdicts"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 9615,
+    "completion_tokens": 1242,
+    "cost": 0.00466656
+  },
+  "audits_judged": [
+    "20260913-151011-qwen-qwen3-235b-a22b-2507.md",
+    "20260913-150946-deepseek-deepseek-v4-flash.md",
+    "20260912-154344-openrouter-free.md"
+  ]
+}
