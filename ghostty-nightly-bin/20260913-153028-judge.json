@@ -1,0 +1,31 @@
+{
+  "package": "ghostty-nightly-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Report 2 (deepseek) successfully reviewed all three files (PKGBUILD, .SRCINFO, LICENSE) and found standard AUR packaging: binary package fetching from GitHub releases with pinned SHA256 checksums, no command substitutions or eval in global scope, no malicious patterns. Report 1 (qwen) had tool errors (HTTP 400) preventing review of PKGBUILD and .SRCINFO, making its inconclusive verdict a coverage failure rather than substantive disagreement. Report 3 (openrouter/free) is marked advisory:true and also had a tool error, so it carries no verdict signal per the rules. The package follows normal AUR conventions for -bin packages with proper checksum pinning.",
+  "disagreement_analysis": "The disagreement is not substantive but procedural: Report 1 returned inconclusive due to LLM API failures (HTTP 400 BadRequestError) on PKGBUILD and .SRCINFO, while Report 2 successfully reviewed all files and found them safe. Report 3 is advisory-only with a tool error. There is no actual disagreement about security findings\u2014only about whether the audit could complete.",
+  "coverage_issues": [
+    "Report 1 (qwen): LLM API failed with HTTP 400 on PKGBUILD and .SRCINFO - the two most critical files for security audit",
+    "Report 3 (openrouter/free): LLM returned error payload, only attempted PKGBUILD review and failed"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Tool errors (API failures, timeouts) on critical files like PKGBUILD should trigger automatic retry or escalation rather than marking the entire audit inconclusive",
+    "When multiple reports exist and one has complete coverage with sound reasoning while others have tool errors, the complete report should be weighted more heavily",
+    "Advisory reports with tool errors should be clearly distinguished from substantive inconclusive verdicts in the disagreement detection logic"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 4770,
+    "completion_tokens": 1204,
+    "cost": 0.00306752
+  },
+  "audits_judged": [
+    "20260913-152634-qwen-qwen3-235b-a22b-2507.md",
+    "20260913-152637-deepseek-deepseek-v4-flash.md",
+    "20260913-120901-openrouter-free.md"
+  ]
+}
