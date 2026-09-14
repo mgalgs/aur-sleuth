@@ -1,0 +1,28 @@
+{
+  "package": "ampcode",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard AUR wrapper for a prebuilt binary from the official upstream domain (static.ampcode.com). The PKGBUILD uses pinned SHA-256 checksums, and no malicious top-level code or network execution occurs during the parse phase. The only disagreement stems from a transient API error (HTTP 400) in one model, which failed to evaluate the PKGBUILD, while the other two models successfully and correctly identified it as safe.",
+  "disagreement_analysis": "The disagreement was caused by a transient API error (HTTP 400 BadRequestError) in the qwen3-235b model when attempting to audit the PKGBUILD, resulting in an 'inconclusive' status for that file. The other two models successfully audited the PKGBUILD and found no issues.",
+  "coverage_issues": [
+    "qwen/qwen3-235b-a22b-2507 failed to audit the PKGBUILD due to an LLM API error (HTTP 400), leaving the file unreviewed by that model."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Transient API errors (e.g., HTTP 400) should ideally trigger an automatic retry before marking a file or package as inconclusive, to prevent infrastructure issues from skewing audit results and triggering unnecessary escalations."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5898,
+    "completion_tokens": 1749,
+    "cost": 0.00412608
+  },
+  "audits_judged": [
+    "20260914-111329-qwen-qwen3-235b-a22b-2507.md",
+    "20260914-111345-deepseek-deepseek-v4-flash.md",
+    "20260910-232641-openrouter-free.md"
+  ]
+}
