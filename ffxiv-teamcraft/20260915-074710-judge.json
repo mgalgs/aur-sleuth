@@ -1,0 +1,31 @@
+{
+  "package": "ffxiv-teamcraft",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Report 2 (deepseek-v4-flash) successfully reviewed all 6 files and found no malicious content. The PKGBUILD downloads an AppImage from the official upstream GitHub repository with pinned SHA1 checksums, preventing artifact substitution. The ffxiv-teamcraft launcher script only chmods and executes the package's own AppImage. The .install script performs standard user/group creation and ACL configuration for the application's self-update feature. No code executes fetched content, and all sources point to the package's stated upstream relationship. Report 1's inconclusive verdict was caused by API errors (HTTP 400) on 3 critical files, not by security concerns.",
+  "disagreement_analysis": "The disagreement stems from tool failures, not security analysis. Report 1 (qwen3-235b) encountered HTTP 400 BadRequestError when auditing FFXIV-Teamcraft.desktop, PKGBUILD, and ffxiv-teamcraft, leaving 3 critical files unreviewed. Report 2 (deepseek-v4-flash) successfully processed all files and found them safe. This is a coverage gap in Report 1, not a genuine security disagreement.",
+  "coverage_issues": [
+    "Report 1 failed to audit PKGBUILD, ffxiv-teamcraft, and FFXIV-Teamcraft.desktop due to LLM API errors (HTTP 400)",
+    "Report 1's inconclusive verdict was driven by tool failures rather than security ambiguity"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Implement retry logic or fallback models when LLM API calls fail with HTTP 400 errors to prevent coverage gaps",
+    "Distinguish between 'inconclusive due to tool errors' and 'inconclusive due to security ambiguity' in verdict reporting",
+    "When a report has >30% file coverage gaps due to tool errors, automatically trigger a re-audit with a different model before publishing an inconclusive verdict",
+    "Track API error rates per model and route around models experiencing transient failures"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5976,
+    "completion_tokens": 1503,
+    "cost": 0.00383616
+  },
+  "audits_judged": [
+    "20260915-072952-qwen-qwen3-235b-a22b-2507.md",
+    "20260915-073122-deepseek-deepseek-v4-flash.md"
+  ]
+}

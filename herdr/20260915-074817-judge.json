@@ -1,0 +1,29 @@
+{
+  "package": "herdr",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The deepseek model successfully completed a thorough review of both PKGBUILD and .SRCINFO, finding no malicious behavior. The package uses standard AUR patterns: pinned GitHub source tarball with SHA256 checksum, Zig dependency fetching from the project's own build.zig.zon files (a legitimate vendored dependency workaround), --frozen/--locked build flags, and standard installation. The qwen model's inconclusive verdict was caused by an API error (HTTP 400) during the full PKGBUILD audit, not a security concern. Its initial audit (which succeeded) confirmed no executable code in global scope.",
+  "disagreement_analysis": "The disagreement stems from a tool error, not substantive security analysis. The qwen model experienced an HTTP 400 BadRequestError when attempting the full PKGBUILD audit, resulting in an inconclusive file verdict. The deepseek model completed the same audit successfully and provided detailed reasoning confirming the package's safety. The qwen model's successful initial audit also found no issues with the PKGBUILD's global scope.",
+  "coverage_issues": [
+    "qwen model: API error (HTTP 400) prevented full PKGBUILD audit completion"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "API errors should trigger automatic retry or fallback to another model rather than producing inconclusive verdicts that escalate unnecessarily",
+    "When one model has a tool error and another completes successfully with thorough analysis, the successful analysis should be weighted as decisive rather than treated as mere disagreement",
+    "The audit tool should distinguish between 'model could not complete analysis' and 'model completed analysis and found concerns' when determining if escalation is needed"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 3970,
+    "completion_tokens": 1450,
+    "cost": 0.0031264
+  },
+  "audits_judged": [
+    "20260915-072951-qwen-qwen3-235b-a22b-2507.md",
+    "20260915-073115-deepseek-deepseek-v4-flash.md"
+  ]
+}
