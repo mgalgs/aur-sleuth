@@ -1,0 +1,26 @@
+{
+  "package": "python-opentelemetry-instrumentation-exceptions",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD uses eval to dynamically generate package_*() functions for a large split-package, but all data interpolated into eval comes from static arrays defined within the same file. No external data, network requests, or fetched content is evaluated. The source is fetched from the legitimate upstream GitHub repository with pinned b2sums checksums. The geninfo.sh script is a maintainer helper tool that doesn't execute during makepkg. No injection patterns are present.",
+  "disagreement_analysis": null,
+  "coverage_issues": [],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "eval usage on static in-file arrays is a legitimate pattern for large split-packages and should not trigger unsafe verdicts when no external data flows into the eval",
+    "Maintainer helper scripts (like geninfo.sh) that update PKGBUILD metadata are normal AUR tooling and don't execute during makepkg unless explicitly called by PKGBUILD functions",
+    "The audit correctly distinguished between packaging patterns that look unusual (eval, global-scope main() call) versus actual injection risks (eval of fetched content, execution of downloaded binaries)"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 3979,
+    "completion_tokens": 962,
+    "cost": 0.00250464
+  },
+  "audits_judged": [
+    "20260915-080923-anthropic-claude-sonnet-4.6.md"
+  ]
+}
