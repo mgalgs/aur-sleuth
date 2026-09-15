@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Test discover_packages() in bench/pipeline.sh: the two candidate streams, the
-# Popularity ranking, the interleave ratio, and the exclusions.
+# Test discover_packages() in bench/pipeline.sh: the new-package lane, the
+# Popularity ranking, the interleave ratios, and the exclusions.
 #
 # The audit target is "all new/updated packages, plus the most popular ones",
 # but the updated stream alone runs far past the daily budget. So the streams are
-# interleaved at UPDATED_SHARE (updated) to (1 - UPDATED_SHARE) (seed), each
-# ranked by Popularity, and the budget cuts the list off. This proves the
-# interleave holds at every prefix, that ranking is by Popularity not votes, and
-# that orphaned, out-of-date, and already-audited packages never appear.
+# interleaved at UPDATED_SHARE (updated) to (1 - UPDATED_SHARE) (seed). Inside
+# updated, NEW_SHARE reserves room for new submissions while existing updates
+# remain ranked by Popularity. This proves both interleaves hold at every prefix
+# and that orphaned, out-of-date, and already-audited packages never appear.
 #
 # Costs nothing: no model is called. The function only reads a synthetic AUR
 # metadata file and prints an ordered candidate list.
@@ -38,11 +38,13 @@ export GIT_DIR="$tmp/git"
 # Run discover_packages against a synthetic metadata file, with the stderr
 # summary line dropped. Extracting the function keeps this a true unit test of
 # the selection logic, with no metadata download and no audit.
-#   $1 metadata .json.gz   $2 audited .tsv   $3 MIN_VOTES   $4 SEED_TOP   $5 UPDATED_SHARE
+#   $1 metadata .json.gz   $2 audited .tsv   $3 MIN_VOTES   $4 SEED_TOP
+#   $5 UPDATED_SHARE       $6 UPDATED_COUNT  $7 SEED_COUNT  $8 NEW_SHARE
 run_discover() {
     (
         export MIN_VOTES="$3" LOOKBACK_HOURS=24 SEED_TOP="$4" UPDATED_SHARE="$5"
         export UPDATED_COUNT="${6:-0}" SEED_COUNT="${7:-0}"
+        export NEW_SHARE="${8:-0.5}"
         export METADATA_CACHE="$1"
         eval "$(sed -n '/^discover_packages()/,/^}/p' bench/pipeline.sh)"
         discover_packages "$2" 2>/dev/null
@@ -86,6 +88,30 @@ else
     printf '    want: %s\n' "$(echo "$want" | tr '\n' ' ')"
     printf '    got:  %s\n' "$(echo "$got"  | tr '\n' ' ')"
 fi
+
+echo "== new submissions have a reserved lane under a tight cap =="
+cat > "$tmp/new.json" <<JSON
+[
+ {"Name":"POPULAR1","Maintainer":"m","Version":"1","NumVotes":500,"Popularity":100.0,"FirstSubmitted":1,"LastModified":$RECENT},
+ {"Name":"POPULAR2","Maintainer":"m","Version":"1","NumVotes":400,"Popularity":90.0,"FirstSubmitted":1,"LastModified":$RECENT},
+ {"Name":"NEWEST","Maintainer":"m","Version":"1","NumVotes":0,"Popularity":0.0,"FirstSubmitted":9999999998,"LastModified":$RECENT},
+ {"Name":"NEWER","Maintainer":"m","Version":"1","NumVotes":0,"Popularity":0.0,"FirstSubmitted":9999999997,"LastModified":$RECENT}
+]
+JSON
+gzip -c "$tmp/new.json" > "$tmp/new.json.gz"
+: > "$tmp/new.tsv"
+got="$(run_discover "$tmp/new.json.gz" "$tmp/new.tsv" 0 0 1.0 4 0 0.5)"
+want=$'NEWEST\nPOPULAR1\nNEWER\nPOPULAR2'
+if [[ "$got" == "$want" ]]; then
+    ok "newest zero-vote packages receive half the updated slots"
+else
+    bad "new-package lane order wrong"
+    printf '    want: %s\n' "$(echo "$want" | tr '\n' ' ')"
+    printf '    got:  %s\n' "$(echo "$got"  | tr '\n' ' ')"
+fi
+
+# Restore the first fixture's result for its exclusion assertions below.
+got="$(run_discover "$tmp/a.json.gz" "$tmp/a.tsv" 0 3 0.8)"
 
 for absent in ORPHAN OOD DONE; do
     if grep -qx "$absent" <<< "$got"; then
@@ -162,6 +188,12 @@ if bash bench/pipeline.sh --advisory-sweep many --dry-run --skip-judge \
     bad "should have refused --advisory-sweep many"
 else
     ok "refused a non-numeric --advisory-sweep"
+fi
+if bash bench/pipeline.sh --new-share 1.1 --dry-run --skip-judge \
+        --skip-dashboard --no-push >/dev/null 2>&1; then
+    bad "should have refused --new-share 1.1"
+else
+    ok "refused a new-package share above 1"
 fi
 if bash bench/pipeline.sh --advisory-models 'a b' --dry-run --skip-judge \
         --skip-dashboard --no-push >/dev/null 2>&1; then
@@ -255,6 +287,11 @@ if grep -A3 'sweep_flags=(--advisory' bench/pipeline.sh | grep -q -- '--updated-
     ok "the child run pins --updated-share 1.0: the seed never runs"
 else
     bad "the sweep child must run updated-only (--updated-share 1.0)"
+fi
+if grep -A4 'sweep_flags=(--advisory' bench/pipeline.sh | grep -q -- '--new-share "$NEW_SHARE"'; then
+    ok "the child sweep inherits the configured new-package share"
+else
+    bad "the sweep child lost the configured new-package share"
 fi
 for shaped in 'RUN_BUDGET=2' 'PACKAGES=foo' 'PACKAGES_FILE=/dev/null' \
               'ESCALATE=foo' 'ESCALATE_PENDING=true' 'UPDATED_COUNT=5' \

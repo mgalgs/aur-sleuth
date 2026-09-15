@@ -84,6 +84,7 @@ expect_flags "--audit-models qwen/qwen3-235b-a22b-2507,deepseek/deepseek-v4-flas
 expect_flags "--daily-budget 1.00 --jobs 2" \
     AUR_SLEUTH_DAILY_BUDGET=1.00 AUR_SLEUTH_JOBS=2
 expect_flags "--updated-share 0.8" AUR_SLEUTH_UPDATED_SHARE=0.8
+expect_flags "--new-share 0.6" AUR_SLEUTH_NEW_SHARE=0.6
 expect_flags "--seed-top 1000" AUR_SLEUTH_SEED_TOP=1000
 expect_flags "--audit-timeout 600" AUR_SLEUTH_AUDIT_TIMEOUT=600
 expect_flags "--updated-count 25" AUR_SLEUTH_UPDATED_COUNT=25
@@ -124,6 +125,8 @@ expect_refused 'AUR_SLEUTH_UPDATED_SHARE=0.8) or (1'
 # Out of range is refused at the container boundary, not left to abort the run.
 expect_refused "AUR_SLEUTH_UPDATED_SHARE=1.5"
 expect_refused "AUR_SLEUTH_UPDATED_SHARE=2"
+expect_refused "AUR_SLEUTH_NEW_SHARE=abc"
+expect_refused "AUR_SLEUTH_NEW_SHARE=1.5"
 # `timeout 0` is no timeout at all: the one value the setting must never be.
 expect_refused "AUR_SLEUTH_AUDIT_TIMEOUT=0"
 expect_refused "AUR_SLEUTH_AUDIT_TIMEOUT=00"

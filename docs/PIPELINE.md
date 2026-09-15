@@ -11,7 +11,9 @@ drives everything described here without a terminal.
 
 1. **Discover.** AUR metadata is refreshed, then two candidate streams are
    built: recently updated packages, and a popularity seed of packages never
-   audited. The streams interleave at `--updated-share`. A sized run caps
+   audited. New submissions and existing-package updates first interleave at
+   `--new-share`; that combined stream and the seed interleave at
+   `--updated-share`. A sized run caps
    them (`--updated-count`, `--seed-count`); a named run (`--packages`)
    skips discovery entirely and audits exactly what it is told.
 2. **Audit.** Every candidate is audited by each model on the audit seat, in
@@ -229,7 +231,9 @@ one that exits on an exhausted budget, since the sweep spends nothing — the
 pipeline runs a child advisory pass over N **recently updated** packages
 with the sweep models (default `openrouter/free`). Updated only, never the
 popularity seed: the threat model is malice arriving in updates, so free
-coverage extends the paid run's reach down the updated list. The child's
+coverage extends the paid run's reach down the updated list. Its
+`--new-share` lane prevents zero-popularity new submissions from sitting behind
+every established package update. The child's
 audited index counts advisory coverage too, so the six daily sweeps do not
 re-read the same updates; its audits run with extra retries
 (`AUR_SLEUTH_LLM_RETRIES=5`) so the free tier's per-minute throttle is

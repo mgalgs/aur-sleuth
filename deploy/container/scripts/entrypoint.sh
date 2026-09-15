@@ -444,6 +444,7 @@ collect_audit_env_flags() {
         "AUR_SLEUTH_LOOKBACK_HOURS:--lookback-hours:int"
         "AUR_SLEUTH_SEED_TOP:--seed-top:int"
         "AUR_SLEUTH_UPDATED_SHARE:--updated-share:share"
+        "AUR_SLEUTH_NEW_SHARE:--new-share:share"
         "AUR_SLEUTH_JOBS:--jobs:int"
         "AUR_SLEUTH_AUDIT_TIMEOUT:--audit-timeout:posint"
         "AUR_SLEUTH_AUDIT_MODELS:--audit-models:models"

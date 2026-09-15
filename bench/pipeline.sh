@@ -3,7 +3,8 @@
 # Runs: discover → audit → judge → re-audit → dashboard → push
 #
 # Usage: pipeline.sh [--min-votes N] [--daily-budget AMOUNT] [--lookback-hours N]
-#                     [--seed-top N] [--updated-share FRACTION] [--jobs N]
+#                     [--seed-top N] [--updated-share FRACTION]
+#                     [--new-share FRACTION] [--jobs N]
 #                     [--dry-run] [--skip-judge]
 #                     [--skip-dashboard] [--no-push] [--packages-file FILE]
 #                     [--audit-timeout SECONDS] [--audit-models LIST]
@@ -26,8 +27,9 @@ cd "$(dirname "$0")/.."
 
 # --- Defaults ---
 # MIN_VOTES is a hard floor on an updated package's vote count. It defaults to 0
-# because the updated stream is ranked and cut by Popularity, not votes: a new or
-# niche package with no votes is exactly the kind of fresh push we want to see.
+# because votes are not a safety signal: a new or niche package with no votes is
+# exactly the kind of fresh push we want to see. NEW_SHARE gives new submissions
+# a reserved lane before the budget cuts the candidate list.
 MIN_VOTES=0
 DAILY_BUDGET=2.00
 LOOKBACK_HOURS=24
@@ -75,6 +77,11 @@ SEED_TOP=1000
 # the popularity seed. The updated stream runs far past the daily budget on its
 # own, so without a reserved share the seed is never reached. See discover_packages.
 UPDATED_SHARE=0.8
+# Share of the recently-updated stream reserved for newly submitted packages.
+# Popularity is necessarily zero for a new package -- exactly the shape an
+# attacker can create cheaply and discard soon after. Keep a lane for those
+# packages instead of putting them at the tail of the popularity-ranked stream.
+NEW_SHARE=0.5
 AUDIT_MODELS="qwen/qwen3-235b-a22b-2507,deepseek/deepseek-v4-flash"
 JUDGE_MODEL="deepseek/deepseek-r1"
 REAUDIT_MODEL="anthropic/claude-sonnet-4.6"
@@ -156,6 +163,7 @@ while [[ $# -gt 0 ]]; do
         --no-push) NO_PUSH=true; shift ;;
         --seed-top) SEED_TOP="$2"; shift 2 ;;
         --updated-share) UPDATED_SHARE="$2"; shift 2 ;;
+        --new-share) NEW_SHARE="$2"; shift 2 ;;
         --audit-timeout) AUDIT_TIMEOUT="$2"; shift 2 ;;
         --audit-budget-share) AUDIT_BUDGET_SHARE="$2"; shift 2 ;;
         --runs-per-day) RUNS_PER_DAY="$2"; shift 2 ;;
@@ -312,6 +320,12 @@ fi
 # not interpolated into code, but validated here so a bad value fails fast.
 if [[ ! "$UPDATED_SHARE" =~ ^(0(\.[0-9]+)?|1(\.0+)?)$ ]]; then
     echo "--updated-share must be between 0 and 1, got '$UPDATED_SHARE'" >&2
+    exit 1
+fi
+# The new-vs-existing split inside the updated stream. Both endpoints are useful
+# for deliberate one-off runs, though the scheduled default reserves both lanes.
+if [[ ! "$NEW_SHARE" =~ ^(0(\.[0-9]+)?|1(\.0+)?)$ ]]; then
+    echo "--new-share must be between 0 and 1, got '$NEW_SHARE'" >&2
     exit 1
 fi
 
@@ -571,14 +585,13 @@ build_audited_index() {
 
 # --- Discover packages needing audit ---
 #
-# Two candidate streams, both ranked by AUR Popularity (a time-decayed vote
-# score, closer to "installed right now" than the raw all-time vote count):
+# Two top-level candidate streams:
 #
 #   updated -- every package changed within the lookback window that is not
-#              already audited at its current version. This is the threat we care
-#              about most: a fresh push, a brand-new package, a maintainer
-#              takeover. A new package has no votes, so this stream is NOT gated
-#              on votes; MIN_VOTES is only a hard floor (default 0).
+#              already audited at its current version. It has two reserved lanes:
+#              newly submitted packages, newest first, and existing packages,
+#              ranked by Popularity. NEW_SHARE interleaves them so a zero-vote
+#              package cannot disappear below hundreds of popular updates.
 #   seed    -- the top SEED_TOP most popular packages overall, so the
 #              long-established set is not a permanent blind spot.
 #
@@ -586,10 +599,8 @@ build_audited_index() {
 # change per day against a budget of a few dozen), so the budget always binds
 # inside it and the seed would never be reached. The two streams are therefore
 # interleaved to a fixed ratio: UPDATED_SHARE of the audited packages come from
-# the updated stream, the rest from the seed. Because each stream is sorted by
-# Popularity first, the point where the budget cuts the interleaved list off acts
-# as an effective popularity floor -- the highest-popularity packages that fit
-# the budget get audited, and that floor is as high as the split allows.
+# the updated stream, the rest from the seed. Inside the updated share, NEW_SHARE
+# is reserved for new submissions and the remainder for existing-package updates.
 discover_packages() {
     local audited_index="$1"
 
@@ -597,6 +608,7 @@ discover_packages() {
     LOOKBACK_HOURS="$LOOKBACK_HOURS" \
     SEED_TOP="$SEED_TOP" \
     UPDATED_SHARE="$UPDATED_SHARE" \
+    NEW_SHARE="$NEW_SHARE" \
     UPDATED_COUNT="$UPDATED_COUNT" \
     SEED_COUNT="$SEED_COUNT" \
     AUDITED_INDEX="$audited_index" \
@@ -608,6 +620,7 @@ min_votes = int(os.environ["MIN_VOTES"])
 lookback_hours = int(os.environ["LOOKBACK_HOURS"])
 seed_top = int(os.environ.get("SEED_TOP", "0"))
 updated_share = float(os.environ.get("UPDATED_SHARE", "0.8"))
+new_share = float(os.environ.get("NEW_SHARE", "0.5"))
 # Sized runs: a positive count caps its stream outright. The seed count also
 # stands in for SEED_TOP, so "Y popular packages" works even when the seed is
 # configured off.
@@ -655,16 +668,46 @@ def eligible(p):
 def popularity(p):
     return p.get("Popularity", 0.0)
 
-# Stream 1: recently updated packages, most popular first.
-updated = [
+# Stream 1 has two lanes. New packages have no popularity signal by definition;
+# sort them newest-first so a short-lived malicious submission can be seen in the
+# first scheduled run after it appears. Existing-package updates retain the
+# popularity ordering that protects commonly installed packages and takeovers.
+recent = [
+    p for p in packages
+    if eligible(p)
+    and p.get("LastModified", 0) >= cutoff
+    and p.get("NumVotes", 0) >= min_votes
+]
+new = [
     p.get("Name", "")
     for p in sorted(
-        (p for p in packages
-         if eligible(p)
-         and p.get("LastModified", 0) >= cutoff
-         and p.get("NumVotes", 0) >= min_votes),
-        key=popularity, reverse=True)
+        (p for p in recent if p.get("FirstSubmitted", 0) >= cutoff),
+        key=lambda p: (p.get("FirstSubmitted", 0), p.get("Name", "")),
+        reverse=True)
 ]
+changed = [
+    p.get("Name", "")
+    for p in sorted(
+        (p for p in recent if p.get("FirstSubmitted", 0) < cutoff),
+        key=lambda p: (popularity(p), p.get("LastModified", 0), p.get("Name", "")),
+        reverse=True)
+]
+
+def stride_merge(primary, primary_share, secondary):
+    """Interleave two ranked lists at a stable ratio, then drain either tail."""
+    secondary_share = 1.0 - primary_share
+    if secondary_share <= 0:
+        return primary + secondary
+    if primary_share <= 0:
+        return secondary + primary
+    tagged = [((i + 0.5) / primary_share, 0, name)
+              for i, name in enumerate(primary)]
+    tagged += [((j + 0.5) / secondary_share, 1, name)
+               for j, name in enumerate(secondary)]
+    tagged.sort()
+    return [name for _, _, name in tagged]
+
+updated = stride_merge(new, new_share, changed)
 if updated_count > 0:
     updated = updated[:updated_count]
 
@@ -698,12 +741,10 @@ else:
     # cuts the list, the mix is right. Two positions can tie exactly for some
     # shares (e.g. 0.75), so the sort key carries a stream tag: a tie always falls
     # to updated (tag 0 before tag 1), which keeps the order deterministic.
-    tagged = [((i + 0.5) / updated_share, 0, name) for i, name in enumerate(updated)]
-    tagged += [((j + 0.5) / seed_share, 1, name) for j, name in enumerate(seed)]
-    tagged.sort()
-    candidates = [name for _, _, name in tagged]
+    candidates = stride_merge(updated, updated_share, seed)
 
-print(f"# {len(updated)} updated + {len(seed)} seed, interleaved "
+print(f"# {len(new)} new / {len(changed)} existing updates -> {len(updated)} updated; "
+      f"{len(seed)} seed, interleaved "
       f"{round(updated_share * 100)}/{round((1 - updated_share) * 100)}",
       file=sys.stderr)
 
@@ -893,6 +934,7 @@ run_advisory_sweep() {
     fi
     local sweep_flags=(--advisory true --audit-models "$ADVISORY_MODELS"
         --updated-share 1.0 --updated-count "$ADVISORY_SWEEP" --run-budget 1
+        --new-share "$NEW_SHARE"
         --jobs "$JOBS" --audit-timeout "$AUDIT_TIMEOUT"
         --lookback-hours "$LOOKBACK_HOURS" --min-votes "$MIN_VOTES")
     $NO_PUSH && sweep_flags+=(--no-push)
@@ -1010,7 +1052,7 @@ main() {
     fi
     log "Audit phase stops at \$$AUDIT_BUDGET; judge and escalations run to completion even past the slice"
     if [[ "$SEED_TOP" -gt 0 ]]; then
-        log "Candidates: updated + top $SEED_TOP by popularity, interleaved at updated-share=$UPDATED_SHARE"
+        log "Candidates: new/existing updates at new-share=$NEW_SHARE + top $SEED_TOP by popularity, interleaved at updated-share=$UPDATED_SHARE"
     fi
     log "Models: ${MODEL_LIST[*]} | Judge: $JUDGE_MODEL | Escalation: $REAUDIT_MODEL, then $TIEBREAK_MODEL | Final: $FINAL_AUDIT_MODEL + $FINAL_JUDGE_MODEL judge"
     if [[ ${#FREE_MODEL_LIST[@]} -gt 0 ]]; then
