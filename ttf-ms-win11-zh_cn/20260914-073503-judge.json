@@ -1,0 +1,29 @@
+{
+  "package": "ttf-ms-win11-zh_cn",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "This is a standard AUR font package where users must manually provide Windows 11 font files locally. The PKGBUILD uses file:// URIs for sources, pins SHA-256 checksums for all font files, contains no network downloads, no obfuscated code, and no executable logic at global scope. The .SRCINFO and .gitignore are standard metadata. No injection patterns or supply-chain risks are present.",
+  "disagreement_analysis": "The disagreement (inconclusive vs safe) was caused by a tool error in the qwen model: the LLM API request failed with HTTP 400 when attempting to fully audit the PKGBUILD. The deepseek model successfully reviewed all files and found no issues. The qwen model's initial top-level code scan also found no dangerous code before the failure occurred.",
+  "coverage_issues": [
+    "qwen model: PKGBUILD full audit failed due to API error (HTTP 400 BadRequestError), resulting in inconclusive verdict for that file"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Tool errors (API failures, timeouts) should trigger automatic retries before marking a file as inconclusive",
+    "When one model fails due to infrastructure errors but another model completes a thorough review of the same files, the successful review should be weighted appropriately in the final verdict",
+    "For packages with only local file sources (file:// URIs) and no build scripts, the audit scope is naturally limited - models should recognize this pattern and confirm coverage is complete"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 4531,
+    "completion_tokens": 1135,
+    "cost": 0.00290272
+  },
+  "audits_judged": [
+    "20260914-070934-qwen-qwen3-235b-a22b-2507.md",
+    "20260914-071227-deepseek-deepseek-v4-flash.md"
+  ]
+}

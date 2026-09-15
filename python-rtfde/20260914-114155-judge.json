@@ -1,0 +1,28 @@
+{
+  "package": "python-rtfde",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD and patch files were successfully audited by multiple models and found to contain only standard, safe packaging practices. The disagreement was solely caused by a transient API error (HTTP 400) in the qwen model when processing non-executable metadata files (.SRCINFO, .gitignore), which do not pose a security risk. The deepseek model successfully reviewed all files and confirmed safety.",
+  "disagreement_analysis": "The qwen model returned 'inconclusive' due to API failures (HTTP 400) when attempting to audit .SRCINFO and .gitignore. The deepseek model successfully audited all files and returned 'safe'. The openrouter report is advisory and also returned 'safe'. The disagreement is purely an artifact of a tool/API error on non-executable files, not a genuine security concern.",
+  "coverage_issues": [
+    "qwen model failed to audit .SRCINFO and .gitignore due to HTTP 400 API errors."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "The audit tool should handle transient API errors on non-executable files (like .SRCINFO and .gitignore) more gracefully. If critical executable files (PKGBUILD, .install) are successfully audited and found safe, failures on inert metadata files should not force an overall 'inconclusive' verdict, or the tool should automatically retry or skip inert files when they fail to parse."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 7025,
+    "completion_tokens": 1673,
+    "cost": 0.00438944
+  },
+  "audits_judged": [
+    "20260914-112046-qwen-qwen3-235b-a22b-2507.md",
+    "20260914-112056-deepseek-deepseek-v4-flash.md",
+    "20260913-233607-openrouter-free.md"
+  ]
+}

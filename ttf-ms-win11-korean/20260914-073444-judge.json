@@ -1,0 +1,30 @@
+{
+  "package": "ttf-ms-win11-korean",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard AUR font packaging script for non-redistributable Microsoft fonts. It uses `file://` sources requiring user-provided local files and overrides `DLAGENTS` to echo an error message if files are missing\u2014both are well-established AUR patterns for proprietary fonts. There is no executable code injection, no network access to untrusted hosts, and no execution of fetched content. The only disagreement arose from an API error in one report when reviewing .gitignore, which is not a security-critical file.",
+  "disagreement_analysis": "Report 1 (qwen3-235b) returned 'inconclusive' solely due to an HTTP 400 API error when auditing .gitignore. The actual security assessments of PKGBUILD and .SRCINFO were safe (after the model self-corrected an initial false positive on .SRCINFO). Report 2 (deepseek-v4-flash) successfully reviewed all files and returned 'safe'. The disagreement is a tool failure, not a security judgment.",
+  "coverage_issues": [
+    "Report 1 failed to review .gitignore due to an API error (HTTP 400). However, .gitignore contains no executable code and is not security-critical, so this does not affect the verdict."
+  ],
+  "false_positives": [
+    "Report 1 initially flagged .SRCINFO as UNSAFE due to `file://` sources and `SKIP` checksums, but correctly self-corrected on second review. This pattern is standard AUR packaging hygiene for non-redistributable fonts, not evidence of injection."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "API errors on non-critical files (e.g., .gitignore, .editorconfig) should not force an 'inconclusive' verdict. The tool should distinguish between security-critical files (PKGBUILD, .install, build scripts) and declarative config files when handling audit failures.",
+    "Models may initially flag `file://` sources with `SKIP` checksums as unsafe. The audit prompt should explicitly clarify that this is a standard AUR pattern for proprietary/non-redistributable content and does not constitute evidence of code injection."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5254,
+    "completion_tokens": 1375,
+    "cost": 0.00344128
+  },
+  "audits_judged": [
+    "20260914-070635-qwen-qwen3-235b-a22b-2507.md",
+    "20260914-070812-deepseek-deepseek-v4-flash.md"
+  ]
+}

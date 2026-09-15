@@ -1,0 +1,31 @@
+{
+  "package": "graphify-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard Python AUR package fetching from PyPI (files.pythonhosted.org) with a pinned SHA256 checksum. The PKGBUILD contains only standard variable assignments and function definitions with no malicious execution during sourcing or build. The build() and package() functions use standard Python tooling (python -m build, python -m installer) with no network requests to unrelated hosts, no obfuscated commands, and no file modifications outside $pkgdir. The naming inconsistencies (graphifyy vs graphify, -bin suffix despite building from sdist) are packaging style issues, not security concerns. The checksum verification closes the swap risk.",
+  "disagreement_analysis": "The disagreement stems from API errors in two models (qwen failed on PKGBUILD with HTTP 400, openrouter failed on .SRCINFO with LLMResponseError), causing inconclusive verdicts. The deepseek model completed successfully and found no issues. The inconclusive results are technical failures, not security findings. The advisory report from openrouter noted a potentially truncated checksum (63 chars vs 64) but acknowledged this was likely a rendering artifact.",
+  "coverage_issues": [
+    "qwen model failed to audit PKGBUILD due to HTTP 400 error",
+    "openrouter model failed to audit .SRCINFO due to LLMResponseError"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "API errors should trigger automatic retry or fallback to prevent inconclusive verdicts from technical failures",
+    "Checksum length validation should be performed before sending to LLM to catch truncation issues early",
+    "Models should distinguish between packaging style issues (naming inconsistencies) and actual security concerns in their summaries"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5053,
+    "completion_tokens": 1343,
+    "cost": 0.003336
+  },
+  "audits_judged": [
+    "20260913-152417-qwen-qwen3-235b-a22b-2507.md",
+    "20260913-152433-deepseek-deepseek-v4-flash.md",
+    "20260913-075714-openrouter-free.md"
+  ]
+}

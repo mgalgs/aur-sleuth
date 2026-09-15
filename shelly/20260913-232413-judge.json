@@ -1,0 +1,29 @@
+{
+  "package": "shelly",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Both models reviewed the same 6 files and found standard, safe packaging practices. The PKGBUILD uses a pinned GitHub release tarball with SHA-256 checksums, standard zig build commands, and legitimate polkit policy installation. The only disagreement stems from an API error (HTTP 400) in the qwen3-235b report that prevented it from reviewing com.shellyorg.shelly-notifications.desktop, while deepseek-v4-flash successfully reviewed all files and found them safe. No malicious code, obfuscation, or supply-chain risks were identified in any file.",
+  "disagreement_analysis": "The disagreement is purely technical: qwen3-235b encountered an API error (BadRequestError) when auditing com.shellyorg.shelly-notifications.desktop, resulting in an inconclusive verdict for that file. deepseek-v4-flash successfully reviewed the same file and found it to be a standard desktop entry with no security concerns. Both models agreed on all other files.",
+  "coverage_issues": [
+    "qwen3-235b failed to review com.shellyorg.shelly-notifications.desktop due to API error (HTTP 400 BadRequestError)"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "When a model encounters a tool error (API failure, timeout, etc.) on a specific file, the audit system should either retry the request or flag the file for re-audit rather than marking the entire package as inconclusive",
+    "If one model successfully reviews a file that another model failed to review due to a tool error, and both models agree on all other files, the successful review should resolve the disagreement",
+    "API errors should be distinguished from genuine security concerns in the verdict logic - a tool failure is not evidence of risk"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 6782,
+    "completion_tokens": 1029,
+    "cost": 0.00348736
+  },
+  "audits_judged": [
+    "20260913-230310-qwen-qwen3-235b-a22b-2507.md",
+    "20260913-230449-deepseek-deepseek-v4-flash.md"
+  ]
+}

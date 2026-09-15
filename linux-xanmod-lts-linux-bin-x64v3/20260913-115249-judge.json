@@ -1,0 +1,28 @@
+{
+  "package": "linux-xanmod-lts-linux-bin-x64v3",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD uses a top-level curl to fetch an RSS feed from the official SourceForge upstream to dynamically resolve download URLs. While this executes network calls during sourcing, it does not execute the fetched content. Furthermore, the downloaded artifacts are pinned with SHA256 checksums, which closes the swap risk: if the feed is compromised and serves a malicious file, makepkg will reject it due to checksum mismatch. This is a standard AUR pattern for vendors without stable URLs, not a malicious injection.",
+  "disagreement_analysis": "Qwen flagged the top-level curl/xmllint as a supply-chain risk because it performs network I/O during sourcing. Deepseek and Openrouter correctly recognized this as a standard dynamic URL resolution pattern and noted that the pinned SHA256 checksums on the downloaded .deb files mitigate any swap risk, rendering the parse-time network call safe.",
+  "coverage_issues": [],
+  "false_positives": [
+    "Qwen's flagging of the top-level curl/xmllint as a remote code execution / supply-chain risk. The fetched content is only parsed for URLs, not executed, and the final artifacts are checksummed, closing the swap risk."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models frequently false-positive on dynamic URL resolution (e.g., curl/grep/sed/xmllint at the top level of a PKGBUILD) by focusing on the network call during sourcing while ignoring that the final downloaded artifacts are checksummed. The audit tool should explicitly instruct models that if the final payload is pinned with a checksum, dynamic URL resolution from the official upstream is a safe, standard AUR pattern and not an injection."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 7601,
+    "completion_tokens": 2260,
+    "cost": 0.00532512
+  },
+  "audits_judged": [
+    "20260913-110344-qwen-qwen3-235b-a22b-2507.md",
+    "20260913-110353-deepseek-deepseek-v4-flash.md",
+    "20260908-161003-openrouter-free.md"
+  ]
+}

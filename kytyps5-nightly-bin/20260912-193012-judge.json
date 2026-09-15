@@ -1,0 +1,27 @@
+{
+  "package": "kytyps5-nightly-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "All models that successfully completed their analysis found no security issues. The package is a standard -bin package that downloads pre-built binaries and licenses from the official upstream GitHub repository with pinned checksums. The .gitlab-ci.yml automates updates using the upstream API, which is a normal and secure pattern for nightly builds. The inconclusive results in the other reports were solely due to transient LLM API errors and parsing failures, not actual security findings.",
+  "disagreement_analysis": "The disagreement was caused by tool errors rather than conflicting security assessments. The qwen model failed with an HTTP 400 error on README.md, and the openrouter model failed to parse the decision for kytyps5.desktop. The deepseek model successfully reviewed all files and found them safe.",
+  "coverage_issues": [],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Transient LLM API errors (e.g., HTTP 400, parse failures) should be handled gracefully by the audit tool, perhaps by retrying or falling back to a simpler check, rather than marking the entire package as inconclusive when the failed file is clearly benign (like a README or desktop file).",
+    "Ensure that a single non-critical file's audit failure does not block the final verdict if all critical execution paths (PKGBUILD, .install, scripts) are verified safe, or provide a more nuanced status for non-critical file failures."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 9128,
+    "completion_tokens": 1623,
+    "cost": 0.0049984
+  },
+  "audits_judged": [
+    "20260912-191707-qwen-qwen3-235b-a22b-2507.md",
+    "20260912-191724-deepseek-deepseek-v4-flash.md",
+    "20260904-194259-openrouter-free.md"
+  ]
+}

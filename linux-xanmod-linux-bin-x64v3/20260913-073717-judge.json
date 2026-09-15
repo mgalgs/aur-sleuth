@@ -1,0 +1,32 @@
+{
+  "package": "linux-xanmod-linux-bin-x64v3",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The top-level curl call fetches an RSS feed from SourceForge (the upstream host) to resolve dynamic download URLs. This is a standard AUR pattern for vendors without stable URLs. The fetched XML is parsed to extract URLs, not executed. Furthermore, the actual downloaded artifacts (.deb files) are pinned with SHA-256 checksums, which closes the swap risk. This falls under the packaging hygiene exception and is not an injection.",
+  "disagreement_analysis": "Qwen flagged the top-level curl call as a supply-chain risk and potential RCE, failing to recognize it as a standard AUR pattern for dynamic URL resolution and ignoring that the downloaded artifacts are checksummed. Deepseek correctly identified it as a standard pattern with mitigated risk.",
+  "coverage_issues": [
+    "openrouter/free failed with a JSONDecodeError and provided no verdict."
+  ],
+  "false_positives": [
+    "Qwen's flag on the top-level curl call: fetching upstream metadata to resolve dynamic URLs is a normal AUR pattern, and the downloaded artifacts are checksummed, mitigating swap risks."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models must distinguish between executing fetched content (unsafe) and parsing it to extract URLs (safe if checksummed).",
+    "Top-level network calls to fetch upstream metadata (RSS, HTML) for URL resolution should not be flagged as unsafe if the final artifacts are pinned with checksums.",
+    "Reinforce the 'packaging hygiene' exception: resolving dynamic URLs via upstream page scraping is normal and not an injection."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5193,
+    "completion_tokens": 1656,
+    "cost": 0.00378144
+  },
+  "audits_judged": [
+    "20260913-070539-qwen-qwen3-235b-a22b-2507.md",
+    "20260913-070707-deepseek-deepseek-v4-flash.md",
+    "20260908-161022-openrouter-free.md"
+  ]
+}

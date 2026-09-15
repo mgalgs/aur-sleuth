@@ -1,0 +1,30 @@
+{
+  "package": "passkeyd",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The disagreement centers on telemetry in the .install script. The escalation audit correctly determined that while the PostHog telemetry is a privacy concern, it only transmits non-sensitive data (locale, UI choice, version, random UUID) to a legitimate analytics service. It does not exfiltrate credentials, keys, or sensitive system information, nor does it execute remote code. This does not meet the threshold for a malicious supply-chain attack.",
+  "disagreement_analysis": "Qwen flagged the PostHog telemetry in passkeyd.install as malicious data exfiltration. The other models, including the escalation audit (Claude Sonnet 4.6), correctly identified it as a privacy concern rather than a security threat, noting the data is non-sensitive and the endpoint is a legitimate analytics service.",
+  "coverage_issues": [],
+  "false_positives": [
+    "Qwen's UNSAFE verdict for passkeyd.install: Overreacts to standard analytics telemetry. Sending non-sensitive metadata to PostHog is a privacy issue, not a malicious supply-chain injection."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models must distinguish between malicious data exfiltration (stealing credentials, SSH keys, etc.) and standard analytics telemetry. Telemetry to known services (PostHog, Mixpanel) transmitting non-sensitive metadata should not trigger an UNSAFE verdict.",
+    "Privacy violations or undisclosed telemetry in .install scripts should be noted as advisory context but not classified as malicious security threats unless they exfiltrate sensitive data or execute untrusted code."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 10106,
+    "completion_tokens": 2339,
+    "cost": 0.00622784
+  },
+  "audits_judged": [
+    "20260912-192507-qwen-qwen3-235b-a22b-2507.md",
+    "20260912-192452-deepseek-deepseek-v4-flash.md",
+    "20260903-153523-openrouter-free.md",
+    "20260912-194013-anthropic-claude-sonnet-4.6.md"
+  ]
+}
