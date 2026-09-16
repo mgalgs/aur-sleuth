@@ -1,0 +1,30 @@
+{
+  "package": "azerothcore-wotlk-git",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package contains standard AUR packaging files. The only flagged issue was in `acore_mod`, which is an administrative helper script installed for the user to compile custom modules post-installation. It is not executed during the `makepkg` build process. The model flagged it for insecure design (parsing binary metadata, using sudo), but this is a legitimate feature of the package, not a malicious injection into the AUR packaging. The threat model explicitly excludes evaluating the security of installed application tooling unless it executes during build/install.",
+  "disagreement_analysis": "The Qwen model flagged `acore_mod` as a supply-chain attack vector due to its use of `sudo` and parsing of binary metadata to determine the build directory. However, `acore_mod` is an admin helper script meant to be run by the user after installation to compile optional modules. It is not invoked by the PKGBUILD or `.install` script. The Qwen model incorrectly applied application security grading to a post-install helper script, mistaking poor input validation for a malicious injection. The DeepSeek model correctly identified it as a legitimate helper script.",
+  "coverage_issues": [
+    "Qwen model failed to review `jemalloc.patch` due to an LLM API error (HTTP 400)."
+  ],
+  "false_positives": [
+    "acore_mod: Flagged for arbitrary code execution and sudo abuse. This is a false positive because the script is a legitimate administrative helper tool provided by the package for compiling user modules, not a malicious payload injected into the build process. The model confused insecure script design with a supply-chain injection."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models frequently confuse insecure design or poor coding practices in post-install admin helper scripts with malicious supply-chain injections. The audit prompt/tool must explicitly distinguish between scripts executed during `makepkg` (PKGBUILD functions, `.install` hooks) and helper scripts installed for the user to run later.",
+    "API errors during file review should be retried or handled gracefully to ensure full coverage, as seen with the skipped `jemalloc.patch` in the Qwen report."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 10193,
+    "completion_tokens": 1834,
+    "cost": 0.00560928
+  },
+  "audits_judged": [
+    "20260916-230836-qwen-qwen3-235b-a22b-2507.md",
+    "20260916-231020-deepseek-deepseek-v4-flash.md"
+  ]
+}
