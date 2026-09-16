@@ -1,0 +1,28 @@
+{
+  "package": "helium-browser-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The disagreement is purely an artifact of a transient API error (HTTP 400) in the first model when attempting to review the LICENSE file. The second model successfully reviewed the LICENSE file and correctly identified it as non-executable. Both models correctly assessed the PKGBUILD, patches, and metadata as safe, finding no evidence of supply-chain injection or malicious packaging.",
+  "disagreement_analysis": "The first model's 'inconclusive' verdict was triggered by a tool/API failure on a non-executable file (LICENSE), not by any security finding. The second model completed the review successfully and confirmed the file was safe.",
+  "coverage_issues": [
+    "qwen/qwen3-235b-a22b-2507 failed to review LICENSE due to an HTTP 400 BadRequestError."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "The orchestration layer should not fail the entire audit or mark it 'inconclusive' due to transient API errors on non-executable files (e.g., LICENSE, .gitignore). It should either retry or skip LLM evaluation for known safe file types.",
+    "Models correctly distinguished between application-level shell script quirks (eval in wrapper) and supply-chain injections, but explicit examples in the prompt could further reduce the risk of false positives on upstream wrapper scripts."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 7183,
+    "completion_tokens": 1938,
+    "cost": 0.0047792
+  },
+  "audits_judged": [
+    "20260916-230152-qwen-qwen3-235b-a22b-2507.md",
+    "20260916-230513-deepseek-deepseek-v4-flash.md"
+  ]
+}
