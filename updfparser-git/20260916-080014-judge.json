@@ -1,0 +1,31 @@
+{
+  "package": "updfparser-git",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD contains a top-level command substitution that fetches a cookie from https://forge.soutade.fr/402.html (the package's own declared upstream domain) and uses it as a Git HTTP authentication header. This is an unusual but legitimate authentication workaround for a repository requiring cookie-based session access. It does not execute fetched content, does not exfiltrate local data, and does not fetch from an unrelated host. Per the threat model, this is not an injection pattern - it's packaging hygiene concern at most, not a supply-chain attack.",
+  "disagreement_analysis": "Qwen3 flagged the top-level curl/sed execution as 'exfiltration' and 'unsafe', but mischaracterized the behavior: (1) it doesn't exfiltrate local data - it only extracts a cookie string from the response, (2) it fetches from the package's own upstream domain, not an unrelated host, (3) it doesn't execute the fetched content. Deepseek correctly identified this as an authentication mechanism targeting the project's own forge, with no malicious behavior. The disagreement stems from qwen3 treating any network activity at global scope as inherently unsafe without evaluating the actual threat model criteria.",
+  "coverage_issues": [],
+  "false_positives": [
+    "Qwen3's 'unsafe' verdict: conflates unusual packaging (top-level network call) with malicious injection. The code fetches from the package's own upstream, extracts only a cookie string (no code execution), and serves a legitimate authentication purpose. This violates packaging best practices but is not a supply-chain attack per the threat model."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models must distinguish between 'unusual packaging' and 'malicious injection' - top-level network calls are a hygiene issue, not automatically a security violation",
+    "When evaluating network fetches, models should check: (1) does it fetch from the package's own declared upstream? (2) does it execute the fetched content? (3) does it exfiltrate local data? Only 'yes' to execution or unrelated hosts should trigger unsafe",
+    "The term 'exfiltration' should only apply when local data is actually sent outbound - extracting a cookie from an HTML response is not exfiltration",
+    "Packaging patterns that parse upstream pages with grep/sed are explicitly noted as normal in the threat model - models should apply this even when done at global scope rather than inside functions"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5991,
+    "completion_tokens": 1953,
+    "cost": 0.00441696
+  },
+  "audits_judged": [
+    "20260916-073016-qwen-qwen3-235b-a22b-2507.md",
+    "20260916-073103-deepseek-deepseek-v4-flash.md",
+    "20260915-152135-openrouter-free.md"
+  ]
+}
