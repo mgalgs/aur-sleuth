@@ -1,0 +1,33 @@
+{
+  "package": "t3code-nightly-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Standard -bin package downloading a prebuilt AppImage from the official upstream GitHub repository (pingdotgg/t3code) with pinned SHA-256 checksums. The PKGBUILD contains no suspicious code, no network calls beyond the declared upstream source, no eval/obfuscation, and follows standard AppImage packaging practices. The chmod 4755 on chrome-sandbox is standard for Electron/Chromium applications. No evidence of injection or malicious behavior.",
+  "disagreement_analysis": "The disagreement between 'inconclusive' and 'safe' was caused by technical failures, not analytical differences. The qwen model correctly identified the PKGBUILD as safe but encountered an HTTP 400 API error when auditing .SRCINFO. The openrouter model (advisory-only) failed to parse a decision from its response. The deepseek model provided a thorough analysis and correctly identified the package as safe. All models that successfully analyzed the PKGBUILD agreed it was safe.",
+  "coverage_issues": [
+    "qwen model: API error (HTTP 400) prevented .SRCINFO audit",
+    "openrouter model: Failed to parse decision from model response",
+    "No model attempted source_fetch, though this is acceptable for -bin packages with pinned checksums from official sources"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Technical errors (API failures, parsing issues) should be distinguished from analytical inconclusiveness in verdict reporting",
+    "For -bin packages with pinned checksums from official upstream sources, the audit is straightforward and models should confidently mark as safe when no injection patterns are present",
+    "The tool should implement retry logic or fallback models when API errors occur to prevent unnecessary escalations",
+    "Models should be trained to recognize standard Electron/Chromium packaging patterns (like chrome-sandbox setuid) as normal rather than flagging them for review"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 4773,
+    "completion_tokens": 1426,
+    "cost": 0.00335264
+  },
+  "audits_judged": [
+    "20260917-030355-qwen-qwen3-235b-a22b-2507.md",
+    "20260917-030627-deepseek-deepseek-v4-flash.md",
+    "20260916-200758-openrouter-free.md"
+  ]
+}
