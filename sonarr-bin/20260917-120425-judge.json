@@ -1,0 +1,33 @@
+{
+  "package": "sonarr-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The deepseek model successfully audited all 9 files and found no security issues. The package follows standard AUR practices: downloads from official Sonarr service (services.sonarr.tv) with pinned SHA256 checksums, standard systemd integration (service, sysusers, tmpfiles), and no obfuscation or malicious patterns. The inconclusive results from other models are due to tool errors (API failures, parsing errors), not security concerns. The openrouter model is advisory-only and had a content safety filter false positive on a systemd service file.",
+  "disagreement_analysis": "The disagreement stems from tool failures rather than security concerns. The qwen model experienced HTTP 400 errors when auditing .nvchecker.toml and PKGBUILD. The openrouter model (advisory-only) had parsing errors on package_info and sonarr.service, with the latter triggering a content safety filter false positive. The deepseek model completed a full audit successfully and found no issues.",
+  "coverage_issues": [
+    "qwen model: API errors prevented audit of .nvchecker.toml and PKGBUILD",
+    "openrouter model: parsing errors on package_info and sonarr.service"
+  ],
+  "false_positives": [
+    "openrouter model's content safety filter flagged sonarr.service as 'Unauthorized Advice, Criminal Planning/Confessions' - this is a systemd service file, not malicious content"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Content safety filters can trigger false positives on technical configuration files; consider disabling or whitelisting known-safe file types",
+    "API errors should trigger automatic retries or fallback to alternative models to avoid incomplete audits",
+    "Distinguish between sloppy packaging (e.g., unescaped backticks in echo statements) and actual malicious intent - the former is a hygiene issue, not a security issue"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 11639,
+    "completion_tokens": 2266,
+    "cost": 0.00662496
+  },
+  "audits_judged": [
+    "20260917-114035-qwen-qwen3-235b-a22b-2507.md",
+    "20260917-114530-deepseek-deepseek-v4-flash.md",
+    "20260917-081008-openrouter-free.md"
+  ]
+}
