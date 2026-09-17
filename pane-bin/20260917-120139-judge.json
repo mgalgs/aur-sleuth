@@ -1,0 +1,29 @@
+{
+  "package": "pane-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard AppImage binary repackaging (-bin) from the official upstream GitHub releases. The source is pinned with a SHA256 checksum, and the build process only extracts the AppImage and installs standard files. There is no malicious code, no unexpected network access, and no execution of untrusted content. The disagreement was solely due to a transient API error in one model when reviewing .SRCINFO.",
+  "disagreement_analysis": "The qwen model returned 'inconclusive' because it encountered an HTTP 400 BadRequestError when auditing .SRCINFO. The deepseek model successfully audited both files and returned 'safe'. The openrouter model (advisory) also returned 'safe'. The disagreement is an artifact of a tool failure, not a genuine security dispute.",
+  "coverage_issues": [
+    "qwen model failed to audit .SRCINFO due to an LLM API error (HTTP 400)."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Transient API errors (e.g., HTTP 400) during file audits should trigger automatic retries or fallback mechanisms rather than immediately failing the file and cascading to an 'inconclusive' package verdict.",
+    "When a package consists only of standard metadata (.SRCINFO) and a clearly safe PKGBUILD, a tool error on the metadata file should not override the safe verdict of the executable build script if the metadata poses no execution risk."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5068,
+    "completion_tokens": 1808,
+    "cost": 0.003936
+  },
+  "audits_judged": [
+    "20260917-112222-qwen-qwen3-235b-a22b-2507.md",
+    "20260917-112202-deepseek-deepseek-v4-flash.md",
+    "20260915-112457-openrouter-free.md"
+  ]
+}
