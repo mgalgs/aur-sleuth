@@ -1,0 +1,30 @@
+{
+  "package": "azerothcore-wotlk-git",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Report 2 successfully audited all files, including the .install script that Report 1 missed due to an API error. The .install script and all other files contain standard, expected packaging and administrative logic for a game server emulator, with no signs of malicious injection. Report 1's initial flag on acore_mod was a false positive confusing administrative privilege use with supply-chain compromise.",
+  "disagreement_analysis": "Report 1 returned 'inconclusive' solely because of an API error when auditing the .install file, and initially flagged acore_mod as unsafe due to its use of sudo and file manipulation (a false positive it later self-corrected). Report 2 successfully audited all files and correctly identified them as safe.",
+  "coverage_issues": [
+    "Report 1 failed to audit azerothcore-wotlk-git.install due to an LLM API error (HTTP 400), leaving a critical install hook unreviewed in that specific run."
+  ],
+  "false_positives": [
+    "Report 1 initially flagged acore_mod as UNSAFE for using sudo to manage symlinks and restart services. This is expected behavior for an administrative module management helper script, not a malicious injection."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models tend to flag administrative scripts that use sudo and manipulate system directories as unsafe, confusing operational risk or packaging hygiene with malicious injection. Audit prompts or post-processing should explicitly distinguish between 'risky admin tooling' and 'supply-chain compromise'.",
+    "Transient API errors on individual files should be handled gracefully to prevent a single failure from rendering the entire package audit inconclusive, especially when the missing file is a standard install hook."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 9537,
+    "completion_tokens": 1842,
+    "cost": 0.0054096000000000005
+  },
+  "audits_judged": [
+    "20260917-150154-qwen-qwen3-235b-a22b-2507.md",
+    "20260917-150514-deepseek-deepseek-v4-flash.md"
+  ]
+}
