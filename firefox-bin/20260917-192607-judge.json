@@ -1,0 +1,33 @@
+{
+  "package": "firefox-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The only complete, non-advisory report (deepseek-v4-flash) successfully reviewed all 5 files and found them safe. The two inconclusive results were caused by tool errors (HTTP 400 API failure on firefox.sh for qwen3-235b; unparseable safety-classifier response on policies.json for openrouter/free), not substantive security findings. The package is standard Firefox binary packaging: PKGBUILD downloads from archive.mozilla.org with PGP signature verification, firefox.sh is a trivial exec wrapper, policies.json disables auto-updates (standard enterprise policy), firefox.desktop is a standard launcher, and .SRCINFO is metadata. No injection patterns, no execution of fetched content, no suspicious hosts.",
+  "disagreement_analysis": "Disagreement was triggered by tool failures, not security findings. qwen3-235b failed to audit firefox.sh (HTTP 400 BadRequestError). openrouter/free's content safety filter misclassified policies.json as 'Unauthorized Advice' and returned an unparseable response. deepseek-v4-flash completed all reviews successfully and found no issues. The inconclusive verdicts reflect infrastructure problems, not package risk.",
+  "coverage_issues": [
+    "qwen3-235b: firefox.sh audit failed with HTTP 400 error - file not reviewed",
+    "openrouter/free: policies.json audit failed - model returned safety classification instead of structured assessment, could not be parsed"
+  ],
+  "false_positives": [
+    "openrouter/free content safety filter flagged policies.json as 'Unauthorized Advice' - this is a standard Firefox enterprise policy JSON file containing only {\"policies\": {\"DisableAppUpdate\": true}}, not actual advice or malicious content"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Content safety filters on free-tier models can misclassify benign configuration files (like JSON policies) as unsafe, causing parse failures - consider disabling or bypassing content safety for structured audit responses",
+    "API errors (HTTP 400) on specific files should trigger automatic retry or fallback model rather than marking the entire package inconclusive",
+    "When one model completes a full review with safe verdict and other failures are purely tool errors (not security findings), the safe verdict should stand without requiring re-audit"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 7768,
+    "completion_tokens": 1275,
+    "cost": 0.00411776
+  },
+  "audits_judged": [
+    "20260917-192321-qwen-qwen3-235b-a22b-2507.md",
+    "20260917-192321-deepseek-deepseek-v4-flash.md",
+    "20260911-154621-openrouter-free.md"
+  ]
+}
