@@ -1,0 +1,28 @@
+{
+  "package": "ttf-mononoki",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The disagreement stems from the Makefile. Qwen flagged a command injection in the Makefile's 'commit' target. However, the Makefile is a maintainer helper script used for repo management (e.g., updpkgsums, makepkg, git commits) and is not executed by makepkg during the package build or installation process. According to the threat model, development tooling and maintainer scripts are out of scope unless referenced by PKGBUILD functions. Deepseek correctly identified it as a maintainer helper and marked it safe.",
+  "disagreement_analysis": "Qwen flagged the Makefile for arbitrary command injection in a 'commit' target. Deepseek correctly recognized the Makefile as an AUR maintainer helper script. Since the Makefile is not invoked by the PKGBUILD's build or package functions, it is considered development/maintainer tooling and is out of scope for AUR injection risks.",
+  "coverage_issues": [],
+  "false_positives": [
+    "Makefile command injection (Qwen): The Makefile is a maintainer helper script, not executed by makepkg. Risks in maintainer tooling are out of scope for AUR package injection."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models must distinguish between build scripts executed by makepkg (via PKGBUILD functions) and maintainer helper scripts (like a root Makefile for repo management). The latter are out of scope unless explicitly called by the PKGBUILD.",
+    "Audit tools should verify if a flagged file is actually part of the makepkg execution path before classifying it as an injection risk."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 6648,
+    "completion_tokens": 2122,
+    "cost": 0.0048435200000000005
+  },
+  "audits_judged": [
+    "20260918-151520-qwen-qwen3-235b-a22b-2507.md",
+    "20260918-151537-deepseek-deepseek-v4-flash.md"
+  ]
+}
