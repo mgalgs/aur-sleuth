@@ -1,0 +1,30 @@
+{
+  "package": "neru-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD is a standard -bin package that downloads a prebuilt binary from the legitimate upstream GitHub repository (y3owk1n/neru) with a pinned SHA256 checksum. The only unpinned source is the LICENSE file from the same upstream repo, which is a common and acceptable AUR pattern. No dangerous code executes during sourcing, and the package() function only installs the verified binary and generates shell completions by invoking it. The 'inconclusive' verdict from Report 1 was due to an HTTP 400 API error when auditing .SRCINFO, not a substantive security finding.",
+  "disagreement_analysis": "The disagreement is artificial: Report 1 marked the package 'inconclusive' solely because the LLM API request for .SRCINFO failed with HTTP 400. The model's actual security assessment of the PKGBUILD and other files was SAFE. Report 2 successfully audited all files and correctly concluded SAFE. There is no substantive security disagreement.",
+  "coverage_issues": [
+    "Report 1 failed to audit .SRCINFO due to HTTP 400 error, but this did not affect the security verdict since .SRCINFO is metadata-only and the PKGBUILD was successfully audited."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Tool errors (API failures, timeouts) on non-critical files like .SRCINFO should not override a SAFE verdict on the PKGBUILD. The audit tool should distinguish between 'file audit failed' and 'package verdict inconclusive'.",
+    "For -bin packages, explicitly verify and document that: (1) download URLs point to legitimate upstream, (2) checksums are pinned for all binary/archive sources, (3) unpinned sources are limited to trivial files like licenses from the same upstream.",
+    "SKIP checksums on license files fetched from the same upstream repository are a standard AUR pattern and should be explicitly noted as acceptable, not just 'not a risk during metadata-only step'."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 7571,
+    "completion_tokens": 1509,
+    "cost": 0.0043542400000000005
+  },
+  "audits_judged": [
+    "20260918-152000-qwen-qwen3-235b-a22b-2507.md",
+    "20260918-152004-deepseek-deepseek-v4-flash.md",
+    "20260905-153150-openrouter-free.md"
+  ]
+}
