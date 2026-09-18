@@ -1,0 +1,29 @@
+{
+  "package": "maple-mono-nf-cn-unhinted",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Standard font package with no injection risks. PKGBUILD downloads a pinned ZIP from official GitHub releases with SHA-256 checksum, then copies .ttf files to the font directory. No executable code in global scope, no install hooks, no patches, no suspicious network activity. The nvchecker.toml is a declarative config for version tracking. The disagreement was caused solely by an API error in the first model, not by any security concern.",
+  "disagreement_analysis": "The qwen model encountered an HTTP 400 error when reviewing nvchecker.toml, causing it to return 'inconclusive' for that file and thus for the entire package. The deepseek model successfully reviewed the same file and correctly identified it as a standard nvchecker configuration. There is no actual security disagreement between the models.",
+  "coverage_issues": [
+    "qwen model failed to review nvchecker.toml due to API error (HTTP 400 BadRequestError)"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "API errors during file review should not cascade to an 'inconclusive' package verdict when other files are safe; the tool should retry or degrade gracefully",
+    "For simple declarative config files like nvchecker.toml, implement a fast-path analysis that doesn't require full LLM inference, reducing cost and failure probability",
+    "When one model fails due to tool error and another succeeds on the same files, the successful review should be weighted as the authoritative result rather than treating the failure as genuine uncertainty"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 4494,
+    "completion_tokens": 1163,
+    "cost": 0.00292672
+  },
+  "audits_judged": [
+    "20260918-151947-qwen-qwen3-235b-a22b-2507.md",
+    "20260918-152055-deepseek-deepseek-v4-flash.md"
+  ]
+}
