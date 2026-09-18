@@ -1,0 +1,30 @@
+{
+  "package": "eden-nightly-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD is a standard AppImage packaging script that downloads a binary from the official upstream domain and verifies it with a pinned SHA-256 checksum. No malicious code execution, exfiltration, or suspicious patterns are present. The disagreements in the reports were solely due to transient API errors and parsing failures on non-executable metadata files (.SRCINFO, .gitignore), not actual security concerns.",
+  "disagreement_analysis": "The 'inconclusive' verdicts from qwen and openrouter/free were caused by tool errors (HTTP 400 API failures and parsing errors) when reviewing .SRCINFO and .gitignore. The deepseek model successfully reviewed all files and correctly identified the package as safe. The openrouter/free report is advisory and does not count as a vote.",
+  "coverage_issues": [
+    "qwen model failed to review .SRCINFO and .gitignore due to HTTP 400 API errors.",
+    "openrouter/free model failed to parse the decision for .gitignore."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "The audit tool should implement retries or fallback mechanisms for transient API errors (e.g., HTTP 400) to prevent non-executable metadata files from causing an overall 'inconclusive' package verdict.",
+    "Non-executable files like .gitignore and .SRCINFO should perhaps be evaluated with a lighter-weight or more robust parser, as LLM parsing failures on these trivial files shouldn't block a safe verdict when the PKGBUILD is clean."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5833,
+    "completion_tokens": 1858,
+    "cost": 0.0042448
+  },
+  "audits_judged": [
+    "20260918-152351-qwen-qwen3-235b-a22b-2507.md",
+    "20260918-152419-deepseek-deepseek-v4-flash.md",
+    "20260914-115642-openrouter-free.md"
+  ]
+}
