@@ -1,0 +1,29 @@
+{
+  "package": "java-openjdk-ea-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard binary wrapper for OpenJDK Early Access builds. It downloads pre-compiled archives directly from Oracle's official domain (download.java.net) and verifies them with pinned SHA-256 checksums, mitigating the risk of upstream artifact swapping. There are no .install hooks, patches, or suspicious build-time network executions. The only disagreement was caused by a transient API error in one of the models.",
+  "disagreement_analysis": "The qwen model returned an 'inconclusive' verdict because it encountered an HTTP 400 API error when attempting to audit the .SRCINFO file. The deepseek model successfully audited both files and returned 'safe'. The openrouter model (marked as advisory) also returned 'safe'.",
+  "coverage_issues": [
+    "The qwen model failed to review .SRCINFO due to an API error (HTTP 400 BadRequestError), resulting in an incomplete audit."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Implement retry logic or graceful degradation for transient API errors (e.g., HTTP 400/500) so that a failure to audit a single non-executable metadata file does not force an 'inconclusive' verdict for the entire package.",
+    "Ensure models are robust when processing standard, declarative files like .SRCINFO to avoid unexpected API rejections."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5173,
+    "completion_tokens": 1627,
+    "cost": 0.0037379200000000005
+  },
+  "audits_judged": [
+    "20260919-231827-qwen-qwen3-235b-a22b-2507.md",
+    "20260919-231821-deepseek-deepseek-v4-flash.md",
+    "20260912-033741-openrouter-free.md"
+  ]
+}
