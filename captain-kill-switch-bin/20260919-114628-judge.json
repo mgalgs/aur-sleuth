@@ -1,0 +1,29 @@
+{
+  "package": "captain-kill-switch-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The only valid voting model (deepseek-v4-flash) correctly identified the package as a standard binary repackage. The PKGBUILD downloads a prebuilt .deb from the official upstream GitHub releases with a pinned SHA-256 checksum and extracts it using bsdtar. There is no top-level executable code, no suspicious network requests, and no signs of supply-chain injection. The inconclusive result from qwen was due to an API error, and the openrouter report is advisory only.",
+  "disagreement_analysis": "The disagreement was triggered by the qwen model failing with an HTTP 400 API error during the PKGBUILD audit, resulting in an 'inconclusive' verdict. The openrouter model also reported 'safe' but is marked as advisory and does not count as a vote. The deepseek model successfully audited the files and returned 'safe'.",
+  "coverage_issues": [
+    "qwen/qwen3-235b-a22b-2507 failed to audit the PKGBUILD due to an HTTP 400 BadRequestError, resulting in an inconclusive file verdict."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "The audit tool should implement retry logic or fallback mechanisms for transient API errors (like HTTP 400) to prevent a single file failure from cascading into an inconclusive package verdict.",
+    "Ensure the escalation trigger logic correctly filters out 'advisory: true' reports and tool errors before flagging a 'disagreement' to avoid unnecessary re-audits."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 4945,
+    "completion_tokens": 1780,
+    "cost": 0.0038608
+  },
+  "audits_judged": [
+    "20260919-112921-qwen-qwen3-235b-a22b-2507.md",
+    "20260919-112944-deepseek-deepseek-v4-flash.md",
+    "20260919-032232-openrouter-free.md"
+  ]
+}
