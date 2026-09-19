@@ -1,0 +1,30 @@
+{
+  "package": "python-ocp-viewer",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD is a standard Python git package with pinned sources and checksums. There is no malicious top-level code, no .install hooks, and no suspicious build steps. The disagreements were caused by API and parsing errors in the other models, not actual security risks.",
+  "disagreement_analysis": "The 'inconclusive' verdicts from Qwen and OpenRouter were caused by tool errors (HTTP 400 API failure on .SRCINFO and XML parsing failure on PKGBUILD, respectively), not genuine security concerns. The OpenRouter model's raw output flagged 'unsafe' but failed to format it correctly, and as an advisory report, it doesn't count as a vote. Deepseek correctly evaluated all files as safe.",
+  "coverage_issues": [],
+  "false_positives": [
+    "OpenRouter's raw 'unsafe' flag on PKGBUILD: Likely a safety filter trigger or hallucination from a free-tier model, compounded by a parsing failure."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Transient API errors (e.g., HTTP 400) on non-executable metadata files like .SRCINFO should not force an overall 'inconclusive' package verdict if the PKGBUILD is verified safe.",
+    "Models that output raw safety classifications instead of the expected XML schema cause parsing failures; the tool should handle malformed responses more gracefully or enforce strict schema validation.",
+    "Free-tier models may trigger overly aggressive safety filters or output garbage; their advisory status is appropriate, but the tool should log the raw output for debugging parsing failures."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5889,
+    "completion_tokens": 2037,
+    "cost": 0.00449184
+  },
+  "audits_judged": [
+    "20260919-111421-qwen-qwen3-235b-a22b-2507.md",
+    "20260919-111411-deepseek-deepseek-v4-flash.md",
+    "20260919-082040-openrouter-free.md"
+  ]
+}
