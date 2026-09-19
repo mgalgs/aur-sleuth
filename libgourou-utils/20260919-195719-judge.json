@@ -1,0 +1,29 @@
+{
+  "package": "libgourou-utils",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The top-level curl command fetches a cookie from the package's own upstream domain (forge.soutade.fr) to bypass an anti-bot 'humanity check'. This is a packaging workaround, not an injection pattern. The fetched content is parsed with sed (not executed), and the actual source download is pinned with a SHA-512 checksum, closing the swap risk. Per the threat model, fetching from the package's own declared upstream page and parsing it without executing the content is a normal AUR pattern when stable URLs are unavailable.",
+  "disagreement_analysis": "The qwen model flagged the top-level curl as unsafe because it executes during PKGBUILD sourcing (parse time), arguing it could exfiltrate data or enable attacker-controlled behavior. However, it failed to recognize that: (1) the fetch targets the package's own upstream domain, (2) the response is only parsed with sed to extract a cookie (not executed), and (3) the source artifact is pinned with a checksum. The deepseek model correctly identified this as a benign packaging workaround after initial hesitation.",
+  "coverage_issues": [],
+  "false_positives": [
+    "qwen model's 'Top-level curl fetches data during parse time, unsafe' finding: This is a false positive. The curl fetches from the upstream project's own domain to bypass anti-bot protection, does not execute the fetched content, and the source is checksum-pinned. This matches the documented 'normal AUR pattern' for vendors without stable URLs."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models must distinguish between 'unconventional packaging' and 'malicious injection'. Fetching from the package's own upstream domain to bypass anti-bot mechanisms is a valid workaround, not an attack vector, especially when the source is checksum-pinned.",
+    "The presence of top-level command substitution that performs network requests is not inherently unsafe if: (a) it targets the declared upstream domain, (b) the response is not executed (only parsed), and (c) the actual artifact download is integrity-verified.",
+    "Models should avoid flagging patterns that 'violate packaging best practices' as unsafe unless they match the specific injection criteria: executing fetched content or fetching from an unrelated host."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5783,
+    "completion_tokens": 1722,
+    "cost": 0.00405472
+  },
+  "audits_judged": [
+    "20260919-193449-qwen-qwen3-235b-a22b-2507.md",
+    "20260919-193354-deepseek-deepseek-v4-flash.md"
+  ]
+}
