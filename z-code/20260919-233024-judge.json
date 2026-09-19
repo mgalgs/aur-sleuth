@@ -1,0 +1,28 @@
+{
+  "package": "z-code",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard AUR wrapper for a prebuilt Electron application. The PKGBUILD downloads .deb archives from the official upstream CDN with pinned b2sum checksums, preventing supply-chain tampering. The wrapper script and desktop entry are benign. The only discrepancy between the reports is an API error in the qwen model for z-code.desktop, which deepseek successfully audited and cleared.",
+  "disagreement_analysis": "The qwen model encountered an HTTP 400 API error when auditing z-code.desktop, forcing an 'inconclusive' overall verdict. The deepseek model audited the same file without issue and correctly identified it as a safe, standard desktop entry.",
+  "coverage_issues": [
+    "qwen model failed to audit z-code.desktop due to an LLM API error (HTTP 400)"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Transient API errors on individual files should not permanently block a safe verdict if the file is low-risk (like a .desktop file) or if another model in the ensemble successfully audits it.",
+    "Implement retry logic for individual file audits when encountering HTTP 400/500 errors before marking the entire package as inconclusive."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5870,
+    "completion_tokens": 1948,
+    "cost": 0.00437184
+  },
+  "audits_judged": [
+    "20260919-230206-qwen-qwen3-235b-a22b-2507.md",
+    "20260919-230430-deepseek-deepseek-v4-flash.md"
+  ]
+}
