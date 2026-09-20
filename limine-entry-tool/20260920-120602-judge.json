@@ -1,0 +1,28 @@
+{
+  "package": "limine-entry-tool",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package downloads a GraalVM JDK as a build dependency to compile a native image via Gradle. This is a standard build requirement for such projects. The downloaded artifacts are pinned with SHA256 checksums, closing the swap risk. The Qwen model incorrectly flagged this as a supply-chain attack/trust injection, confusing a legitimate, checksummed build dependency with a malicious injection. Deepseek correctly identified it as safe.",
+  "disagreement_analysis": "Qwen3 flagged the GraalVM JDK download as an untrusted supply-chain risk and high-privilege trust injection, despite it being checksummed and serving a clear build purpose. Deepseek correctly recognized it as a standard build dependency.",
+  "coverage_issues": [],
+  "false_positives": [
+    "Qwen3 flagged the GraalVM JDK download as an unsafe supply-chain risk. It is a legitimate, checksummed build dependency required for the project's Gradle nativeCompile step, not an injected payload."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models may falsely flag large binary build dependencies (like JDKs, Go, or Rust toolchains) fetched from official release pages as supply-chain attacks, even when checksummed. Prompts should explicitly clarify that fetching standard build toolchains with pinned checksums is a normal AUR pattern and not an injection."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 9173,
+    "completion_tokens": 2035,
+    "cost": 0.005540160000000001
+  },
+  "audits_judged": [
+    "20260920-113149-qwen-qwen3-235b-a22b-2507.md",
+    "20260920-113413-deepseek-deepseek-v4-flash.md",
+    "20260914-075110-openrouter-free.md"
+  ]
+}
