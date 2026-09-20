@@ -1,0 +1,32 @@
+{
+  "package": "gaze-kde-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The only disagreement stems from tool errors (API failures), not substantive security concerns. Report 2 (deepseek-v4-flash) successfully reviewed all three files and found them safe: PKGBUILD is a standard binary wrapper with pinned checksum from the project's own domain, .SRCINFO is metadata-only, and gaze-kde-bin.install performs expected PAM integration/cleanup for KDE face unlock with no network access or suspicious operations. Reports 1 and 3 had tool errors preventing full review but showed no security concerns in the files they did assess.",
+  "disagreement_analysis": "Disagreement caused by tool errors, not security findings. Report 1 (qwen3-235b) failed to review gaze-kde-bin.install due to HTTP 400 API error. Report 3 (openrouter/free, advisory) failed to parse PKGBUILD response. Report 2 (deepseek-v4-flash) successfully reviewed all files and found them safe with detailed reasoning about the install script's PAM operations.",
+  "coverage_issues": [
+    "Report 1: gaze-kde-bin.install not reviewed due to API error (HTTP 400 BadRequestError)",
+    "Report 3: PKGBUILD verdict not parseable due to model output format issue"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Implement retry logic or fallback models when API calls fail with transient errors (HTTP 400/500)",
+    "When critical files (install scripts, PKGBUILD functions) fail to review, automatically escalate to a different model rather than marking inconclusive",
+    "Improve output parsing robustness to handle model response format variations, especially for router/aggregator models",
+    "Tool errors should be distinguished from substantive inconclusive findings in the final verdict logic"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5784,
+    "completion_tokens": 1470,
+    "cost": 0.00373248
+  },
+  "audits_judged": [
+    "20260920-151500-qwen-qwen3-235b-a22b-2507.md",
+    "20260920-152050-deepseek-deepseek-v4-flash.md",
+    "20260913-032815-openrouter-free.md"
+  ]
+}
