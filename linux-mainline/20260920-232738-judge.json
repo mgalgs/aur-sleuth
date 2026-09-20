@@ -1,0 +1,30 @@
+{
+  "package": "linux-mainline",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard Arch Linux mainline kernel package. The only model that successfully completed the audit correctly identified standard AUR patterns, such as the use of `eval` for generating split-package functions and fetching sources from the official kernel.org git repository. The 'inconclusive' results from the other models were artifacts of tool errors (API failures and parsing errors), not genuine security concerns.",
+  "disagreement_analysis": "The initial trigger was an 'agreed inconclusive' verdict, but this was a false consensus caused by tool errors in the voting models. The models did not disagree on security; they simply failed to execute or parse their responses. The advisory model successfully audited the package and found it to be safe.",
+  "coverage_issues": [
+    "qwen/qwen3-235b-a22b-2507 failed to audit PKGBUILD and linux.install due to HTTP 400 API errors.",
+    "deepseek/deepseek-v4-flash failed to parse the model response for PKGBUILD, resulting in an incomplete audit and early termination."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Tool errors (API timeouts, HTTP 400s, parsing failures) should be explicitly categorized as 'tool_error' rather than 'inconclusive' to prevent them from skewing consensus or triggering false escalation warnings.",
+    "Implement retry logic or fallback models when a primary model fails to parse its output or encounters an API error, ensuring the audit can complete or fail gracefully without blocking the entire package review."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 7055,
+    "completion_tokens": 1945,
+    "cost": 0.0047472
+  },
+  "audits_judged": [
+    "20260920-230701-qwen-qwen3-235b-a22b-2507.md",
+    "20260920-231749-deepseek-deepseek-v4-flash.md",
+    "20260915-231221-openrouter-free.md"
+  ]
+}
