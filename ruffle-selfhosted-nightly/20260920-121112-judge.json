@@ -1,0 +1,32 @@
+{
+  "package": "ruffle-selfhosted-nightly",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "All models that successfully parsed a verdict (and the textual analysis of the one that failed to parse) agree the PKGBUILD contains no malicious injections. The items flagged by deepseek (duplicate source array, unpinned cargo install, chromium update URL) are either packaging hygiene or upstream application behavior, which are explicitly out of scope for the injection threat model.",
+  "disagreement_analysis": "The disagreement was triggered by deepseek returning 'inconclusive' due to a parsing error on its PKGBUILD review, despite its textual analysis explicitly concluding the package is 'CLEAN' and 'safe'. Qwen correctly parsed its 'safe' verdict. There is no genuine security disagreement between the models.",
+  "coverage_issues": [
+    "deepseek/deepseek-v4-flash report ended in a tool error (failed to parse the model's decision from the response), resulting in an 'inconclusive' verdict despite the model's text being a clear 'safe'."
+  ],
+  "false_positives": [
+    "deepseek flagged 'cargo install' without '--locked' and git tag pinning as supply-chain concerns. These are packaging hygiene issues, not malicious injections.",
+    "deepseek flagged a duplicate 'source=' array. This is a packaging bug/hygiene issue, not a security injection."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "The verdict parser needs to be more robust to handle markdown-formatted responses (e.g., tables, bold text) from models like deepseek, or the prompt must strictly enforce the expected XML/JSON schema for the final verdict.",
+    "Models tend to flag supply-chain hygiene (e.g., unpinned dependencies, tag vs commit pinning) as security concerns. The prompt or post-processing should explicitly filter out 'packaging hygiene' and 'upstream behavior' to prevent them from being misclassified as injections or causing parser confusion."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 7788,
+    "completion_tokens": 2145,
+    "cost": 0.00523776
+  },
+  "audits_judged": [
+    "20260920-113756-qwen-qwen3-235b-a22b-2507.md",
+    "20260920-114846-deepseek-deepseek-v4-flash.md",
+    "20260920-081225-openrouter-free.md"
+  ]
+}
