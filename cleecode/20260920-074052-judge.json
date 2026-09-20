@@ -1,0 +1,33 @@
+{
+  "package": "cleecode",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Report 2 (deepseek-v4-flash) provides a complete and thorough review of all 4 files, finding no malicious content. The PKGBUILD follows standard Rust packaging practices: pinned GitHub tarball with SHA-256 checksum, frozen cargo builds, no dangerous top-level code, no obfuscation or unexpected network requests. Report 1 failed due to API errors (HTTP 400) on 3 of 4 files, providing incomplete coverage. Report 3 (advisory-only) had a parsing error on .gitignore but otherwise confirmed safety. The package is a straightforward Rust build with proper supply-chain controls.",
+  "disagreement_analysis": "The 'disagreement' was caused by tool failures, not substantive security concerns. Report 1's LLM API failed with HTTP 400 errors on .SRCINFO, .gitignore, and PKGBUILD, leaving it unable to render a verdict. Report 3's router model output an unparsable response for .gitignore. Neither failure reflects actual security issues - Report 2 successfully reviewed all files and found none.",
+  "coverage_issues": [
+    "qwen3-235b: API failures (HTTP 400 BadRequestError) prevented review of .SRCINFO, .gitignore, and PKGBUILD - only .nvchecker.toml was successfully audited",
+    "openrouter/free: Model output for .gitignore could not be parsed into a structured decision, leaving that file inconclusive"
+  ],
+  "false_positives": [
+    "openrouter/free flagged .gitignore as 'unsafe' with categories 'Unauthorized Advice, Needs Caution' - this is a standard AUR .gitignore that ignores all files except packaging metadata, a completely normal pattern with no security implications"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "API failure handling: When a model returns HTTP 400 errors on multiple files, the tool should either retry with a different model or clearly flag the audit as incomplete rather than returning 'inconclusive' which implies uncertainty about content rather than tool failure",
+    "Parser robustness: The openrouter/free response for .gitignore included non-standard output ('User Safety: unsafe', 'Safety Categories: ...') that couldn't be parsed. The parser should handle or gracefully degrade when models output unexpected formats",
+    "Advisory report weighting: Reports marked 'advisory: true' from free-tier router models should be deprioritized more aggressively when they conflict with or add noise to substantive reports from capable models"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 6247,
+    "completion_tokens": 1389,
+    "cost": 0.00377696
+  },
+  "audits_judged": [
+    "20260920-072001-qwen-qwen3-235b-a22b-2507.md",
+    "20260920-072003-deepseek-deepseek-v4-flash.md",
+    "20260916-234704-openrouter-free.md"
+  ]
+}
