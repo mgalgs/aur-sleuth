@@ -1,0 +1,30 @@
+{
+  "package": "voltius-git",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard AUR VCS (-git) package for a Tauri application. The PKGBUILD contains no malicious code in the global scope, and the build functions perform standard operations (installing pnpm locally, building with tauri). The .SRCINFO and .desktop files are standard metadata. The disagreements were caused by tool/API errors (HTTP 400, parsing failures) rather than actual security concerns.",
+  "disagreement_analysis": "The disagreement was triggered by tool failures, not security findings. Qwen encountered an HTTP 400 error when reviewing voltius.desktop, and Openrouter failed to parse the PKGBUILD response. Deepseek successfully reviewed all files and correctly identified them as safe.",
+  "coverage_issues": [
+    "qwen/qwen3-235b-a22b-2507 failed to review voltius.desktop due to an API error (HTTP 400).",
+    "openrouter/free failed to parse the PKGBUILD decision from the model response."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Tool errors (API failures, parsing errors) should trigger automatic retries or fallbacks instead of immediately resulting in an 'inconclusive' verdict that escalates the audit.",
+    "Models correctly identify standard VCS packaging patterns (git+https sources, SKIP checksums, local pnpm installation) as safe, showing good alignment with AUR conventions."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5948,
+    "completion_tokens": 1483,
+    "cost": 0.0038016
+  },
+  "audits_judged": [
+    "20260920-152325-qwen-qwen3-235b-a22b-2507.md",
+    "20260920-152320-deepseek-deepseek-v4-flash.md",
+    "20260920-123227-openrouter-free.md"
+  ]
+}
