@@ -1,0 +1,31 @@
+{
+  "package": "stably-orca-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Report 2 (deepseek-v4-flash) successfully reviewed all 4 files and found them safe. The PKGBUILD follows standard AUR -bin packaging: downloads AppImage from official GitHub releases (github.com/stablyai/orca), pins SHA256 checksums (no SKIP), extracts with --appimage-extract in prepare(), and installs to /opt/stably-orca in package(). No command substitutions, eval, base64, or network exfiltration patterns. The wrapper script (stably-orca.sh) is a benign AppImage launcher with standard Chromium flags. The .SRCINFO and .desktop files are metadata-only. The two inconclusive results were caused by tool errors (HTTP 400 and empty LLM response), not security concerns.",
+  "disagreement_analysis": "Disagreement caused by tool failures, not substantive security analysis. Report 1 (qwen3-235b) failed on PKGBUILD with HTTP 400 error. Report 3 (openrouter/free, advisory-only) failed on stably-orca.desktop with empty LLM response. Report 2 (deepseek-v4-flash) successfully audited all files and found no issues. The failures are infrastructure problems, not evidence of risk.",
+  "coverage_issues": [
+    "Report 1: PKGBUILD audit failed due to HTTP 400 BadRequestError - critical file not reviewed",
+    "Report 3: stably-orca.desktop audit failed due to empty LLM response - file not reviewed"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Tool errors (HTTP 400, empty responses) should trigger automatic retries before marking files as inconclusive",
+    "When one model successfully reviews all files and finds no issues, while others fail due to API errors, the successful review should carry decisive weight",
+    "Advisory reports (advisory: true) should be clearly distinguished from voting reports in disagreement calculations"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 6785,
+    "completion_tokens": 1083,
+    "cost": 0.00355744
+  },
+  "audits_judged": [
+    "20260921-070257-qwen-qwen3-235b-a22b-2507.md",
+    "20260921-070323-deepseek-deepseek-v4-flash.md",
+    "20260917-121224-openrouter-free.md"
+  ]
+}
