@@ -3,12 +3,36 @@
 # makepkg-with-sleuthing - makepkg wrapper that checks the package with aur-sleuth
 # before building.
 
-# Skip audit for non-build actions
+# Skip the audit only for makepkg actions that run no maintainer-authored code.
+# The trap: -o/--nobuild is not one of them. It extracts the sources and runs
+# prepare() and pkgver() before exiting, so it must be audited -- it is the
+# first invocation that executes the maintainer's code, and both yay
+# (--nobuild -f) and paru (-ofA -C) call it that way. --verifysource and
+# -g/--geninteg do exit before extraction.
 skip=false
 for arg in "$@"; do
     case "$arg" in
-        --verifysource|--nobuild|--geninteg|--packagelist|--printsrcinfo|--help|-h|--version|-V|-o|-g)
+        --verifysource|--geninteg|--packagelist|--printsrcinfo|--help|-h|--version|-V|-g)
             skip=yes
+            ;;
+        --*)
+            # Any other long option is a build-related one; audit it.
+            ;;
+        -?*)
+            # A cluster of short flags, which is how both helpers spell their
+            # phases, so g must be matched inside a cluster as well as bare.
+            rest="${arg#-}"
+            # -p (build script) and -D (directory) take an argument that
+            # consumes the rest of the cluster -- getopt reads -Dg as -D with
+            # the argument "g", a real build -- so only the characters before
+            # the first p or D are flags. makepkg's OPT_SHORT is
+            # AcCdD:efFghiLmop:rRsSV; D: and p: are the only two taking one.
+            case "$rest" in
+                *[pD]*) rest="${rest%%[pD]*}" ;;
+            esac
+            case "$rest" in
+                *g*) skip=yes ;;
+            esac
             ;;
     esac
 done
