@@ -1,0 +1,28 @@
+{
+  "package": "python-pybricks",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The deepseek report provides a complete and coherent analysis: the PKGBUILD downloads from the official PyPI mirror (files.pythonhosted.org) with a pinned sha256 checksum, uses standard Python build tooling (python -m build, python -m installer), and contains no global-scope code execution, no network calls outside declared sources, and no execution of downloaded content. The qwen report suffered HTTP 400 API failures on all three file reviews, rendering it a tool error with no verdict signal per the rules. Its initial PKGBUILD gate did pass (finding no dangerous top-level code), which is consistent with the deepseek finding. No injection pattern is present.",
+  "disagreement_analysis": "The disagreement is not substantive but mechanical: the qwen model's API returned HTTP 400 BadRequestError for every file review request, producing INCONCLUSIVE across the board. The deepseek model completed all reviews and found standard, safe packaging. The trigger 'disagreement (inconclusive safe)' reflects the qwen tool failure rather than a genuine analytical split.",
+  "coverage_issues": [
+    "qwen/qwen3-235b-a22b-2507: all three file reviews (.gitignore, PKGBUILD, .SRCINFO) failed with HTTP 400 BadRequestError; report carries no verdict signal"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "When a model's API returns repeated HTTP 400 errors during file review, the orchestration layer should detect this pattern early and either retry with backoff or escalate to a fallback model, rather than completing the run with all files INCONCLUSIVE.",
+    "The initial PKGBUILD gate (sourcing safety) succeeded for qwen even though the subsequent file reviews failed; the tool could surface this partial signal more clearly so adjudicators can see that the build-time risk was cleared even when file-level review broke down."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 3903,
+    "completion_tokens": 1078,
+    "cost": 0.0026288
+  },
+  "audits_judged": [
+    "20260921-190934-qwen-qwen3-235b-a22b-2507.md",
+    "20260921-190951-deepseek-deepseek-v4-flash.md"
+  ]
+}
