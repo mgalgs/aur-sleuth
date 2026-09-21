@@ -1,0 +1,30 @@
+{
+  "package": "zapret-rust-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard prebuilt binary AUR package. The PKGBUILD downloads from the project's official GitHub releases with a pinned SHA256 checksum (not SKIP), performs routine installation operations (binary to /usr/lib/, data dir to /var/lib/, wrapper script in /usr/bin/), and contains no command substitution, eval, curl|bash, or obfuscated code at parse time. The zapret-rust.install script only performs standard post-removal cleanup of /var/lib/zapret-rust. No injection patterns, unexpected network destinations, or supply-chain attack indicators are present.",
+  "disagreement_analysis": "The disagreement was caused by Report 1 (qwen3-235b) experiencing API failures (HTTP 400 BadRequestError) when auditing .SRCINFO and PKGBUILD, resulting in an inconclusive verdict. Report 2 (deepseek-v4-flash) successfully reviewed all files and correctly identified the package as safe. Report 3 (openrouter/free) also found it safe but carries 'advisory: true' and does not count as a vote. The inconclusive result was a tool failure, not a genuine security concern.",
+  "coverage_issues": [
+    "Report 1 (qwen3-235b) failed to audit .SRCINFO and PKGBUILD due to LLM API errors (HTTP 400), leaving 2/3 files without verdicts"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "API failures should be handled gracefully - when a model crashes on specific files, the audit tool should either retry or clearly distinguish between 'inconclusive due to tool error' vs 'inconclusive due to genuine uncertainty'",
+    "Standard prebuilt binary packages with pinned checksums are common AUR patterns that models should recognize quickly without flagging as suspicious",
+    "Post-removal cleanup scripts that only delete package-specific directories (/var/lib/<pkgname>) are routine and should not trigger concern"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5777,
+    "completion_tokens": 1500,
+    "cost": 0.00376864
+  },
+  "audits_judged": [
+    "20260921-152032-qwen-qwen3-235b-a22b-2507.md",
+    "20260921-152137-deepseek-deepseek-v4-flash.md",
+    "20260921-083129-openrouter-free.md"
+  ]
+}
