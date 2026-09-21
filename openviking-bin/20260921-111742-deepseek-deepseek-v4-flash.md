@@ -1,0 +1,158 @@
+---
+package: openviking-bin
+pkgver: 0.4.21
+pkgrel: 1
+result: safe
+model: deepseek/deepseek-v4-flash
+provider: custom
+aur_sleuth_rev: e76320400488b1dad2302211f4f5cfaf8522c9b1
+prompt_tokens: 18792
+completion_tokens: 3468
+total_tokens: 22260
+cost: 0.002279655168
+execution_time: 71.16
+files_reviewed: 6
+files_skipped: 0
+maintainer_files: 6
+source_fetch: not_attempted
+upstream_files: 0
+upstream_named_files: 0
+unpinned_sources: 0
+injection_attempts: 0
+date: 2026-09-21T11:17:42Z
+file_verdicts:
+  - file: .gitignore
+    status: safe
+    summary: Standard .gitignore for AUR package; no security concerns.
+  - file: .SRCINFO
+    status: safe
+    summary: Standard AUR metadata with pinned hashes; no malicious indicators.
+  - file: openviking-bin.install
+    status: safe
+    summary: Standard install info message, no malicious code.
+  - file: openviking.service
+    status: safe
+    summary: Standard systemd service unit, no malicious content.
+  - file: openviking.sysusers
+    status: safe
+    summary: Standard system user creation, no security issues.
+  - file: PKGBUILD
+    status: safe
+    summary: Standard AUR -bin package with virtualenv; no malicious patterns found.
+---
+
+Materializing openviking-bin from local mirror...
+Materialized openviking-bin
+Analyzing openviking-bin AUR package with deepseek/deepseek-v4-flash
+Performing initial audit of PKGBUILD to ensure that we can safely run `makepkg`
+LLM auditresponse for PKGBUILD:
+<security_assessment>
+<decision>SAFE</decision>
+<details>
+The PKGBUILD contains only variable assignments, array definitions, and function declarations at the top level. No command substitutions, `eval`, or external command invocations (e.g., `curl`, `wget`, `git`) are present in the global scope. All potentially dangerous operations (pip install, file manipulation) are inside `build()` and `package()` functions, which are not executed by `makepkg --printsrcinfo`. The `_wheel` variable uses `$CARCH`, but this is simple variable expansion, not a command execution. Sourcing this file is safe.
+</details>
+<evidence></evidence>
+<summary>No executable code at top level.</summary>
+</security_assessment>
+
++ Initial PKGBUILD audit complete -- No executable code at top level.
+Reviewing the 6 file(s) in the AUR repository.
+Reviewing the AUR repository's files...
+[0/6] Reviewing .SRCINFO...
+[0/6] Reviewing .SRCINFO, .gitignore...
+[0/6] Reviewing .SRCINFO, .gitignore, PKGBUILD...
+LLM auditresponse for .gitignore:
+<security_assessment>
+<decision>SAFE</decision>
+<details>
+This file is a standard `.gitignore` for an AUR package repository. It ignores all files (`*`) then explicitly whitelists only the essential packaging files: `PKGBUILD`, `*.install`, `*.service`, `*.sysusers`, and `.SRCINFO`. There is no executable code, no network activity, no obfuscation, and no deviation from expected AUR maintenance practices. The content is benign and serves solely to prevent accidental tracking of generated or extraneous files in the git repository.
+</details>
+<evidence></evidence>
+<summary>Standard .gitignore for AUR package; no security concerns.</summary>
+</security_assessment>
+
+[0/6] Reviewing .SRCINFO, .gitignore, PKGBUILD, openviking-bin.install...
+[1/6] Reviewing .SRCINFO, PKGBUILD, openviking-bin.install...
++ Reviewed .gitignore. Status: SAFE -- Standard .gitignore for AUR package; no security concerns.
+LLM auditresponse for .SRCINFO:
+<security_assessment>
+<decision>SAFE</decision>
+<details>
+The `.SRCINFO` file describes a binary package for OpenViking, a self-evolving context database for AI agents. It specifies pinned SHA256 checksums for the upstream Python wheels downloaded from `files.pythonhosted.org` (PyPI), which is the standard and expected distribution channel for Python packages. The two non-wheel source files (`openviking.service` and `openviking.sysusers`) have `SKIP` checksums, which is a routine packaging choice and not indicative of malice. There is no obfuscated code, unexpected network destinations, or any instructions that deviate from normal AUR packaging practices. The file contains only metadata and does not execute any commands, download unexpected content, or exfiltrate data. The presence of an install script (`openviking-bin.install`) is noted, but that script is not included in this file and cannot be evaluated here; the `.SRCINFO` itself is harmless.
+</details>
+<evidence></evidence>
+<summary>Standard AUR metadata with pinned hashes; no malicious indicators.</summary>
+</security_assessment>
+
+[1/6] Reviewing .SRCINFO, PKGBUILD, openviking-bin.install, openviking.service...
+[2/6] Reviewing PKGBUILD, openviking-bin.install, openviking.service...
++ Reviewed .SRCINFO. Status: SAFE -- Standard AUR metadata with pinned hashes; no malicious indicators.
+LLM auditresponse for openviking-bin.install:
+<security_assessment>
+<decision>SAFE</decision>
+<details>
+The file `openviking-bin.install` contains a standard Arch Linux installation script with `post_install()` and `post_upgrade()` hooks. The only action is printing an informational message about package setup (virtualenv location, configuration file paths, systemd service, and a note about Python rebuilds). There are no commands that download or execute code, no file operations altering system files outside normal packaging, no obfuscation, and no references to unexpected network hosts. The script performs precisely the expected duty of an install hook: displaying post-install instructions to the user. No security issues are present.
+</details>
+<evidence></evidence>
+<summary>Standard install info message, no malicious code.</summary>
+</security_assessment>
+
+[2/6] Reviewing PKGBUILD, openviking-bin.install, openviking.service, openviking.sysusers...
+[3/6] Reviewing PKGBUILD, openviking.service, openviking.sysusers...
++ Reviewed openviking-bin.install. Status: SAFE -- Standard install info message, no malicious code.
+LLM auditresponse for openviking.service:
+<security_assessment>
+<decision>SAFE</decision>
+<details>
+The file `openviking.service` is a standard systemd service unit file for the OpenViking application. It defines a service that runs `/usr/bin/openviking-server` with appropriate user isolation and security hardening options (e.g., NoNewPrivileges, PrivateTmp, ProtectSystem, ProtectHome). There are no network requests, obfuscated code, or unusual commands. The configuration paths are typical for Linux services. No evidence of malicious or supply-chain attack behavior is present.
+</details>
+<evidence>
+</evidence>
+<summary>Standard systemd service unit, no malicious content.</summary>
+</security_assessment>
+
+[4/6] Reviewing PKGBUILD, openviking.sysusers...
++ Reviewed openviking.service. Status: SAFE -- Standard systemd service unit, no malicious content.
+LLM auditresponse for openviking.sysusers:
+<security_assessment>
+<decision>SAFE</decision>
+<details>
+This file is a standard sysusers.d configuration used in Arch Linux to create a system user for the OpenViking application. It defines a user named `openviking` with a description and home directory `/var/lib/openviking`. This is normal packaging practice for service isolation and does not contain any malicious behavior.
+</details>
+<evidence></evidence>
+<summary>Standard system user creation, no security issues.</summary>
+</security_assessment>
+
+[5/6] Reviewing PKGBUILD...
++ Reviewed openviking.sysusers. Status: SAFE -- Standard system user creation, no security issues.
+LLM auditresponse for PKGBUILD:
+<security_assessment>
+<decision>SAFE</decision>
+<details>
+This PKGBUILD is a standard AUR `-bin` package that downloads a pre-built Python wheel from PyPI (with pinned SHA256 checksums) and installs it into a private virtualenv under `/opt`. The build process runs `pip install` inside the venv to resolve transitive dependencies from PyPI, which is documented and expected for a package that cannot use system Python packages due to version conflicts.  
+
+All network requests go to the package&#x27;s own upstream host (PyPI) for the specifically checksummed wheel. There are no signs of obfuscation, no eval/base64/curl|bash patterns, and no attempts to exfiltrate data or install backdoors. The wrapper scripts that launch the application are generated inline and use `exec` with the venv path—standard practice.  
+
+The source array references two files (`openviking.service` and `openviking.sysusers`) with `SKIP` checksums; these are maintained locally within the AUR repository rather than downloaded from upstream. While unpinned checksums are a hygiene consideration, **aur-sleuth** already flags them separately, and they are not evidence of malice. The wheel&#x27;s checksum is pinned, ensuring integrity of the main binary. No genuine security threats are present.
+</details>
+<evidence>
+</evidence>
+<summary>Standard AUR -bin package with virtualenv; no malicious patterns found.</summary>
+</security_assessment>
+
+[6/6] Reviewing ...
++ Reviewed PKGBUILD. Status: SAFE -- Standard AUR -bin package with virtualenv; no malicious patterns found.
+Reviewed all the AUR repository's files.
+Audit complete! Result: No issues found
+API Usage Summary
+  Models: deepseek/deepseek-v4-flash
+  Prompt Tokens: 18,792
+  Completion Tokens: 3,468
+  Total Tokens: 22,260
+  Total Cost: $0.002280
+  Execution Time: 71.16 seconds
+
+Final Status: SAFE
+
+
+No issues found.
