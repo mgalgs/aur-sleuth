@@ -1,0 +1,30 @@
+{
+  "package": "zcode-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard AUR -bin package for a prebuilt Electron app. The PKGBUILD downloads a .deb from the vendor's own CDN (cdn-zcode.z.ai) with a pinned SHA256 checksum, eliminating swap risk. The prepare() function performs legitimate repackaging operations (extracting deb, patching paths, symlinking system ripgrep, removing unnecessary files). The zcode.sh launcher is a standard Electron wrapper with no malicious behavior. The LICENSE is standard MIT text. No .install hooks or suspicious patterns detected.",
+  "disagreement_analysis": "The disagreement between 'inconclusive' (qwen) and 'safe' (deepseek) was caused by an API error (HTTP 400 BadRequestError) when qwen attempted to audit .SRCINFO, not by any security concern. The deepseek model successfully reviewed all 4 files and found them safe. The openrouter/free report (advisory: true, not counted as a vote) corroborates the safe verdict.",
+  "coverage_issues": [
+    "qwen model failed to audit .SRCINFO due to API error (HTTP 400), resulting in inconclusive verdict despite no security concerns"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "API errors should be distinguished from security concerns when determining final verdict - a tool failure on a metadata file (.SRCINFO) should not override successful security audits of executable files",
+    "Models correctly identified that pinned checksums on downloaded artifacts close the swap risk, even when using vendor CDNs",
+    "Standard Electron repackaging patterns (path patching, system library symlinking, file removal) were correctly recognized as legitimate by all models"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 7103,
+    "completion_tokens": 1157,
+    "cost": 0.00375392
+  },
+  "audits_judged": [
+    "20260922-073038-qwen-qwen3-235b-a22b-2507.md",
+    "20260922-073155-deepseek-deepseek-v4-flash.md",
+    "20260921-031958-openrouter-free.md"
+  ]
+}
