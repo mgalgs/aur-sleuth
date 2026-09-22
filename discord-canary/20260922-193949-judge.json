@@ -1,0 +1,30 @@
+{
+  "package": "discord-canary",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "All models that successfully reviewed the files found the package safe. The PKGBUILD follows standard AUR packaging practices: it fetches the prebuilt binary from Discord's official CDN (dl-canary.discordapp.net) with a pinned sha512 checksum, uses SKIP for license HTML files (a documented practice for unstable upstream files, justified in comments), and performs standard installation operations (copy to /opt, create symlinks, install licenses). The removal of upstream's postinst.sh is standard practice to avoid executing non-Arch install scripts. No .install hooks or patches exist. The inconclusive result from qwen3-235b was due to an HTTP 400 error on .SRCINFO (a metadata-only file with no executable code), not a security concern.",
+  "disagreement_analysis": "The disagreement was caused by a tool error (HTTP 400 BadRequestError) when qwen3-235b attempted to audit .SRCINFO, resulting in an 'inconclusive' verdict. This is not a security disagreement - all models that successfully reviewed the PKGBUILD agreed it was safe. The .SRCINFO file contains only metadata with no executable code, so the error does not affect the security assessment.",
+  "coverage_issues": [
+    "qwen3-235b failed to review .SRCINFO due to HTTP 400 error, but this is a metadata-only file with no security impact"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Tool errors on non-executable files (like .SRCINFO or .gitignore) should not cause an 'inconclusive' verdict when executable files (PKGBUILD, .install) were successfully reviewed and found safe",
+    "The audit tool should distinguish between 'file review failed due to API error' and 'file has security concerns' - the former should not block the overall verdict if critical files were reviewed",
+    "For packages with only metadata files and a PKGBUILD, a successful PKGBUILD review should be sufficient for a verdict even if metadata file review fails"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5996,
+    "completion_tokens": 1508,
+    "cost": 0.0038489600000000002
+  },
+  "audits_judged": [
+    "20260922-192650-qwen-qwen3-235b-a22b-2507.md",
+    "20260922-192715-deepseek-deepseek-v4-flash.md",
+    "20260920-194920-openrouter-free.md"
+  ]
+}
