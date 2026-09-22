@@ -1,0 +1,34 @@
+{
+  "package": "capi-shell",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The deepseek-v4-flash model completed full coverage of all 13 files and found no security issues. The package contains legitimate Cluster API (CAPI) tooling for Kubernetes/OpenStack integration. The PKGBUILD uses only local sources with SHA-512 checksums and no dangerous patterns. All scripts perform operations consistent with their stated purpose: extracting kubeconfigs and OpenStack credentials from Kubernetes secrets (which is the entire point of a CAPO plugin), managing API endpoint proxies via systemd, and providing interactive cluster selection. No code injection, no execution of fetched content, no fetching from unrelated hosts.",
+  "disagreement_analysis": "The disagreement was caused by tool errors (LLM API failures), not substantive disagreement about the code. qwen3-235b had 2 files fail with HTTP 400 errors, and openrouter/free had 2 files fail with LLMResponseError. Only deepseek-v4-flash completed all files successfully. Additionally, qwen3-235b initially flagged capi-shell-plugin-capo.sh as UNSAFE for 'credential exfiltration' but correctly self-corrected on second look, recognizing that extracting OpenStack credentials from k8s secrets is the intended functionality of a CAPO plugin, not an injection.",
+  "coverage_issues": [
+    "qwen3-235b: Failed to audit capi-shell-plugin-api-endpoint-proxy-provider-capo.sh and test-capi-shell.bats due to HTTP 400 BadRequestError",
+    "openrouter/free: Failed to audit PKGBUILD and multi-capi-shell due to LLMResponseError"
+  ],
+  "false_positives": [
+    "qwen3-235b's initial UNSAFE verdict on capi-shell-plugin-capo.sh: The model flagged credential extraction as 'supply-chain risk' but this is the intended functionality of a Cluster API Provider OpenStack plugin. The model correctly self-corrected on second look."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Tool errors (LLM API failures) can cause inconclusive results even when packages are safe; infrastructure reliability is critical for complete coverage",
+    "Models may initially flag intended functionality as suspicious (e.g., credential extraction in a credential-management plugin); self-correction mechanisms help identify these false positives",
+    "When multiple models have tool errors, a single complete audit from a reliable model can provide sufficient confidence for a verdict",
+    "Distinguish between upstream application behavior (what the tool does when running) and injection attacks (what executes during makepkg); the former is not a security concern for AUR packages"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 17165,
+    "completion_tokens": 1951,
+    "cost": 0.00799008
+  },
+  "audits_judged": [
+    "20260922-154243-qwen-qwen3-235b-a22b-2507.md",
+    "20260922-154336-deepseek-deepseek-v4-flash.md",
+    "20260922-120717-openrouter-free.md"
+  ]
+}
