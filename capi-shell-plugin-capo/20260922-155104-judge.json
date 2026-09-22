@@ -1,0 +1,33 @@
+{
+  "package": "capi-shell-plugin-capo",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD only installs local shell scripts with pinned checksums and performs no network fetches or dynamic code execution during build. The flagged behaviors (reading k8s secrets for OpenStack env vars, dynamic bash function dispatch) are intended upstream application features, not AUR packaging injections. Deepseek successfully reviewed all files and correctly identified them as safe.",
+  "disagreement_analysis": "The disagreement stems from transient API/parsing errors in qwen and openrouter causing inconclusive results, combined with initial false positive flags for normal upstream application behaviors (credential retrieval and bash plugin dispatch) which were later corrected on 'second look' but still affected the final verdicts.",
+  "coverage_issues": [
+    "qwen failed to review 3 files (capi-shell, capi-shell-plugin-api-endpoint-proxy-provider-capo.sh, multi-capi-shell) due to HTTP 400 API errors.",
+    "openrouter (advisory) failed to parse decisions for 2 files (capi-shell-plugin-api-endpoint-proxy-tool-sshuttle.sh, multi-capi-shell)."
+  ],
+  "false_positives": [
+    "qwen flagged capi-shell-plugin-capo.sh for 'credential exfiltration' - this is the intended functionality of the OpenStack plugin to populate shell env vars from k8s secrets.",
+    "openrouter flagged capi-shell-plugin-api-endpoint-proxy.sh for 'command injection' via dynamic function naming - this is a standard bash plugin-dispatcher pattern, not an injection."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models frequently confuse intended application behavior (e.g., reading secrets to set env vars, dynamic bash dispatch) with malicious supply-chain injections. Prompts should explicitly instruct models to ignore upstream application logic unless it executes fetched content or contacts unrelated hosts.",
+    "Transient API errors (HTTP 400) and parsing failures in cheaper models cause unnecessary audit escalations. Implementing automatic retries for transient errors could reduce false escalations."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 17955,
+    "completion_tokens": 2169,
+    "cost": 0.00852192
+  },
+  "audits_judged": [
+    "20260922-153511-qwen-qwen3-235b-a22b-2507.md",
+    "20260922-153724-deepseek-deepseek-v4-flash.md",
+    "20260922-120338-openrouter-free.md"
+  ]
+}
