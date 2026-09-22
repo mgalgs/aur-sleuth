@@ -1,0 +1,27 @@
+{
+  "package": "orca-ide-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The only valid report (deepseek-v4-flash) thoroughly reviewed all package files and found them to be standard, safe AUR packaging for a prebuilt Electron binary. The PKGBUILD uses pinned SHA256 checksums for GitHub release assets, and the wrapper script is a standard electron-builder template with no malicious execution, obfuscation, or network exfiltration. The other report failed entirely due to API errors.",
+  "disagreement_analysis": "The disagreement was caused by an HTTP 400 API error in the qwen model, which prevented it from auditing the PKGBUILD and wrapper script, resulting in an inconclusive verdict. The deepseek model successfully audited all files and found no security issues.",
+  "coverage_issues": [
+    "qwen model failed to review PKGBUILD and orca-ide.sh due to LLM API HTTP 400 errors, rendering its report a tool failure with no verdict signal."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "When a model fails with an API error (e.g., HTTP 400), the audit orchestration layer should ideally fall back to an alternative model or retry the request, rather than defaulting to an inconclusive verdict for the entire package when a parallel model succeeded."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 4764,
+    "completion_tokens": 1391,
+    "cost": 0.00330496
+  },
+  "audits_judged": [
+    "20260922-110119-qwen-qwen3-235b-a22b-2507.md",
+    "20260922-110413-deepseek-deepseek-v4-flash.md"
+  ]
+}
