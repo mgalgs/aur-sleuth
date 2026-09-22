@@ -1,0 +1,29 @@
+{
+  "package": "mindustry-server",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The only valid voting model (deepseek-v4-flash) correctly identified the package as safe. The PKGBUILD uses a standard `eval` loop for split-package function generation, which operates only on locally defined functions. Sources are pinned to official upstream GitHub repositories with SHA256 checksums. The inconclusive result from qwen3 was due to an API error, not a security finding.",
+  "disagreement_analysis": "The disagreement was caused by an API error (HTTP 400) in the qwen3 model when reviewing .gitignore, resulting in an inconclusive verdict. The deepseek model successfully reviewed all files and found no issues. The openrouter report is advisory and does not count as a vote.",
+  "coverage_issues": [
+    "qwen3-235b-a22b-2507 failed to review .gitignore due to an LLM API error (HTTP 400), resulting in an inconclusive overall verdict."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "API errors on low-risk files (like .gitignore) should not force an overall inconclusive verdict; the tool should either retry the request or mark the file as skipped and proceed if other files are safe.",
+    "Models are generally good at recognizing standard AUR split-package `eval` patterns, showing accurate understanding of common bash packaging idioms and avoiding false positives."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 6918,
+    "completion_tokens": 2176,
+    "cost": 0.00499904
+  },
+  "audits_judged": [
+    "20260922-191711-qwen-qwen3-235b-a22b-2507.md",
+    "20260922-191704-deepseek-deepseek-v4-flash.md",
+    "20260922-083345-openrouter-free.md"
+  ]
+}
