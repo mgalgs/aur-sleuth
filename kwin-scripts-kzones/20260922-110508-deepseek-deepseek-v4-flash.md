@@ -1,0 +1,109 @@
+---
+package: kwin-scripts-kzones
+pkgver: 0.9.2
+pkgrel: 1
+result: safe
+model: deepseek/deepseek-v4-flash
+provider: custom
+aur_sleuth_rev: e76320400488b1dad2302211f4f5cfaf8522c9b1
+prompt_tokens: 9045
+completion_tokens: 1780
+total_tokens: 10825
+cost: 0.001116878630
+execution_time: 32.63
+files_reviewed: 3
+files_skipped: 0
+maintainer_files: 3
+source_fetch: not_attempted
+upstream_files: 0
+upstream_named_files: 0
+unpinned_sources: 0
+injection_attempts: 0
+date: 2026-09-22T11:05:08Z
+file_verdicts:
+  - file: .gitignore
+    status: safe
+    summary: Standard .gitignore for AUR build artifacts.
+  - file: .SRCINFO
+    status: safe
+    summary: Standard .SRCINFO metadata with pinned upstream source; no malicious behavior found.
+  - file: PKGBUILD
+    status: safe
+    summary: Standard PKGBUILD, no security issues.
+---
+
+Materializing kwin-scripts-kzones from local mirror...
+Materialized kwin-scripts-kzones
+Analyzing kwin-scripts-kzones AUR package with deepseek/deepseek-v4-flash
+Performing initial audit of PKGBUILD to ensure that we can safely run `makepkg`
+LLM auditresponse for PKGBUILD:
+<security_assessment>
+<decision>SAFE</decision>
+<details>
+The PKGBUILD contains only top-level variable definitions (pkgname, pkgver, etc.), a source array with a standard GitHub tarball URL, and a sha256sums array with a fixed hash. No command substitutions, backticks, or function calls exist in the global scope that would execute when the file is sourced. The `package()` function is not invoked by `makepkg --printsrcinfo`, so its contents are irrelevant for this gate. There is no risk of malicious code running during the sourcing step.
+</details>
+<evidence>
+</evidence>
+<summary>No global scope code executes, safe to parse.</summary>
+</security_assessment>
+
++ Initial PKGBUILD audit complete -- No global scope code executes, safe to parse.
+Reviewing the 3 file(s) in the AUR repository.
+Reviewing the AUR repository's files...
+[0/3] Reviewing .SRCINFO...
+[0/3] Reviewing .SRCINFO, PKGBUILD...
+[0/3] Reviewing .SRCINFO, PKGBUILD, .gitignore...
+LLM auditresponse for .gitignore:
+<security_assessment>
+<decision>SAFE</decision>
+<details>
+The `.gitignore` file contains standard ignore patterns for an AUR package build environment: the `src` and `pkg` directories (created by `makepkg`) and any `.tar.gz` files in the root. There is no executable code, no network requests, no obfuscation, and no deviation from normal packaging or version-control practices. This file poses no security threat.
+</details>
+<evidence></evidence>
+<summary>Standard .gitignore for AUR build artifacts.</summary>
+</security_assessment>
+
+[1/3] Reviewing .SRCINFO, PKGBUILD...
++ Reviewed .gitignore. Status: SAFE -- Standard .gitignore for AUR build artifacts.
+LLM auditresponse for .SRCINFO:
+ <security_assessment>
+<decision>SAFE</decision>
+<details>
+The `.SRCINFO` file contains only standard package metadata for the `kwin-scripts-kzones` AUR package. It declares a single tarball source fetched from the project's own upstream GitHub repository (`https://github.com/gerritdevriese/kzones/archive/refs/tags/v0.9.2.tar.gz`) and pins it with a SHA-256 checksum. There are no executable components, no network hooks, no file operations, and no post-install logic in this file. The `depends = kwin` entry is normal for a KWin script package.
+
+This file is purely declarative and contains no instructions that could run during packaging or installation. There is nothing here that suggests obfuscation, data exfiltration, unauthorized downloads, or any other malicious behavior. The pinned source tag and checksum are consistent with healthy packaging practice.
+</details>
+<evidence>
+</evidence>
+<summary>
+Standard .SRCINFO metadata with pinned upstream source; no malicious behavior found.</summary>
+</security_assessment>
+
+[2/3] Reviewing PKGBUILD...
++ Reviewed .SRCINFO. Status: SAFE -- Standard .SRCINFO metadata with pinned upstream source; no malicious behavior found.
+LLM auditresponse for PKGBUILD:
+<security_assessment>
+<decision>SAFE</decision>
+<details>
+This PKGBUILD follows standard AUR packaging practices. The source is an official tagged release tarball from the upstream GitHub repository with a fixed sha256sum. The `package()` function only copies the application files (`contents/`, `metadata.json`, and `LICENSE.md`) into the package directory. There are no network requests, no execution of untrusted code, no obfuscation, and no system modifications beyond installing the package itself. No signs of malicious behavior are present.
+</details>
+<evidence></evidence>
+<summary>Standard PKGBUILD, no security issues.</summary>
+</security_assessment>
+
+[3/3] Reviewing ...
++ Reviewed PKGBUILD. Status: SAFE -- Standard PKGBUILD, no security issues.
+Reviewed all the AUR repository's files.
+Audit complete! Result: No issues found
+API Usage Summary
+  Models: deepseek/deepseek-v4-flash
+  Prompt Tokens: 9,045
+  Completion Tokens: 1,780
+  Total Tokens: 10,825
+  Total Cost: $0.001117
+  Execution Time: 32.63 seconds
+
+Final Status: SAFE
+
+
+No issues found.
