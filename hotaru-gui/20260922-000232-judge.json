@@ -1,0 +1,28 @@
+{
+  "package": "hotaru-gui",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Both models reviewed the same two files (PKGBUILD and .SRCINFO) and found no malicious patterns. The PKGBUILD is a standard Go split-package with pinned source (sha256sums), no command injection in global scope, and standard build/install operations confined to $pkgdir. The .SRCINFO is routine metadata. The qwen model's 'inconclusive' verdict was caused entirely by an HTTP 400 API error when auditing .SRCINFO\u2014a tool failure, not a security finding. The deepseek model successfully audited both files and found them safe. There is no evidence of injected code, unpinned sources, or suspicious network activity.",
+  "disagreement_analysis": "The disagreement is artificial: qwen returned 'inconclusive' due to an LLM API failure (HTTP 400 BadRequestError) on .SRCINFO, not due to any security concern. Deepseek successfully audited the same file and found it safe. Both models agreed the PKGBUILD was safe with nearly identical reasoning (pinned Go source, no eval/curl|bash, standard build process).",
+  "coverage_issues": [
+    "qwen model failed to audit .SRCINFO due to HTTP 400 API error, causing the entire audit to be marked inconclusive despite the PKGBUILD being successfully reviewed"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Tool errors (API failures, timeouts) on individual files should not cascade to an overall 'inconclusive' verdict when other files were successfully audited and found safe. The audit system should distinguish between 'could not complete audit' and 'audit completed with no findings'.",
+    "When a model encounters an API error on a metadata-only file like .SRCINFO, the system should either retry or fall back to a simpler check rather than poisoning the entire verdict."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 4163,
+    "completion_tokens": 1011,
+    "cost": 0.00262624
+  },
+  "audits_judged": [
+    "20260921-230122-qwen-qwen3-235b-a22b-2507.md",
+    "20260921-230855-deepseek-deepseek-v4-flash.md"
+  ]
+}
