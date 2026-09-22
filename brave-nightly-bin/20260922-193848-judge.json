@@ -1,0 +1,29 @@
+{
+  "package": "brave-nightly-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard AUR binary wrapper for Brave Nightly. The PKGBUILD downloads a pre-built .deb from the official GitHub repository with pinned SHA-512 checksums, extracts it, and installs it. The launch wrapper script simply sets environment variables and executes the binary. There is no malicious code, no unexpected network requests, and no execution of untrusted content during build or install. The only discrepancy between models was an API error on the .SRCINFO file in one report, which is non-executable metadata and does not affect the security verdict.",
+  "disagreement_analysis": "The disagreement was caused by a tool error (HTTP 400 API failure) in the qwen model when auditing the .SRCINFO file, forcing an 'inconclusive' overall result. The deepseek model successfully audited all files and correctly returned 'safe'. Since .SRCINFO contains no executable code, the tool error does not mask any security risks.",
+  "coverage_issues": [
+    "qwen model failed to audit .SRCINFO due to an LLM API error (HTTP 400)."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Tool errors on non-executable metadata files (like .SRCINFO) should not force an overall 'inconclusive' verdict if all executable files (PKGBUILD, install hooks, scripts) are successfully audited and found safe. The audit tool should decouple metadata parsing failures from the final security verdict.",
+    "Ensure that transient API errors do not cascade into a full audit failure for non-critical files; the tool should gracefully degrade and base the verdict on the executable files that were successfully analyzed."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 7031,
+    "completion_tokens": 1863,
+    "cost": 0.004634559999999999
+  },
+  "audits_judged": [
+    "20260922-193607-qwen-qwen3-235b-a22b-2507.md",
+    "20260922-193603-deepseek-deepseek-v4-flash.md",
+    "20260917-195338-openrouter-free.md"
+  ]
+}
