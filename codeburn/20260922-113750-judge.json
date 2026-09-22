@@ -1,0 +1,28 @@
+{
+  "package": "codeburn",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The only valid voting report (deepseek-v4-flash) correctly identified the package as safe. The PKGBUILD uses standard AUR practices, fetching a pinned npm tarball with a SHA-256 checksum and using `npm install --ignore-scripts`. The qwen model's inconclusive result was due to API errors (HTTP 400), not security concerns. The openrouter report is advisory only and does not count.",
+  "disagreement_analysis": "The disagreement was caused by the qwen model failing to audit the PKGBUILD and .SRCINFO files due to HTTP 400 API errors, resulting in an 'inconclusive' status. The deepseek model successfully audited the files and found them safe. Since the qwen failure was a tool error, it carries no verdict signal, leaving the deepseek 'safe' verdict as the sole valid opinion.",
+  "coverage_issues": [
+    "qwen/qwen3-235b-a22b-2507 failed to audit .SRCINFO and PKGBUILD due to HTTP 400 API errors."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "The orchestration layer should differentiate between 'inconclusive due to security ambiguity' and 'inconclusive due to tool/API errors'. A tool error should be treated as missing data rather than a conflicting verdict that triggers an escalation, especially when another model has provided a valid 'safe' verdict."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5432,
+    "completion_tokens": 1808,
+    "cost": 0.00405248
+  },
+  "audits_judged": [
+    "20260922-112931-qwen-qwen3-235b-a22b-2507.md",
+    "20260922-112843-deepseek-deepseek-v4-flash.md",
+    "20260921-201415-openrouter-free.md"
+  ]
+}
