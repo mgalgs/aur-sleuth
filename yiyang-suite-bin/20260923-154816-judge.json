@@ -1,0 +1,28 @@
+{
+  "package": "yiyang-suite-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard -bin wrapper for a prebuilt Electron application. It downloads a .deb from the vendor's CDN with pinned SHA256 checksums, extracts it, patches paths, and repacks it. The launcher script is a standard Electron wrapper. No malicious code injection or suspicious behavior was found. The disagreement was solely due to a transient API error in one model preventing it from reviewing the launcher script, which the other model successfully reviewed and cleared.",
+  "disagreement_analysis": "The disagreement (inconclusive vs safe) was caused by a transient LLM API error (HTTP 400) in the qwen model when attempting to audit yiyang-suite.sh, forcing an overall inconclusive verdict. The deepseek model successfully audited the same file and found it to be a standard, safe Electron launcher script.",
+  "coverage_issues": [
+    "qwen model failed to audit yiyang-suite.sh due to an API error (HTTP 400 BadRequestError)"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Transient API errors on individual files should not necessarily force an overall inconclusive verdict if the tool can retry or if consensus is reached by other models on the same file.",
+    "Models correctly handled the -bin package pattern (downloading prebuilt binaries with pinned checksums) without flagging it as a supply chain risk, showing good adherence to the threat model by focusing on injection during build/install rather than upstream trust."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 4618,
+    "completion_tokens": 1489,
+    "cost": 0.00338368
+  },
+  "audits_judged": [
+    "20260923-152236-qwen-qwen3-235b-a22b-2507.md",
+    "20260923-152241-deepseek-deepseek-v4-flash.md"
+  ]
+}
