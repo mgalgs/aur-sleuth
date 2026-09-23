@@ -1,0 +1,30 @@
+{
+  "package": "brave-origin-nightly-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The deepseek model successfully audited all four files and found no security issues. The PKGBUILD sources official Brave GitHub releases with SHA-512 checksums, preventing artifact substitution. The build process extracts a .deb and installs files\u2014standard operations for a -bin package. The wrapper script (brave-origin-nightly-bin.sh) only reads user config and launches the installed binary with no network activity or suspicious behavior. The qwen model's inconclusive result was due to API errors (HTTP 400) on the two most critical files (PKGBUILD and the shell wrapper), providing no verdict signal per the rules.",
+  "disagreement_analysis": "The disagreement was caused by a tool error in the qwen model, which failed with HTTP 400 errors when auditing PKGBUILD and brave-origin-nightly-bin.sh. This is not a genuine security disagreement but a coverage failure. The deepseek model completed a full audit of all files and found them safe.",
+  "coverage_issues": [
+    "qwen model failed to audit PKGBUILD due to API error (HTTP 400 BadRequestError)",
+    "qwen model failed to audit brave-origin-nightly-bin.sh due to API error (HTTP 400 BadRequestError)"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Tool errors (API failures, timeouts) on critical files should be clearly flagged and excluded from verdict calculation, as they provide no security signal",
+    "When one model has complete coverage and another has tool errors on key files, the complete audit should be weighted appropriately rather than treated as a genuine disagreement",
+    "For -bin packages, audit models should explicitly verify: (1) source URLs point to official upstream, (2) checksums are present and pinned, (3) package() function performs only standard extraction/installation operations"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 4996,
+    "completion_tokens": 1274,
+    "cost": 0.00322944
+  },
+  "audits_judged": [
+    "20260923-191144-qwen-qwen3-235b-a22b-2507.md",
+    "20260923-191136-deepseek-deepseek-v4-flash.md"
+  ]
+}
