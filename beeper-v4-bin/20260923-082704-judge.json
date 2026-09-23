@@ -1,0 +1,28 @@
+{
+  "package": "beeper-v4-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD performs a top-level curl request to the package's own upstream API (api.beeper.com) to resolve the dynamic download URL and version. This is a standard AUR pattern for vendors without stable URLs. It does not execute the fetched content, nor does it contact an unrelated host. The Qwen model incorrectly flagged this as a supply-chain risk based on packaging hygiene (network activity during sourcing), which the threat model explicitly excludes from the verdict.",
+  "disagreement_analysis": "Qwen flagged the top-level network call during PKGBUILD sourcing as an unauthorized network communication and supply-chain risk. Deepseek correctly identified it as a benign, standard AUR auto-update pattern. The disagreement stems from Qwen treating a packaging hygiene issue (side-effects during metadata parsing) as a security violation, whereas the prompt explicitly states that fetching from the declared upstream without executing the content is a normal pattern and not grounds for an unsafe verdict.",
+  "coverage_issues": [],
+  "false_positives": [
+    "Qwen's flag on the top-level curl request to api.beeper.com. Fetching metadata/redirects from the declared upstream without executing the response is a normal AUR pattern, and flagging it as a supply-chain risk violates the instruction to ignore packaging hygiene issues."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models need stronger guidance to distinguish between 'packaging hygiene' (e.g., network calls at the top level of a PKGBUILD causing side-effects during `makepkg --printsrcinfo`) and 'malicious injection'. Fetching metadata from the declared upstream should never be flagged as unsafe, regardless of where in the PKGBUILD it occurs.",
+    "Reinforce that `sha256sums=('SKIP')` combined with dynamic URL resolution is a common AUR pattern for `-bin` packages and should not be conflated with malicious artifact swapping unless the URL points to an unrelated or suspicious host."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 4978,
+    "completion_tokens": 2276,
+    "cost": 0.00450624
+  },
+  "audits_judged": [
+    "20260923-081417-qwen-qwen3-235b-a22b-2507.md",
+    "20260923-082302-deepseek-deepseek-v4-flash.md"
+  ]
+}
