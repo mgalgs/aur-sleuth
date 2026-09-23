@@ -1,0 +1,32 @@
+{
+  "package": "hytale-launcher-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Report 2 (deepseek) successfully reviewed all files and found no security issues. The package is a standard binary wrapper: PKGBUILD downloads from official upstream (launcher.hytale.com) with pinned checksums, hytale-launcher.install contains only echo statements, hytale-launcher.sh is a benign wrapper script with system checks and environment setup, and .SRCINFO is metadata-only. No injection patterns, no execution of fetched content, no suspicious network destinations. The inconclusive results from Reports 1 and 3 are due to tool errors (API failures, parsing errors), not security concerns.",
+  "disagreement_analysis": "Disagreement caused by tool errors, not security findings. Report 1 (qwen) had HTTP 400 errors for .SRCINFO, com.hypixel.HytaleNodeEditorOnly.desktop, and hytale-launcher.install. Report 3 (openrouter, advisory-only) had extensive JSON parsing errors. Report 2 (deepseek) completed full coverage successfully. No actual security disagreement exists.",
+  "coverage_issues": [
+    "Report 1 (qwen): API errors prevented review of .SRCINFO, com.hypixel.HytaleNodeEditorOnly.desktop, and hytale-launcher.install",
+    "Report 3 (openrouter): Widespread parsing errors (JSONDecodeError, could not parse decision) affected 7 of 10 files"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Tool errors (API failures, parsing errors) should be distinguished from security inconclusiveness in verdict reporting",
+    "Need retry mechanisms or fallback models when primary model encounters API errors",
+    "Should prioritize complete coverage over partial results when determining final verdict",
+    "Advisory reports with extensive tool errors should be flagged as having no verdict signal earlier in the process"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 11491,
+    "completion_tokens": 1454,
+    "cost": 0.00553824
+  },
+  "audits_judged": [
+    "20260923-071223-qwen-qwen3-235b-a22b-2507.md",
+    "20260923-071429-deepseek-deepseek-v4-flash.md",
+    "20260916-030137-openrouter-free.md"
+  ]
+}
