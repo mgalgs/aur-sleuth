@@ -1,0 +1,29 @@
+{
+  "package": "pane-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The downloaded AppImage is pinned by a SHA-256 checksum, which closes the swap risk per the threat model ('makepkg rejects substituted bytes'). The mismatch between the declared upstream URL (dcouple/Pane) and the actual download host (greenfield-inc/Pane) is a packaging hygiene issue, not a security injection. Both repositories are named 'Pane', suggesting a legitimate relationship (e.g., company organization vs. personal developer repo). No malicious code execution, no fetching from a completely unrelated host, and no unpinned artifacts. The threat model explicitly states that 'Violates packaging best practices' is never by itself grounds for unsafe when a real checksum pins the artifact.",
+  "disagreement_analysis": "Both models flagged the URL mismatch between dcouple/Pane and greenfield-inc/Pane as a supply-chain risk. However, both also noted the checksum pins the artifact. The deepseek model even acknowledged in its second PKGBUILD review that 'the organization mismatch is a hygiene concern... but it does not rise to the level of a genuine supply-chain attack under the given calibration rules.' Despite this, both models returned unsafe verdicts, indicating they over-weighted the URL mismatch and failed to properly apply the threat model's guidance that pinned checksums close the swap risk. The openrouter model also flagged the 'bbffee' prefix in the checksum as suspicious, but this is just a pattern observation and doesn't invalidate the checksum's pinning function.",
+  "coverage_issues": [],
+  "false_positives": [
+    "Both models flagged the URL mismatch (dcouple vs greenfield-inc) as a supply-chain attack. This is a false positive because the checksum pins the artifact, closing the swap risk. The mismatch is a hygiene issue, not an injection. The threat model explicitly states that when a real checksum pins the downloaded artifact, the swap risk is closed."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models consistently over-weight URL mismatches between declared upstream and actual download host, even when checksums pin the artifact. The audit tool should more strongly emphasize in prompts that pinned checksums close the swap risk, and URL mismatches alone are hygiene issues unless there's evidence of executing fetched content or fetching from a completely unrelated/unexpected host.",
+    "Models should be trained to distinguish between 'packaging hygiene' and 'security injection' more clearly. The threat model explicitly states that hygiene violations are not grounds for unsafe when checksums pin artifacts, but models still flag these as unsafe.",
+    "Pattern observations (like 'bbffee' in a checksum) should not be treated as security risks unless they can be shown to invalidate the checksum's pinning function."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5914,
+    "completion_tokens": 3761,
+    "cost": 0.00670656
+  },
+  "audits_judged": [
+    "20260923-082513-deepseek-deepseek-v4-flash.md",
+    "20260922-084400-openrouter-free.md"
+  ]
+}
