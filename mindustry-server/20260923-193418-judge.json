@@ -1,0 +1,28 @@
+{
+  "package": "mindustry-server",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package consists of standard AUR metadata and build scripts (PKGBUILD, .SRCINFO, .nvchecker.toml, .gitignore) with no malicious injections. The PKGBUILD uses `eval` to dynamically generate split-package functions from locally defined shell functions, which is a known and safe AUR pattern. There are no suspicious network requests, unpinned sources, or execution of untrusted content during the build process.",
+  "disagreement_analysis": "The disagreement stems from a transient tool error rather than a difference in security assessment. The qwen model encountered an HTTP 400 API error when attempting to audit the .gitignore file, which caused it to return an overall 'inconclusive' verdict. The deepseek model successfully audited all files and correctly returned 'safe'. The openrouter/free report also returned 'safe' but is marked as advisory and does not count toward the vote.",
+  "coverage_issues": [
+    "The qwen model failed to audit .gitignore due to an API error (HTTP 400), resulting in an incomplete review and an inconclusive overall verdict."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "The audit orchestration layer should implement retry logic for transient API errors on individual files, or at least not fail the entire package audit if a low-risk file like .gitignore cannot be processed by the LLM."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 6917,
+    "completion_tokens": 1554,
+    "cost": 0.00420256
+  },
+  "audits_judged": [
+    "20260923-191138-qwen-qwen3-235b-a22b-2507.md",
+    "20260923-191137-deepseek-deepseek-v4-flash.md",
+    "20260922-083345-openrouter-free.md"
+  ]
+}
