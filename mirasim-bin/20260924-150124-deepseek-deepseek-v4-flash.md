@@ -1,0 +1,123 @@
+---
+package: mirasim-bin
+pkgver: 0.0.354
+pkgrel: 3
+result: safe
+model: deepseek/deepseek-v4-flash
+provider: custom
+aur_sleuth_rev: e76320400488b1dad2302211f4f5cfaf8522c9b1
+prompt_tokens: 13643
+completion_tokens: 2108
+total_tokens: 15751
+cost: 0.00152765886
+execution_time: 34.54
+files_reviewed: 4
+files_skipped: 0
+maintainer_files: 4
+source_fetch: not_attempted
+upstream_files: 0
+upstream_named_files: 0
+unpinned_sources: 0
+injection_attempts: 0
+date: 2026-09-24T15:01:24Z
+file_verdicts:
+  - file: .gitignore
+    status: safe
+    summary: Routine .gitignore with build artifacts only, no malicious content.
+  - file: .SRCINFO
+    status: safe
+    summary: Standard package metadata; no security issues.
+  - file: PKGBUILD
+    status: safe
+    summary: Standard binary PKGBUILD with pinned checksums and no suspicious behavior.
+  - file: launcher-flags.patch
+    status: safe
+    summary: Launcher reads user config flags and passes them safely to the app. No malicious behavior found.
+---
+
+Materializing mirasim-bin from local mirror...
+Materialized mirasim-bin
+Analyzing mirasim-bin AUR package with deepseek/deepseek-v4-flash
+Performing initial audit of PKGBUILD to ensure that we can safely run `makepkg`
+LLM auditresponse for PKGBUILD:
+<security_assessment>
+<decision>SAFE</decision>
+<details>
+The PKGBUILD contains only standard variable definitions and function declarations in its top-level scope. No command substitutions, backticks, or other executable expressions are present that could trigger code execution during sourcing. The `source` arrays contain URL strings but these are not downloaded or executed at this stage. The `package()` function (which contains the actual build/install logic) is defined but not invoked by `makepkg --printsrcinfo`. Therefore, running this command poses no risk.</details>
+<evidence></evidence>
+<summary>No top-level code executes during sourcing; safe.</summary>
+</security_assessment>
+
++ Initial PKGBUILD audit complete -- No top-level code executes during sourcing; safe.
+Reviewing the 4 file(s) in the AUR repository.
+Reviewing the AUR repository's files...
+[0/4] Reviewing .SRCINFO...
+[0/4] Reviewing .SRCINFO, .gitignore...
+[0/4] Reviewing .SRCINFO, .gitignore, PKGBUILD...
+LLM auditresponse for .gitignore:
+<security_assessment>
+<decision>SAFE</decision>
+<details>
+This is a standard .gitignore file used in AUR packaging workflows. It only lists build artifacts (src/, pkg/) and generated package files (*.deb, *.pkg.tar.*, *.pkg.tar.zst). There are no commands, no network operations, no code execution, and no reference to any external data. This file presents no security risk.</details>
+<evidence></evidence>
+<summary>Routine .gitignore with build artifacts only, no malicious content.</summary>
+</security_assessment>
+
+[0/4] Reviewing .SRCINFO, .gitignore, PKGBUILD, launcher-flags.patch...
+[1/4] Reviewing .SRCINFO, PKGBUILD, launcher-flags.patch...
++ Reviewed .gitignore. Status: SAFE -- Routine .gitignore with build artifacts only, no malicious content.
+LLM auditresponse for .SRCINFO:
+<security_assessment>
+<decision>SAFE</decision>
+<details>
+This `.SRCINFO` file is metadata for the `mirasim-bin` AUR package. It declares package version, dependencies, and download sources. All source URLs point to `cdn-assets.mirasim.ai`, which is the package's own upstream CDN. SHA256 checksums are provided for all three source entries (two architecture-specific `.deb` files and one patch file). No obfuscated code, suspicious commands, or unexpected network destinations are present. The file is a standard AUR packaging descriptor and contains no malicious or supply-chain attack indicators.
+</details>
+<evidence></evidence>
+<summary>Standard package metadata; no security issues.</summary>
+</security_assessment>
+
+[2/4] Reviewing PKGBUILD, launcher-flags.patch...
++ Reviewed .SRCINFO. Status: SAFE -- Standard package metadata; no security issues.
+LLM auditresponse for PKGBUILD:
+<security_assessment>
+<decision>SAFE</decision>
+<details>
+The PKGBUILD follows standard AUR packaging practices for a proprietary binary package. All sources are fetched over HTTPS from the official Mirasim CDN (`cdn-assets.mirasim.ai`) and have pinned SHA-256 checksums. The `package()` function extracts the `.deb` archive, installs a symlink, applies a local patch (`launcher-flags.patch`), and generates icon variants using ImageMagick — all routine operations. No obfuscated code, network requests to unexpected hosts, file exfiltration, backdoors, or execution of untrusted content is present. The patch source is included as a separate file (not shown here) but its inclusion is normal; there is no evidence of malice in the packaging logic itself.
+</details>
+<evidence></evidence>
+<summary>Standard binary PKGBUILD with pinned checksums and no suspicious behavior.</summary>
+</security_assessment>
+
+[3/4] Reviewing launcher-flags.patch...
++ Reviewed PKGBUILD. Status: SAFE -- Standard binary PKGBUILD with pinned checksums and no suspicious behavior.
+LLM auditresponse for launcher-flags.patch:
+<security_assessment>
+<decision>SAFE</decision>
+<details>
+This patch modifies the `mirasim-desktop` launcher to read optional Chromium flags from a user configuration file (`${XDG_CONFIG_HOME:-$HOME/.config}/mirasim-flags.conf`) and pass them to the application binary. This is an ordinary, user-controlled launcher feature: the file lives in the user's own config directory, and the contents are filtered by `sed` to strip comments and blank lines, then converted to whitespace-separated flags.
+
+The unquoted `$user_flags` expansion is intentional word-splitting to separate flags, and `set -f` disables glob expansion. Shell metacharacters in the config file are not re-parsed as commands after variable expansion, so this does not create a command-injection or code-execution vector. There are no network requests, encoded payloads, suspicious downloads, file modifications outside the launcher's scope, or hidden behavior. The change simply routes existing `exec` calls through a helper that prepends user-specified switches to the application command line.
+</details>
+<evidence>
+</evidence>
+<summary>
+Launcher reads user config flags and passes them safely to the app. No malicious behavior found.
+</summary>
+</security_assessment>
+
+[4/4] Reviewing ...
++ Reviewed launcher-flags.patch. Status: SAFE -- Launcher reads user config flags and passes them safely to the app. No malicious behavior found.
+Reviewed all the AUR repository's files.
+Audit complete! Result: No issues found
+API Usage Summary
+  Models: deepseek/deepseek-v4-flash
+  Prompt Tokens: 13,643
+  Completion Tokens: 2,108
+  Total Tokens: 15,751
+  Total Cost: $0.001528
+  Execution Time: 34.54 seconds
+
+Final Status: SAFE
+
+
+No issues found.
