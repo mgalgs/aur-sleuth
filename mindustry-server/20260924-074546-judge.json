@@ -1,0 +1,29 @@
+{
+  "package": "mindustry-server",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package contains standard AUR packaging files. The PKGBUILD uses a common idiom (eval with declare -f) to generate split-package functions, which does not execute untrusted code or fetch external data during sourcing. The only disagreement was caused by a transient API error in one model, not by any actual security concern.",
+  "disagreement_analysis": "The disagreement was triggered by a tool error (HTTP 400 BadRequestError) in the qwen model when auditing .SRCINFO, resulting in an inconclusive verdict. The deepseek model successfully reviewed all files and found them safe. The openrouter report is advisory and also found it safe.",
+  "coverage_issues": [
+    "qwen model failed to audit .SRCINFO due to an API error (HTTP 400 BadRequestError)"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Transient API errors during individual file reviews should not force an overall 'inconclusive' package verdict if the critical files (like PKGBUILD) are successfully audited and deemed safe; the tool should either retry or gracefully degrade.",
+    "Models correctly identified the eval/declare -f split-package idiom as safe. This confirms that modern models can distinguish between malicious eval usage and standard AUR packaging patterns."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 6866,
+    "completion_tokens": 1723,
+    "cost": 0.00440256
+  },
+  "audits_judged": [
+    "20260924-070812-qwen-qwen3-235b-a22b-2507.md",
+    "20260924-070825-deepseek-deepseek-v4-flash.md",
+    "20260922-083345-openrouter-free.md"
+  ]
+}
