@@ -1,0 +1,32 @@
+{
+  "package": "mindustry",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The only complete and valid audit (deepseek) correctly identified the package as safe. The PKGBUILD uses a standard AUR idiom (eval with declare -f) to generate split-package functions from locally defined templates, which is not an injection vector. Sources are pinned with SHA256 checksums from official upstream repositories. The 'inconclusive' trigger was caused by API errors in other models, not genuine security concerns.",
+  "disagreement_analysis": "The trigger was caused by incomplete audits (API errors) from qwen and openrouter, rather than a true security disagreement. openrouter (advisory) also initially flagged the PKGBUILD's eval pattern as unsafe before self-correcting, highlighting a common model confusion with AUR metaprogramming.",
+  "coverage_issues": [
+    "qwen/qwen3-235b-a22b-2507 failed to audit PKGBUILD and .gitignore due to HTTP 400 errors.",
+    "openrouter/free failed to audit .SRCINFO due to HTTP 429 rate limiting."
+  ],
+  "false_positives": [
+    "openrouter/free initially flagged the eval loop in PKGBUILD as 'unbounded code execution'. This is a standard AUR pattern for split packages using locally defined functions, not a supply-chain injection."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models frequently confuse standard AUR metaprogramming (e.g., eval with declare -f for split packages) with malicious code execution. Prompts should explicitly clarify that eval operating on locally defined static functions is safe.",
+    "API rate limits and errors (400, 429) lead to missing verdicts on critical files. The orchestration layer needs better retry logic or fallback models to ensure the PKGBUILD is always fully audited."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 7671,
+    "completion_tokens": 2630,
+    "cost": 0.00582112
+  },
+  "audits_judged": [
+    "20260924-070402-qwen-qwen3-235b-a22b-2507.md",
+    "20260924-070609-deepseek-deepseek-v4-flash.md",
+    "20260922-083321-openrouter-free.md"
+  ]
+}
