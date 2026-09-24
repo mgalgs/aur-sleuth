@@ -1,0 +1,95 @@
+---
+package: salamlang
+pkgver: 0.4.3
+pkgrel: 1
+result: safe
+model: deepseek/deepseek-v4-flash
+provider: custom
+aur_sleuth_rev: e76320400488b1dad2302211f4f5cfaf8522c9b1
+prompt_tokens: 9231
+completion_tokens: 4704
+total_tokens: 13935
+cost: 0.001651527234
+execution_time: 117.62
+files_reviewed: 2
+files_skipped: 0
+maintainer_files: 2
+source_fetch: not_attempted
+upstream_files: 0
+upstream_named_files: 0
+unpinned_sources: 0
+injection_attempts: 0
+date: 2026-09-24T03:05:09Z
+file_verdicts:
+  - file: .SRCINFO
+    status: safe
+    summary: Standard AUR metadata file with no malicious content.
+  - file: PKGBUILD
+    status: safe
+    summary: Pinned-source build of Salam compiler; checksummed seed bootstrap; no malicious code.
+---
+
+Materializing salamlang from local mirror...
+Materialized salamlang
+Analyzing salamlang AUR package with deepseek/deepseek-v4-flash
+Performing initial audit of PKGBUILD to ensure that we can safely run `makepkg`
+LLM auditresponse for PKGBUILD:
+<security_assessment>
+<decision>SAFE</decision>
+<details>
+Running `makepkg --printsrcinfo` sources the PKGBUILD and executes only its global/top-level scope. In this file, the top-level scope consists solely of variable assignments, source array definitions, checksum arrays, and function definitions. There are no top-level command substitutions, network calls, downloads, encoded payloads, or file-modifying commands that would execute during sourcing.
+
+The `_seeddir`, `build()`, `check()`, and `package()` functions contain build/install logic, but those functions are not invoked by `makepkg --printsrcinfo`. Their content is out of scope for this narrow gate and will be reviewed in the full PKGBUILD audit. No genuinely malicious top-level behavior is present.
+</details>
+<evidence>
+</evidence>
+<summary>
+Top-level PKGBUILD scope is benign; printsrcinfo is safe to run.
+</summary>
+</security_assessment>
+
++ Initial PKGBUILD audit complete -- Top-level PKGBUILD scope is benign; printsrcinfo is safe to run.
+Reviewing the 2 file(s) in the AUR repository.
+Reviewing the AUR repository's files...
+[0/2] Reviewing .SRCINFO...
+[0/2] Reviewing .SRCINFO, PKGBUILD...
+LLM auditresponse for .SRCINFO:
+<security_assessment>
+<decision>SAFE</decision>
+<details>
+The .SRCINFO file is purely metadata for the AUR package. It declares the package name, version, dependencies, and source URLs, all pointing to the official SalamLang GitHub repository. Checksums are provided for all sources. There is no executable code, no suspicious network requests beyond fetching the upstream sources from the project's own GitHub releases, and no obfuscation or dangerous commands. This file follows standard AUR packaging practices.
+</details>
+<evidence></evidence>
+<summary>Standard AUR metadata file with no malicious content.</summary>
+</security_assessment>
+
+[1/2] Reviewing PKGBUILD...
++ Reviewed .SRCINFO. Status: SAFE -- Standard AUR metadata file with no malicious content.
+LLM auditresponse for PKGBUILD:
+<security_assessment>
+<decision>SAFE</decision>
+<details>
+This PKGBUILD follows a standard self-hosting compiler bootstrap pattern. The main source tarball (Salam v0.4.3) and the per-architecture &quot;seed&quot; bootstrap binaries (v0.4.1) are all fetched from the project&apos;s own upstream GitHub repository and every source is pinned with a concrete SHA-256 checksum. No source uses &apos;SKIP&apos;. The seed binary is executed only during the build to compile the local sources from this repository — this is the normal bootstrap approach used by many self-hosting toolchains, and the artifact is the upstream project&apos;s published, checksummed release. There is no evidence that the PKGBUILD tampers with the seed, redirects it from an unrelated host, or injects anything into the build.
+
+The build, check, and package functions are all ordinary packaging operations: they compile, run a small &quot;salam&quot; smoke test, install the binary/library into `${pkgdir}`, and write a simple shell wrapper in `/usr/bin`. There is no obfuscation, no eval/base64 decoding, no curl-piped-to-sh, no exfiltration of local data, and no writes outside `${srcdir}`/`${pkgdir}`. The only slight trust consideration is that the prebuilt seed bootstrap is trusted to compile the language, but that binary is pinned to the upstream project&apos;s own release with a checksum, which is a reasonable supply-chain posture and not evidence of malice in this package file.
+</details>
+<evidence></evidence>
+<summary>Pinned-source build of Salam compiler; checksummed seed bootstrap; no malicious code.</summary>
+</security_assessment>
+
+[2/2] Reviewing ...
++ Reviewed PKGBUILD. Status: SAFE -- Pinned-source build of Salam compiler; checksummed seed bootstrap; no malicious code.
+Reviewed all the AUR repository's files.
+Audit complete! Result: No issues found
+API Usage Summary
+  Models: deepseek/deepseek-v4-flash
+  Prompt Tokens: 9,231
+  Completion Tokens: 4,704
+  Total Tokens: 13,935
+  Total Cost: $0.001652
+  Execution Time: 117.62 seconds
+
+Final Status: SAFE
+
+
+No issues found.
