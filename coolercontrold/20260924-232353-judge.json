@@ -1,0 +1,29 @@
+{
+  "package": "coolercontrold",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The disagreement stems from a tool error in the qwen model (HTTP 400 BadRequestError when auditing PKGBUILD), not a genuine safety concern. The deepseek model successfully reviewed both PKGBUILD and .SRCINFO, finding standard AUR packaging: pinned SHA-256 checksums from official GitLab releases, no dangerous global-scope code, and expected Rust build commands (cargo build --release --frozen). No .install hooks or suspicious scripts exist. The package follows normal AUR patterns with no injection indicators.",
+  "disagreement_analysis": "The qwen model failed to audit the PKGBUILD due to an API error (HTTP 400), resulting in an inconclusive verdict. The deepseek model completed the audit successfully and found the PKGBUILD safe. This is a tool failure, not a substantive disagreement about package safety.",
+  "coverage_issues": [
+    "qwen model: PKGBUILD audit failed due to LLM API error (HTTP 400 BadRequestError), leaving the most critical file unreviewed"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Implement retry logic or fallback models when LLM API calls fail with transient errors (HTTP 400/500) to prevent inconclusive verdicts on critical files like PKGBUILD",
+    "When a model encounters an API error during file review, the audit tool should automatically escalate to a re-audit rather than marking the entire package as inconclusive",
+    "Track API error rates per model to identify reliability issues and route critical audits to more stable endpoints"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 3749,
+    "completion_tokens": 925,
+    "cost": 0.00238368
+  },
+  "audits_judged": [
+    "20260924-230446-qwen-qwen3-235b-a22b-2507.md",
+    "20260924-230423-deepseek-deepseek-v4-flash.md"
+  ]
+}
