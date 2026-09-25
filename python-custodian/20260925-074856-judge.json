@@ -1,0 +1,28 @@
+{
+  "package": "python-custodian",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The only valid voting report (deepseek) correctly identified the PKGBUILD as safe. The qwen report was inconclusive due to API errors (HTTP 400) and thus carries no verdict signal. The openrouter report is advisory. The PKGBUILD uses a static PyPI URL with a SKIP checksum; while poor hygiene, it does not constitute an injection (no dynamic URL execution, no unrelated hosts). No other maintainer files exist to review.",
+  "disagreement_analysis": "The disagreement was triggered because qwen returned 'inconclusive' due to LLM API errors (HTTP 400), while deepseek returned 'safe'. Since qwen's result was a tool error, it is treated as missing, leaving deepseek's 'safe' verdict as the only valid signal.",
+  "coverage_issues": [
+    "qwen model failed to complete the audit due to HTTP 400 API errors, resulting in missing file verdicts."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "When a model fails with an API error during the file review phase, the orchestration layer should ideally retry the request or fall back to another model rather than failing the entire audit, especially when the initial PKGBUILD gate already passed."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 4963,
+    "completion_tokens": 2382,
+    "cost": 0.00463712
+  },
+  "audits_judged": [
+    "20260925-073459-qwen-qwen3-235b-a22b-2507.md",
+    "20260925-073504-deepseek-deepseek-v4-flash.md",
+    "20260924-234511-openrouter-free.md"
+  ]
+}
