@@ -1,0 +1,31 @@
+{
+  "package": "kilo-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The only report that completed a full review (deepseek-v4-flash) found the package safe, with detailed reasoning: sources point to official GitHub releases (Kilo-Org/kilocode), SHA256 checksums are pinned, and the package() function performs only standard operations (install, cp, printf, chmod) to install prebuilt binaries and create a wrapper script. The qwen model's initial PKGBUILD audit also returned SAFE before an API error caused the second pass to fail. The openrouter report is advisory-only and also failed due to a parsing error after initially returning SAFE. No .install script or other maintainer hooks exist (files_reviewed: 2 matches the two metadata files). This is a standard -bin package with verified upstream sources.",
+  "disagreement_analysis": "The disagreement was caused entirely by tool errors, not security findings. The qwen model hit an HTTP 400 error on its second PKGBUILD review pass. The openrouter model returned an unparsable 'User Safety: unsafe' response that was a content safety filter trigger, not a real security finding. Both models had initially returned SAFE on their first PKGBUILD pass. The deepseek model completed successfully and found no issues.",
+  "coverage_issues": [
+    "qwen model: API failure (HTTP 400) on second PKGBUILD review pass",
+    "openrouter model: parsing failure due to content safety filter returning unparsable format"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "When a model's initial audit pass succeeds but a subsequent pass fails due to tool error, the tool should fall back to the initial result rather than marking the file inconclusive",
+    "Content safety filters in routing layers (like openrouter/free) can intercept and reformat model responses, causing parsing failures; the audit tool should detect and handle these filter triggers gracefully",
+    "For -bin packages with pinned checksums from official upstream repositories, models should explicitly confirm that no .install script exists to close the coverage question"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 4920,
+    "completion_tokens": 1638,
+    "cost": 0.00367104
+  },
+  "audits_judged": [
+    "20260925-192044-qwen-qwen3-235b-a22b-2507.md",
+    "20260925-192119-deepseek-deepseek-v4-flash.md",
+    "20260915-191818-openrouter-free.md"
+  ]
+}
