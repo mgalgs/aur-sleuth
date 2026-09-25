@@ -1,0 +1,29 @@
+{
+  "package": "firefox-nightly-i18n-zh-cn",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard Firefox Nightly language pack that downloads a pre-built .xpi from Mozilla's official FTP server and installs it. There are no build scripts, install hooks, or top-level code execution in the PKGBUILD. The disagreement was solely due to a transient API error in one model.",
+  "disagreement_analysis": "The qwen3-235b model returned an 'inconclusive' verdict because it encountered an HTTP 400 API error while auditing the .SRCINFO file. The other models successfully audited all files and correctly determined the package is safe.",
+  "coverage_issues": [
+    "qwen3-235b failed to audit .SRCINFO due to an HTTP 400 API error."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Transient API errors on non-executable metadata files (like .SRCINFO) should not force an 'inconclusive' package verdict if the PKGBUILD is successfully audited and found safe. The tool should implement retries or fallback logic.",
+    "Models should be guided to recognize that hash length mismatches (e.g., a 40-character hash in sha256sums) are packaging hygiene issues, not security injections, to avoid unnecessary confusion."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5141,
+    "completion_tokens": 1974,
+    "cost": 0.0041718400000000004
+  },
+  "audits_judged": [
+    "20260925-112500-qwen-qwen3-235b-a22b-2507.md",
+    "20260925-112554-deepseek-deepseek-v4-flash.md",
+    "20260924-235058-openrouter-free.md"
+  ]
+}
