@@ -1,0 +1,30 @@
+{
+  "package": "beellama.cpp-cuda",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard AUR build for a llama.cpp fork with CUDA support. The PKGBUILD uses pinned GitHub release sources with SHA256 checksums and contains no top-level execution or malicious build hooks. The systemd service and configuration files are standard and benign. The only valid full review (deepseek) correctly identified the package as safe, while the other reports were marked inconclusive solely due to LLM API errors.",
+  "disagreement_analysis": "The disagreement is an artifact of tool errors rather than genuine security concerns. Qwen failed with an HTTP 400 error when auditing the PKGBUILD, and OpenRouter (an advisory-only report) failed to parse the decision for beellama.conf. Deepseek successfully reviewed all files and correctly concluded the package is safe.",
+  "coverage_issues": [
+    "qwen/qwen3-235b-a22b-2507 failed to audit PKGBUILD due to an HTTP 400 BadRequestError",
+    "openrouter/free failed to parse the security decision for beellama.conf"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Implement retry logic for transient LLM API errors (like HTTP 400) to prevent them from forcing an inconclusive package verdict.",
+    "Make the output parser more resilient to minor formatting deviations from smaller or free-tier models to avoid failing the entire file audit."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 6845,
+    "completion_tokens": 1991,
+    "cost": 0.00473888
+  },
+  "audits_judged": [
+    "20260926-155032-qwen-qwen3-235b-a22b-2507.md",
+    "20260926-155029-deepseek-deepseek-v4-flash.md",
+    "20260926-033356-openrouter-free.md"
+  ]
+}
