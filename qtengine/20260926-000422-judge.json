@@ -1,0 +1,28 @@
+{
+  "package": "qtengine",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The disagreement is solely due to a tool error (HTTP 400 API failure) in the first model's review of the PKGBUILD, which carries no verdict signal. The second model successfully reviewed all files, including the PKGBUILD, and correctly identified standard, safe packaging practices (pinned GitHub release tarball, standard cmake build, benign install hook). No malicious injections or suspicious behaviors exist.",
+  "disagreement_analysis": "The first model returned 'inconclusive' because its LLM API request failed with an HTTP 400 error while auditing the PKGBUILD. This is a tool failure, not a security finding. The second model successfully audited the PKGBUILD and found it safe, resolving the gap.",
+  "coverage_issues": [
+    "qwen3-235b-a22b-2507 failed to audit the PKGBUILD due to an API error (HTTP 400 BadRequestError)."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Transient API errors (e.g., HTTP 400) on individual files should trigger retries rather than immediately degrading the entire package verdict to 'inconclusive'.",
+    "The adjudication layer should automatically discount file-level tool errors when another model has successfully reviewed the same file, preventing unnecessary escalations."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 4828,
+    "completion_tokens": 1750,
+    "cost": 0.0037849600000000004
+  },
+  "audits_judged": [
+    "20260925-230738-qwen-qwen3-235b-a22b-2507.md",
+    "20260925-230759-deepseek-deepseek-v4-flash.md"
+  ]
+}
