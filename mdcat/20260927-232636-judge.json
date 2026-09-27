@@ -1,0 +1,30 @@
+{
+  "package": "mdcat",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD and .SRCINFO are standard, safe, and use a pinned SHA256 checksum for the source tarball. The use of a maintainer's fork (BIRSAx2/mdcat) is a normal AUR pattern and the pinned checksum prevents upstream substitution. The 'inconclusive' results are solely due to LLM API errors and parsing failures on non-executable files (LICENSE, REUSE.toml), not substantive security concerns.",
+  "disagreement_analysis": "The 'inconclusive' verdicts from qwen and openrouter/free were caused by tooling errors (HTTP 400 API failures and response parsing errors) on non-executable metadata files, not by any security findings. deepseek correctly evaluated all files and returned 'safe', correctly noting that the forked source URL is mitigated by the pinned checksum.",
+  "coverage_issues": [
+    "qwen failed to audit LICENSE and REUSE.toml due to HTTP 400 API errors.",
+    "openrouter/free (advisory) failed to parse the final PKGBUILD decision."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "The audit tool should not fail the entire package audit or mark it inconclusive if non-executable files (like LICENSE or REUSE.toml) cause LLM API errors, especially when the critical PKGBUILD is verified safe.",
+    "Consider filtering out purely static metadata files (LICENSE, REUSE.toml) from LLM review to save tokens and reduce the chance of API/parsing errors."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 7442,
+    "completion_tokens": 2087,
+    "cost": 0.0050528
+  },
+  "audits_judged": [
+    "20260927-230131-qwen-qwen3-235b-a22b-2507.md",
+    "20260927-230157-deepseek-deepseek-v4-flash.md",
+    "20260919-121009-openrouter-free.md"
+  ]
+}
