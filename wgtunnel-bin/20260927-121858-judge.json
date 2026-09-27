@@ -1,0 +1,30 @@
+{
+  "package": "wgtunnel-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard AUR binary package (-bin) that downloads a prebuilt artifact from the project's own GitHub releases with a pinned SHA-256 checksum. The PKGBUILD contains no dangerous top-level code execution during sourcing. The .install script performs routine systemd service management (daemon-reload, enable/disable, restart) with standard error suppression. No injection patterns, no execution of fetched content, no fetching from unrelated hosts. The only 'disagreement' was caused by API failures in the qwen model, not by actual security concerns.",
+  "disagreement_analysis": "The qwen/qwen3-235b-a22b-2507 model experienced HTTP 400 BadRequestError when attempting to audit .SRCINFO and PKGBUILD, resulting in an inconclusive verdict due to tool failure rather than security findings. The deepseek model successfully reviewed all files and found them safe with accurate reasoning. The openrouter/free report was correctly marked as advisory and does not count toward voting.",
+  "coverage_issues": [
+    "qwen/qwen3-235b-a22b-2507: API request failed (HTTP 400) for .SRCINFO and PKGBUILD, leaving 2 of 3 files unreviewed"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "API failures (HTTP 400/500) should be clearly distinguished from security inconclusiveness in the final verdict - a tool error is not a security finding",
+    "When a model experiences partial API failures, the audit tool should either retry the failed files or clearly flag the verdict as 'incomplete due to tool error' rather than 'inconclusive'",
+    "The deepseek model demonstrated good reasoning by correctly identifying that package() function execution is out of scope for the initial makepkg --printsrcinfo safety gate, showing proper understanding of AUR build mechanics"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5873,
+    "completion_tokens": 1309,
+    "cost": 0.00355488
+  },
+  "audits_judged": [
+    "20260927-115110-qwen-qwen3-235b-a22b-2507.md",
+    "20260927-115132-deepseek-deepseek-v4-flash.md",
+    "20260925-123133-openrouter-free.md"
+  ]
+}
