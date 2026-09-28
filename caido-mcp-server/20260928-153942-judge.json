@@ -1,0 +1,28 @@
+{
+  "package": "caido-mcp-server",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The disagreement is entirely caused by a tool error (HTTP 400) in the qwen model's PKGBUILD review, not by any security finding. The deepseek model successfully reviewed all three maintainer files (PKGBUILD, .SRCINFO, caido-mcp-server.install) and found them to be standard, safe AUR packaging: a Go PKGBUILD with pinned SHA-256 checksum fetching from the project's own GitHub releases, standard metadata, and an install script that only prints informational messages. No injection patterns, no execution of fetched content, no suspicious network operations. The qwen model's own initial PKGBUILD gate audit (before the error) also found it safe, confirming the deepseek assessment.",
+  "disagreement_analysis": "The qwen model encountered an LLM API error (HTTP 400 BadRequestError) during full PKGBUILD review, forcing an inconclusive verdict. This is a tool failure, not a security disagreement. The deepseek model completed all reviews successfully and found no issues. The qwen model's preliminary PKGBUILD gate audit (which succeeded before the error) also assessed the file as safe, so there is no actual substantive disagreement between the models.",
+  "coverage_issues": [
+    "qwen model: PKGBUILD full review failed with HTTP 400 error, resulting in inconclusive file verdict"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "When a full file review fails with a tool error, check whether the model produced a preliminary gate audit of the same file earlier in the run. If the gate audit succeeded and found no issues, it can serve as a fallback signal to avoid unnecessary inconclusive verdicts.",
+    "Tool errors (API failures, timeouts) should be distinguished from genuine security uncertainty. An inconclusive caused by infrastructure failure should not trigger escalation re-audits if another model has already successfully reviewed the same files."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 4483,
+    "completion_tokens": 1278,
+    "cost": 0.0030704
+  },
+  "audits_judged": [
+    "20260928-151528-qwen-qwen3-235b-a22b-2507.md",
+    "20260928-151547-deepseek-deepseek-v4-flash.md"
+  ]
+}
