@@ -1,0 +1,32 @@
+{
+  "package": "pane-bin",
+  "correct_verdict": "safe",
+  "confidence": "medium",
+  "reasoning": "The PKGBUILD downloads a pinned, checksummed AppImage from GitHub Releases. While there is a URL mismatch (url= points to dcouple/Pane but source downloads from greenfield-inc/Pane), the SHA256 checksum is concrete and not SKIP, which closes the artifact swap risk per the threat model. The mismatch is a packaging hygiene/trust consideration but not evidence of injected malicious behavior. No top-level code execution, no eval/base64/curl/wget, no writes outside package directories. The openrouter report (advisory-only) overreacted to the URL mismatch without considering that the pinned checksum mitigates the swap risk.",
+  "disagreement_analysis": "The qwen model had a tool error (HTTP 400) and couldn't complete PKGBUILD review, resulting in inconclusive. The openrouter model (advisory-only, doesn't count) flagged the URL mismatch as UNSAFE, treating it as a supply-chain attack. The deepseek model correctly identified the mismatch as a hygiene issue but noted the pinned checksum closes the swap risk, resulting in SAFE. The disagreement stems from whether a URL mismatch with a pinned checksum constitutes an injection or just poor packaging hygiene.",
+  "coverage_issues": [
+    "qwen/qwen3-235b-a22b-2507: PKGBUILD review failed with HTTP 400 error, no verdict signal for the main file"
+  ],
+  "false_positives": [
+    "openrouter/free: UNSAFE verdict for URL mismatch is a false positive. The threat model explicitly states that when a real checksum pins the downloaded artifact, the swap risk is closed. The URL mismatch (dcouple vs greenfield-inc) is a hygiene issue but not proof of malice. Without evidence that greenfield-inc is malicious or the binary is tampered, this is not an injection."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models must distinguish between packaging hygiene issues (URL mismatches, non-standard patterns) and actual injections. A pinned checksum mitigates swap risks even when the download URL doesn't match the declared upstream.",
+    "URL mismatches should be flagged as informational or hygiene concerns, not UNSAFE, unless there's additional evidence of malice (e.g., fetching from a known malicious host, executing fetched content, or the checksum being SKIP).",
+    "The threat model's guidance on checksums closing swap risks needs to be more prominently applied by models when evaluating URL mismatches in -bin packages."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 6297,
+    "completion_tokens": 1965,
+    "cost": 0.00453024
+  },
+  "audits_judged": [
+    "20260928-231845-qwen-qwen3-235b-a22b-2507.md",
+    "20260928-231954-deepseek-deepseek-v4-flash.md",
+    "20260927-123332-openrouter-free.md"
+  ]
+}
