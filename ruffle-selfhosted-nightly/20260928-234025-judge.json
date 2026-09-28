@@ -1,0 +1,32 @@
+{
+  "package": "ruffle-selfhosted-nightly",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The deepseek model successfully reviewed all 3 maintainer files (PKGBUILD, .SRCINFO, .gitignore) and found no malicious content. The PKGBUILD sources from the official Ruffle GitHub repository with pinned tags, uses standard build tools (cargo, npm), provides checksums, and contains no obfuscated commands or suspicious network operations. The qwen model's 'inconclusive' result was caused by an API error (HTTP 400) when reviewing .gitignore, not a security concern. The openrouter report is advisory-only and also failed due to a parsing error. No evidence of injected malicious code exists.",
+  "disagreement_analysis": "The disagreement stems from tool errors, not security findings. The qwen model encountered an API failure (HTTP 400 BadRequestError) when auditing .gitignore, causing it to return 'inconclusive' despite finding PKGBUILD and .SRCINFO safe. The deepseek model successfully completed all file reviews and returned 'safe'. The openrouter report (advisory-only) failed to parse its own XML output. These are infrastructure failures, not substantive security disagreements.",
+  "coverage_issues": [
+    "qwen model: API error (HTTP 400) prevented review of .gitignore",
+    "openrouter model: Failed to parse its own security_assessment XML output",
+    "openrouter model: Only reviewed 1 of 3 maintainer files before failing"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Tool errors (API failures, parsing errors) should not produce 'inconclusive' verdicts that override successful 'safe' findings from other models - distinguish between 'could not audit' and 'found issues'",
+    "When multiple models review the same package and one fails due to infrastructure errors while another succeeds, the successful review should carry the verdict weight",
+    "Models should be validated for correct XML output formatting before accepting their responses - the openrouter model produced valid-looking XML but with HTML entities that broke parsing"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5449,
+    "completion_tokens": 1226,
+    "cost": 0.00331296
+  },
+  "audits_judged": [
+    "20260928-230544-qwen-qwen3-235b-a22b-2507.md",
+    "20260928-230523-deepseek-deepseek-v4-flash.md",
+    "20260927-195348-openrouter-free.md"
+  ]
+}
