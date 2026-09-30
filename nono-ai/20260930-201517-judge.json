@@ -1,0 +1,32 @@
+{
+  "package": "nono-ai",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Two models (deepseek-v4-flash and openrouter/free) independently reviewed both PKGBUILD and .SRCINFO and found no malicious indicators. The PKGBUILD follows standard Rust packaging practices with pinned checksums and no dangerous patterns. The third model (qwen3-235b) returned inconclusive solely due to an API error when reviewing .SRCINFO, not due to any security concern. The truncated checksum noted by openrouter/free is a hygiene issue, not an injection risk.",
+  "disagreement_analysis": "The disagreement was caused by a tool failure (HTTP 400 API error) in qwen3-235b's review of .SRCINFO, not by any substantive security finding. The other two models successfully reviewed all files and found them safe.",
+  "coverage_issues": [
+    "qwen3-235b-a22b-2507 failed to audit .SRCINFO due to API error (HTTP 400 BadRequestError), resulting in inconclusive verdict"
+  ],
+  "false_positives": [
+    "Truncated sha256sum in .SRCINFO (63 chars instead of 64) - correctly identified by openrouter/free as a hygiene issue, not a security risk. This does not constitute an injection."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "When a model returns inconclusive due to tool/API errors rather than security concerns, the audit system should distinguish between 'inconclusive due to failure' and 'inconclusive due to uncertainty' to avoid triggering unnecessary escalations.",
+    "Models correctly distinguish between packaging hygiene issues (truncated checksums, style violations) and actual injection risks - this judgment should be preserved in prompt guidance.",
+    "Standard Rust packaging patterns (cargo fetch --locked, cargo build --frozen, RUSTFLAGS with security hardening) are well-recognized by models as benign, indicating good training on common AUR patterns."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5081,
+    "completion_tokens": 1157,
+    "cost": 0.0031068800000000002
+  },
+  "audits_judged": [
+    "20260930-193924-qwen-qwen3-235b-a22b-2507.md",
+    "20260930-193945-deepseek-deepseek-v4-flash.md",
+    "20260916-160820-openrouter-free.md"
+  ]
+}
