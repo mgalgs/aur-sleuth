@@ -1,0 +1,30 @@
+{
+  "package": "koreader-nightly-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard AUR binary repackaging of KOReader nightly builds. It fetches prebuilt .deb artifacts from the project's own official GitLab CI (gitlab.com/koreader/nightly-builds), with SHA-256 checksums pinned for both architectures. The prepare() function uses standard tools (ar, tar) to extract the .deb, and package() copies files to $pkgdir. No top-level code execution, no suspicious network requests, no obfuscated code, and no injection patterns. The sources are from the upstream project's own infrastructure, closed by real checksums.",
+  "disagreement_analysis": "The disagreement was caused by an infrastructure failure, not a genuine security concern. The qwen3-235b model returned 'inconclusive' because the LLM API request failed with HTTP 400 (BadRequestError) when reviewing the PKGBUILD. This is a tool error, not a security finding. The deepseek-v4-flash model correctly reviewed all files and found no issues. The openrouter/free report is marked advisory:true and does not count as a vote.",
+  "coverage_issues": [
+    "qwen3-235b failed to review PKGBUILD due to LLM API error (HTTP 400 BadRequestError). The initial makepkg --printsrcinfo audit succeeded, but the full file review crashed."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "API errors (HTTP 400, timeouts, crashes) should trigger automatic retry or fallback to another model, rather than marking the entire audit as inconclusive when other models succeeded.",
+    "When a model fails due to infrastructure issues (not security findings), the adjudication system should recognize this and rely on consistent verdicts from other models.",
+    "The qwen3-235b model successfully completed the initial PKGBUILD audit (finding it safe) but failed on the full review. This suggests the failure may be related to prompt construction or size for the full audit phase, which should be investigated."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5084,
+    "completion_tokens": 1528,
+    "cost": 0.00358272
+  },
+  "audits_judged": [
+    "20260930-152050-qwen-qwen3-235b-a22b-2507.md",
+    "20260930-152053-deepseek-deepseek-v4-flash.md",
+    "20260921-120234-openrouter-free.md"
+  ]
+}
