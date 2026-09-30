@@ -1,0 +1,29 @@
+{
+  "package": "tutanota-desktop-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard AppImage wrapper with pinned SHA-512 checksums and upstream signature verification via openssl. The PKGBUILD contains no malicious code in the global scope, and the build/package functions perform standard extraction and installation. The only disagreement was caused by an API error in one model, which carries no verdict signal.",
+  "disagreement_analysis": "The 'inconclusive' result from qwen3-235b was caused by an HTTP 400 API error when auditing .SRCINFO, not by actual security concerns. Per the rules, tool errors carry no verdict signal. The deepseek model correctly identified the package as safe, and the advisory openrouter model agreed.",
+  "coverage_issues": [
+    "qwen/qwen3-235b-a22b-2507 failed to audit .SRCINFO due to an LLM API error (HTTP 400), resulting in an inconclusive overall verdict."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Isolate LLM API errors for individual files so they do not force an 'inconclusive' verdict for the entire package, especially for non-executable metadata files like .SRCINFO.",
+    "Implement retry logic or fallback for transient API errors during file-level audits to prevent incomplete coverage from skewing the final verdict."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 7569,
+    "completion_tokens": 1854,
+    "cost": 0.0047952
+  },
+  "audits_judged": [
+    "20260924-191030-qwen-qwen3-235b-a22b-2507.md",
+    "20260924-191032-deepseek-deepseek-v4-flash.md",
+    "20260921-160626-openrouter-free.md"
+  ]
+}

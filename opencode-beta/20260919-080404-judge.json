@@ -1,0 +1,30 @@
+{
+  "package": "opencode-beta",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard AUR wrapper for a prebuilt npm binary. The PKGBUILD uses pinned SHA-256 checksums for sources fetched from the official npm registry, and the top-level scope contains no executable code. The included wrapper script (opencode2) is a benign shell script that simply execs the extracted binary. There are no install hooks or suspicious build steps. The disagreements were caused entirely by API and parsing errors in the other models, not by actual security concerns.",
+  "disagreement_analysis": "The disagreement was triggered by tool failures rather than security analysis differences. The qwen model experienced HTTP 400 errors when auditing the PKGBUILD and .SRCINFO, while the openrouter/free model (which was an advisory report) failed to parse its response for the opencode2 wrapper script. The deepseek model successfully audited all files and correctly identified the package as safe.",
+  "coverage_issues": [
+    "qwen model failed to audit PKGBUILD and .SRCINFO due to HTTP 400 API errors.",
+    "openrouter/free model failed to parse the audit response for the opencode2 wrapper script."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Implement automatic retries or fallback mechanisms for transient API errors (like HTTP 400) to prevent them from causing inconclusive verdicts that trigger unnecessary escalations.",
+    "Improve output parsing robustness to handle minor formatting deviations from models, preventing parse errors from invalidating an otherwise complete audit."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 6229,
+    "completion_tokens": 1581,
+    "cost": 0.00401696
+  },
+  "audits_judged": [
+    "20260919-071410-qwen-qwen3-235b-a22b-2507.md",
+    "20260919-071411-deepseek-deepseek-v4-flash.md",
+    "20260917-235620-openrouter-free.md"
+  ]
+}

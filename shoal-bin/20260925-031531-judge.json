@@ -1,0 +1,30 @@
+{
+  "package": "shoal-bin",
+  "correct_verdict": "safe",
+  "confidence": "medium",
+  "reasoning": "The disagreement is caused by tool errors in the qwen report, not substantive analysis differences. The qwen model failed with HTTP 400 errors on the two most critical files (PKGBUILD and shoal.install), rendering its verdict inconclusive. The deepseek model successfully reviewed all files and found: (1) PKGBUILD downloads pinned tarballs from official GitHub releases with valid SHA256 checksums, (2) shoal.install is a standard capability-setting script (cap_net_raw) for network functionality, (3) all other files are standard AUR metadata/config. No injection patterns, no execution of fetched content, no suspicious network requests to unrelated hosts.",
+  "disagreement_analysis": "The qwen model experienced API failures (HTTP 400 BadRequestError) when attempting to audit PKGBUILD and shoal.install, the two most security-critical files. This is a tool/infrastructure failure, not a disagreement about package content. The deepseek model completed all audits successfully.",
+  "coverage_issues": [
+    "qwen model failed to audit PKGBUILD due to API error (HTTP 400)",
+    "qwen model failed to audit shoal.install due to API error (HTTP 400)"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "When a model fails to audit critical files (PKGBUILD, .install) due to API errors, the audit should be automatically retried or escalated rather than marked inconclusive",
+    "API error handling should distinguish between transient failures (retryable) and permanent failures (escalate to stronger model)",
+    "Coverage gaps on security-critical files should trigger immediate re-audit rather than waiting for human-triggered escalation"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5165,
+    "completion_tokens": 1017,
+    "cost": 0.00295456
+  },
+  "audits_judged": [
+    "20260925-030622-qwen-qwen3-235b-a22b-2507.md",
+    "20260925-030647-deepseek-deepseek-v4-flash.md"
+  ]
+}

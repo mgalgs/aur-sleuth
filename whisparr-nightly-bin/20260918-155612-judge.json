@@ -1,0 +1,32 @@
+{
+  "package": "whisparr-nightly-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The deepseek/deepseek-v4-flash report provides a complete and thorough analysis of all 9 files, finding no malicious patterns. The PKGBUILD uses pinned SHA-256 checksums for all sources from official GitHub releases, has no dangerous top-level code execution, and the package() function performs only standard staging operations. The whisparr.install script contains only informational echo statements. The systemd service, sysusers, and tmpfiles configurations follow standard patterns with appropriate security hardening. No injection attempts, obfuscated code, or suspicious network operations were found.",
+  "disagreement_analysis": "The disagreement stems from tool failures rather than reasoning differences. The qwen3-235b model experienced HTTP 400 errors on 6 of 9 files including critical files (PKGBUILD, whisparr.install), rendering its verdict invalid. The openrouter/free report (advisory-only) had a parsing error on whisparr.install. Only the deepseek-v4-flash model completed a full audit successfully, finding all files safe with sound reasoning.",
+  "coverage_issues": [
+    "qwen3-235b model failed with HTTP 400 errors on 6 files: .gitignore, .nvchecker.toml, PKGBUILD, whisparr.install, whisparr.service, whisparr.sysusers",
+    "openrouter/free model could not parse decision for whisparr.install"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Implement retry logic or fallback models when API requests fail with HTTP 400 errors to prevent incomplete audits",
+    "Add validation to ensure model responses can be parsed before marking files as reviewed",
+    "Consider requiring at least 2 successful model completions before accepting a verdict when tool failures occur",
+    "The initial PKGBUILD audit (checking for dangerous top-level code) worked correctly even in failed runs - this gate is valuable and should be preserved"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 11435,
+    "completion_tokens": 1288,
+    "cost": 0.00530784
+  },
+  "audits_judged": [
+    "20260918-152523-qwen-qwen3-235b-a22b-2507.md",
+    "20260918-152910-deepseek-deepseek-v4-flash.md",
+    "20260918-033739-openrouter-free.md"
+  ]
+}

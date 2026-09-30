@@ -1,0 +1,28 @@
+{
+  "package": "ttf-ubuntusans-nerd",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard font packaging script that downloads prebuilt archives from the official upstream GitHub releases with pinned SHA-256 checksums. There is no code execution, obfuscation, or suspicious network activity. The disagreement was solely caused by a transient API error (HTTP 400) in the qwen model when reviewing the .SRCINFO file, which is auto-generated metadata and poses no security risk.",
+  "disagreement_analysis": "The qwen model returned an 'inconclusive' verdict because it encountered an HTTP 400 API error while auditing the .SRCINFO file. The deepseek model successfully audited all files and returned 'safe'. The openrouter model also returned 'safe' but is marked as advisory and does not count as a vote. The disagreement is purely an artifact of a tool failure, not a genuine security dispute.",
+  "coverage_issues": [
+    "qwen model failed to review .SRCINFO due to an LLM API error (HTTP 400), resulting in an overall inconclusive verdict."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Transient API errors during the review of auto-generated metadata files like .SRCINFO should not force an overall 'inconclusive' verdict if the primary executable files (PKGBUILD) are deemed safe. The tool should either retry the request or gracefully degrade the verdict based on the criticality of the failed file."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 6112,
+    "completion_tokens": 1597,
+    "cost": 0.004
+  },
+  "audits_judged": [
+    "20260922-191515-qwen-qwen3-235b-a22b-2507.md",
+    "20260922-191514-deepseek-deepseek-v4-flash.md",
+    "20260922-085855-openrouter-free.md"
+  ]
+}

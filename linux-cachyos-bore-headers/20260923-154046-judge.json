@@ -1,0 +1,31 @@
+{
+  "package": "linux-cachyos-bore-headers",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard custom Linux kernel headers package for CachyOS with BORE scheduler. The PKGBUILD contains typical kernel packaging patterns: conditional source arrays, helper functions, and an eval loop that only defines local package_* functions from templates within the same file. All sources point to expected upstream locations (CachyOS GitHub, NVIDIA). The config file is a standard kernel .config with CONFIG_* options only. The .SRCINFO is standard metadata. No injection patterns, no execution of fetched content, no unexpected network destinations. The 'disagreement' was caused by API errors in Report 1, not substantive security concerns.",
+  "disagreement_analysis": "Report 1 (qwen3-235b) returned inconclusive due to HTTP 400 API errors when reviewing config and .SRCINFO files, though it successfully marked PKGBUILD as safe. Report 2 (deepseek-v4-flash) successfully reviewed all three files and found them safe. Report 3 (openrouter/free) is advisory-only and had a parsing error. The disagreement is purely a tool failure, not a substantive security disagreement.",
+  "coverage_issues": [
+    "Report 1 failed to review config and .SRCINFO due to API errors (HTTP 400 BadRequestError)",
+    "Report 3 failed to parse a decision from the model response and only attempted PKGBUILD"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "API errors should be distinguished from substantive inconclusive findings - tool failures should not trigger disagreement escalations",
+    "Advisory reports with tool errors should be filtered out before triggering multi-model review",
+    "Standard kernel packaging patterns (eval loops for package function generation, SKIP checksums for GPG signatures) are well-understood by capable models and should not cause uncertainty"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5241,
+    "completion_tokens": 1055,
+    "cost": 0.00302752
+  },
+  "audits_judged": [
+    "20260923-153252-qwen-qwen3-235b-a22b-2507.md",
+    "20260923-153418-deepseek-deepseek-v4-flash.md",
+    "20260916-203430-openrouter-free.md"
+  ]
+}

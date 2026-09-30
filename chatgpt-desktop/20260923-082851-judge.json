@@ -1,0 +1,32 @@
+{
+  "package": "chatgpt-desktop",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard AUR repackaging of OpenAI's official ChatGPT desktop .deb binaries. The source domain `persistent.oaistatic.com` is OpenAI's legitimate static asset CDN (oai = OpenAI), not an unrelated host. All sources are pinned with SHA-256 checksums, preventing substitution attacks. The install hook manages AppArmor profiles (standard sandboxing), and the launcher script reads user config safely. No code injection, no execution of fetched content, and no unexpected network calls during build/install.",
+  "disagreement_analysis": "The disagreement was triggered by qwen3-235b returning 'inconclusive' due to an LLM API error (HTTP 400) when reviewing chatgpt-desktop.install, while deepseek-v4-flash successfully reviewed all files and returned 'safe'. The openrouter/free report (advisory: true, non-voting) incorrectly flagged persistent.oaistatic.com as an 'unrelated domain', demonstrating a false positive based on lack of knowledge about OpenAI's infrastructure.",
+  "coverage_issues": [
+    "qwen3-235b-a22b-2507 failed to audit chatgpt-desktop.install due to an LLM API error (HTTP 400 BadRequestError), resulting in an inconclusive file verdict"
+  ],
+  "false_positives": [
+    "openrouter/free flagged persistent.oaistatic.com as an unrelated/malicious domain. This is incorrect: oaistatic.com is OpenAI's official static content delivery domain. The model hallucinated that only openai.com/chatgpt.com are legitimate OpenAI domains."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models may flag legitimate vendor CDN domains as suspicious when they don't recognize the domain pattern. Consider providing context about common vendor infrastructure domains (e.g., *static.com patterns for major tech companies) or implementing a known-good domain allowlist for verified vendors.",
+    "When one model fails with an API error on a specific file, the orchestration layer should recognize that other models may have successfully reviewed that file and not force an overall 'inconclusive' verdict if coverage is otherwise complete.",
+    "Advisory-only models can generate convincing but factually incorrect domain reputation claims. The adjudication layer should cross-reference domain ownership claims against known vendor infrastructure when possible."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 9117,
+    "completion_tokens": 1437,
+    "cost": 0.0047568
+  },
+  "audits_judged": [
+    "20260923-070124-qwen-qwen3-235b-a22b-2507.md",
+    "20260923-070300-deepseek-deepseek-v4-flash.md",
+    "20260922-200749-openrouter-free.md"
+  ]
+}

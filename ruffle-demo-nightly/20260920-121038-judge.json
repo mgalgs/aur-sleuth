@@ -1,0 +1,30 @@
+{
+  "package": "ruffle-demo-nightly",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD and .SRCINFO contain standard, non-malicious AUR packaging logic. The disagreement between 'inconclusive' and 'safe' was entirely caused by an LLM API error when auditing the .gitignore file in one of the reports. Since .gitignore is not executable and poses no security risk, the package is safe.",
+  "disagreement_analysis": "The qwen model returned 'inconclusive' solely because it encountered an HTTP 400 error when attempting to audit the .gitignore file. The deepseek model successfully audited all files, including .gitignore, and correctly returned 'safe'. The openrouter report was advisory and also suffered from parsing errors, but its initial PKGBUILD assessment aligned with 'safe'. The disagreement is an artifact of tool instability, not a genuine security conflict.",
+  "coverage_issues": [
+    "qwen/qwen3-235b-a22b-2507 failed to audit .gitignore due to an HTTP 400 API error.",
+    "openrouter/free (advisory) failed to parse model responses for .gitignore and PKGBUILD."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "The audit tool should not force an 'inconclusive' package verdict when a non-executable, low-risk file like .gitignore fails to audit due to an API error. It should gracefully degrade and base the final verdict on the successfully audited critical files (PKGBUILD, .install, etc.).",
+    "Free-tier router models (like openrouter/free) are highly prone to parsing and payload errors, reinforcing the need to treat them strictly as advisory context rather than voting members."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 6036,
+    "completion_tokens": 1906,
+    "cost": 0.0043712
+  },
+  "audits_judged": [
+    "20260920-114947-qwen-qwen3-235b-a22b-2507.md",
+    "20260920-115021-deepseek-deepseek-v4-flash.md",
+    "20260920-081104-openrouter-free.md"
+  ]
+}

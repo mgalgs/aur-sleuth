@@ -1,0 +1,30 @@
+{
+  "package": "polaris-gamestream-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard binary AUR package that downloads a prebuilt archive from the official GitHub repository with a pinned SHA256 checksum. The PKGBUILD contains no executable code in the global scope, and the package() function performs standard extraction and cleanup operations. The .install script contains only echo statements providing user instructions. No malicious code, network exfiltration, or obfuscated commands are present. Two models independently reviewed all files and found them safe; the third model's inconclusive result was due to an API error, not a security concern.",
+  "disagreement_analysis": "The disagreement was caused by a tool error (HTTP 400 API failure) in the qwen model when reviewing the .install file, resulting in an inconclusive verdict. The other two models successfully reviewed the .install file and found it to contain only benign echo statements. This is not a genuine security disagreement but a coverage gap due to infrastructure failure.",
+  "coverage_issues": [
+    "qwen model failed to review polaris-gamestream-bin.install due to API error (HTTP 400 BadRequestError)"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Implement retry logic for API failures to prevent inconclusive verdicts when files can be reviewed by retrying or using a fallback model",
+    "When a critical file like .install fails to review due to tool error, the audit should automatically retry rather than marking the entire package as inconclusive",
+    "Distinguish between tool errors (API failures, timeouts) and genuine security concerns when determining final verdicts"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5895,
+    "completion_tokens": 1676,
+    "cost": 0.00403168
+  },
+  "audits_judged": [
+    "20260927-070714-qwen-qwen3-235b-a22b-2507.md",
+    "20260927-070659-deepseek-deepseek-v4-flash.md",
+    "20260917-121454-openrouter-free.md"
+  ]
+}

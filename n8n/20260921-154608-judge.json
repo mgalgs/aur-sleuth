@@ -1,0 +1,31 @@
+{
+  "package": "n8n",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The deepseek report successfully reviewed all 8 files and found no malicious behavior. The PKGBUILD fetches from the official npm registry (https://registry.npmjs.org/n8n/-/n8n-${pkgver}.tgz), uses `npm install --ignore-scripts` to prevent arbitrary install-time scripts, and rebuilds native addons with node-gyp. All auxiliary files (systemd units, sysusers, tmpfiles, env config) are standard and benign. The lack of checksum verification for the npm tarball is a packaging hygiene note, not a supply-chain attack per the threat model. No code injection, obfuscation, or unexpected network destinations were found.",
+  "disagreement_analysis": "The disagreement was caused by tool errors, not security concerns. The qwen model experienced HTTP 400 errors on 4 critical files (PKGBUILD, .SRCINFO, n8n.service, n8n.tmpfiles), leaving the audit incomplete. The openrouter model (advisory report) had a JSONDecodeError on PKGBUILD and only reviewed 1 file. The deepseek model successfully reviewed all files and found them safe.",
+  "coverage_issues": [
+    "qwen model: HTTP 400 errors prevented review of PKGBUILD, .SRCINFO, n8n.service, n8n.tmpfiles (4 of 8 files)",
+    "openrouter model: JSONDecodeError on PKGBUILD, only 1 of 8 files attempted"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "API errors (HTTP 400, JSONDecodeError) can cause incomplete audits; the tool should retry or escalate to a different model when critical files fail",
+    "Advisory reports with tool errors should be clearly flagged as non-votes to avoid confusion",
+    "When multiple models fail on the same files, it may indicate provider/model issues rather than package issues"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 7743,
+    "completion_tokens": 1499,
+    "cost": 0.0043964799999999995
+  },
+  "audits_judged": [
+    "20260921-152437-qwen-qwen3-235b-a22b-2507.md",
+    "20260921-152633-deepseek-deepseek-v4-flash.md",
+    "20260917-161749-openrouter-free.md"
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "package": "google-cloud-cli-bq",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Both models reviewed the same 6 files (PKGBUILD, .SRCINFO, .gitignore, patch, install script, shell script). The PKGBUILD fetches sources from official Google domains (dl.google.com) with pinned SHA-256 checksums, performs standard split-package operations, and contains no code execution at global scope. The install script only prints messages. The shell script only sets environment variables. The patch adds standard zsh completion directives. No injection patterns, no untrusted network calls, no obfuscation. The sole disagreement was caused by a tool error (HTTP 400) in the qwen model when processing .gitignore, not by any security concern.",
+  "disagreement_analysis": "The qwen model failed to audit .gitignore due to an LLM API error (HTTP 400 BadRequestError), causing it to return 'inconclusive'. The deepseek model successfully processed the same .gitignore file and correctly identified it as a standard gitignore with no security issues. This is a tool failure, not a substantive disagreement about package safety.",
+  "coverage_issues": [
+    "qwen model: .gitignore audit failed due to HTTP 400 API error, leaving that file unreviewed in that report"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Tool errors (HTTP 400, timeouts) on individual files should trigger automatic retry or fallback rather than propagating an 'inconclusive' verdict for the entire package when all other files are safe.",
+    ".gitignore files are trivially low-risk (no executable content); the audit tool could fast-path them with a simple regex check to avoid wasting LLM calls and reduce error surface.",
+    "When one model errors out on a file and another model successfully reviews it, the adjudication layer should recognize the coverage gap is closed and not require re-audit."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 6431,
+    "completion_tokens": 1134,
+    "cost": 0.00350944
+  },
+  "audits_judged": [
+    "20260922-231220-qwen-qwen3-235b-a22b-2507.md",
+    "20260922-231229-deepseek-deepseek-v4-flash.md"
+  ]
+}

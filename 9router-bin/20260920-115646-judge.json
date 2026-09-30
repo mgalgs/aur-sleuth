@@ -1,0 +1,30 @@
+{
+  "package": "9router-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Two successful audits (deepseek-v4-flash and openrouter/free advisory) reviewed all 9 files and found no malicious indicators. The package is a standard Node.js application from npm with typical AUR packaging: PKGBUILD fetches from registry.npmjs.org with SHA256 checksums, install hook creates local config with JWT secret, Python scripts are deterministic asset patchers for UI region selection. No network exfiltration, obfuscation, or execution of untrusted content. The 'disagreement' is solely due to Report 1's API failures (HTTP 400 errors on 5 files), not actual security concerns.",
+  "disagreement_analysis": "Report 1 (qwen3-235b) returned inconclusive due to LLM API errors (HTTP 400 BadRequestError) on 5 of 9 files, not due to security findings. Reports 2 and 3 successfully analyzed all files and found them safe. The disagreement is a tool failure, not a substantive security disagreement.",
+  "coverage_issues": [
+    "Report 1 failed to analyze 5 files (.gitignore, 9router-bin.install, 9router.service, fix-tokenplan-region.py, fix-tokenplan-ui-region.py) due to API errors"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "API errors should be distinguished from security inconclusiveness - tool failures should not trigger re-audits when other models successfully complete the analysis",
+    "When one model has partial API failures but other models complete full coverage with consistent results, the successful analyses should be weighted appropriately",
+    "Advisory reports (advisory: true) should be clearly separated from voting reports in disagreement detection logic"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 12364,
+    "completion_tokens": 1153,
+    "cost": 0.00543232
+  },
+  "audits_judged": [
+    "20260920-111949-qwen-qwen3-235b-a22b-2507.md",
+    "20260920-112522-deepseek-deepseek-v4-flash.md",
+    "20260911-114458-openrouter-free.md"
+  ]
+}

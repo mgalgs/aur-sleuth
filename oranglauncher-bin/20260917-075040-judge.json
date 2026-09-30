@@ -1,0 +1,32 @@
+{
+  "package": "oranglauncher-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The disagreement centers on a loop in package() that copies the .desktop file to each user's ~/Desktop. While invasive and poor packaging hygiene (modifying user directories outside $pkgdir, running as root), this behavior serves the package's stated purpose: providing quick access to the launcher. It performs no network operations, executes no fetched content, exfiltrates no data, and introduces no backdoors. The threat model explicitly excludes 'violates packaging best practices' as grounds for unsafe. The code is a heavy-handed but legitimate feature implementation, not a supply-chain injection.",
+  "disagreement_analysis": "qwen3-235b flagged the user-directory modification loop as a security risk, conflating invasive packaging with malicious injection. It cited 'social engineering' and 'unwanted persistence' risks that are speculative for a .desktop shortcut. deepseek-v4-flash correctly distinguished between hygiene concerns and actual security threats, noting the loop 'does not exfiltrate data, execute remote code, or introduce a backdoor.' The openrouter/free report (advisory-only) agreed with deepseek, calling it a 'common AUR packaging convention.'",
+  "coverage_issues": [
+    "qwen3-235b failed to audit oranglauncher-mime.xml (HTTP 400 error), though this is a declarative XML file with no executable content and poses no risk"
+  ],
+  "false_positives": [
+    "qwen3-235b's UNSAFE verdict on the ~/Desktop copy loop: this is poor packaging style, not malicious injection. The loop copies a file the package legitimately installs, serves the package's stated purpose (launcher access), and performs no network/execution operations. The threat model explicitly excludes hygiene violations from the unsafe verdict."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models need clearer guidance distinguishing 'invasive but legitimate packaging' from 'malicious injection.' The current prompt mentions hygiene vs injection, but models still flag user-directory modifications as security risks when they serve the package's purpose.",
+    "Add explicit examples of acceptable (if poor) packaging patterns: copying shortcuts to user directories, modifying user configs, etc., when they serve the package's stated function and perform no network/execution operations.",
+    "The speculative risk framing ('could be abused for social engineering') should be rejected unless there's evidence of actual malicious intent or capability. A .desktop shortcut is not a persistence mechanism comparable to a reverse shell."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 9399,
+    "completion_tokens": 1608,
+    "cost": 0.00506592
+  },
+  "audits_judged": [
+    "20260917-074025-qwen-qwen3-235b-a22b-2507.md",
+    "20260917-074053-deepseek-deepseek-v4-flash.md",
+    "20260917-034229-openrouter-free.md"
+  ]
+}

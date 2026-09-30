@@ -1,0 +1,33 @@
+{
+  "package": "mindustry",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The only complete audit (deepseek-v4-flash) found all files safe. The PKGBUILD uses standard AUR patterns: pinned sources with SHA256 checksums from official GitHub repos, safe local eval for split package generation, and no malicious code execution. The other two reports were inconclusive due to tool errors (API failure and parsing error), not substantive security concerns. No model identified any actual injection or malicious behavior.",
+  "disagreement_analysis": "Disagreement caused by tool errors, not security findings. Report 1 (qwen3-235b) failed on .SRCINFO with HTTP 400 error. Report 3 (openrouter/free, advisory-only) failed to parse PKGBUILD decision after noting ROT13-encoded contributor email (which it correctly identified as non-malicious). Report 2 (deepseek-v4-flash) completed successfully and found all files safe.",
+  "coverage_issues": [
+    "Report 1: .SRCINFO review failed due to API error (HTTP 400)",
+    "Report 3: PKGBUILD review failed due to parsing error"
+  ],
+  "false_positives": [
+    "Report 3 flagged ROT13-encoded contributor email as unusual, but correctly noted it's not malicious code execution - this is metadata obfuscation, not injection"
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Tool errors (API failures, parsing errors) should trigger automatic retry or fallback rather than marking entire audit inconclusive when other files were successfully reviewed",
+    "Advisory reports with tool errors should be clearly distinguished from substantive disagreements to avoid unnecessary escalations",
+    "Metadata obfuscation (like ROT13 emails) should be recognized as non-security-relevant unless it's used to hide malicious code execution"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 7077,
+    "completion_tokens": 1234,
+    "cost": 0.00384416
+  },
+  "audits_judged": [
+    "20260921-231307-qwen-qwen3-235b-a22b-2507.md",
+    "20260921-231801-deepseek-deepseek-v4-flash.md",
+    "20260921-200836-openrouter-free.md"
+  ]
+}

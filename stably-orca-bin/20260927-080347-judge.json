@@ -1,0 +1,29 @@
+{
+  "package": "stably-orca-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "All executable and packaging files (PKGBUILD, stably-orca.sh, stably-orca.desktop) were reviewed and found to contain standard, benign packaging logic for an AppImage binary. The PKGBUILD uses pinned SHA256 checksums for its sources, mitigating swap risks. The only discrepancy was a transient API error in one model's review of the .SRCINFO metadata file, which does not execute code and poses no injection risk.",
+  "disagreement_analysis": "The disagreement (inconclusive vs safe) was caused solely by a transient LLM API error (HTTP 400) in the qwen model when attempting to review the .SRCINFO file. The deepseek model successfully reviewed all files and correctly identified the package as safe.",
+  "coverage_issues": [
+    "qwen/qwen3-235b-a22b-2507 failed to review .SRCINFO due to an LLM API error (HTTP 400 BadRequestError)."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "The audit tool should implement retries for transient LLM API errors to prevent incomplete coverage.",
+    "Failures to review non-executable metadata files (like .SRCINFO) should not force an overall 'inconclusive' verdict if all executable packaging files (PKGBUILD, install hooks, scripts) have been successfully verified as safe."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 7290,
+    "completion_tokens": 2055,
+    "cost": 0.0049632
+  },
+  "audits_judged": [
+    "20260927-070418-qwen-qwen3-235b-a22b-2507.md",
+    "20260927-070458-deepseek-deepseek-v4-flash.md",
+    "20260925-122057-openrouter-free.md"
+  ]
+}

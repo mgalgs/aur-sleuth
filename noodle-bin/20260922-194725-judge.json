@@ -1,0 +1,30 @@
+{
+  "package": "noodle-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard AUR -bin package that downloads pre-compiled binaries from the official upstream GitHub repository with pinned SHA256 checksums. The PKGBUILD contains no executable code in the global scope, and the package() function only performs standard file installations. The inconclusive verdicts were caused entirely by tool/API errors, not by any security concerns in the packaging.",
+  "disagreement_analysis": "The disagreement stems from tool errors rather than security findings. The qwen model failed to audit .gitignore due to an HTTP 400 API error, forcing an inconclusive package verdict. The openrouter/free model failed to parse its own response. The deepseek model successfully reviewed all files and correctly identified the package as safe.",
+  "coverage_issues": [
+    "qwen model failed to audit .gitignore due to an API error (HTTP 400)",
+    "openrouter/free model failed to parse the decision for PKGBUILD"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Implement automatic retries for transient API errors (like HTTP 400) to prevent non-executable files like .gitignore from forcing an inconclusive package verdict when other files are safe.",
+    "Ensure models that fail to parse their own output do not unnecessarily trigger or prolong audit workflows, especially when they are flagged as advisory."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5669,
+    "completion_tokens": 1755,
+    "cost": 0.00406048
+  },
+  "audits_judged": [
+    "20260922-192123-qwen-qwen3-235b-a22b-2507.md",
+    "20260922-192253-deepseek-deepseek-v4-flash.md",
+    "20260919-001313-openrouter-free.md"
+  ]
+}

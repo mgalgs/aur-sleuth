@@ -1,0 +1,158 @@
+---
+package: mcaselector
+pkgver: 2.9
+pkgrel: 1
+result: safe
+model: deepseek/deepseek-v4-flash
+provider: custom
+aur_sleuth_rev: 171a316e053e9c4b28731ccb1aa63b1168550d3a
+prompt_tokens: 14057
+completion_tokens: 3449
+total_tokens: 17506
+cost: 0.00146685
+execution_time: 87.11
+files_reviewed: 5
+files_skipped: 1
+maintainer_files: 6
+source_fetch: not_attempted
+upstream_files: 0
+upstream_named_files: 0
+unpinned_sources: 0
+injection_attempts: 0
+date: 2026-09-17T15:02:16Z
+file_verdicts:
+  - file: .SRCINFO
+    status: safe
+    summary: Standard AUR metadata, no security issues.
+  - file: PKGBUILD
+    status: safe
+    summary: Standard PKGBUILD, no malicious content found.
+  - file: mcaselector.desktop
+    status: safe
+    summary: Standard desktop entry file, no security concerns.
+  - file: mcaselector.png
+    status: skipped
+    summary: "Skipping binary file: mcaselector.png"
+  - file: .gitignore
+    status: safe
+    summary: Standard .gitignore with no security issues.
+  - file: mcaselector
+    status: safe
+    summary: Standard Java launcher script; no malicious behavior detected.
+---
+
+Materializing mcaselector from local mirror...
+Materialized mcaselector
+Analyzing mcaselector AUR package with deepseek/deepseek-v4-flash
+Performing initial audit of PKGBUILD to ensure that we can safely run `makepkg`
+LLM auditresponse for PKGBUILD:
+<security_assessment>
+<decision>SAFE</decision>
+<details>
+Running `makepkg --printsrcinfo` sources the PKGBUILD and executes only its top-level/global scope. In this PKGBUILD, the global scope consists solely of normal metadata variable assignments, the `source` array, checksum entries, `noextract`, and `options`. None of these perform command substitution, network access, code fetching, or file modifications.
+
+The only functional code is inside the `package()` function, which is not executed by `makepkg --printsrcinfo`. There is no top-level invocation that could download or run untrusted payloads or exfiltrate data. Although the package is a prebuilt JAR from the upstream repository, all source entries have pinned SHA-256 checksums, and the absence or skipping of checksums would not itself be a concern at this stage. No malicious top-level behavior is present.
+</details>
+<evidence>
+</evidence>
+<summary>
+No top-level execution risk; only metadata assignments, so `--printsrcinfo` is safe.
+</summary>
+</security_assessment>
+
++ Initial PKGBUILD audit complete -- No top-level execution risk; only metadata assignments, so `--printsrcinfo` is safe.
+Reviewing the 6 file(s) in the AUR repository.
+Reviewing the AUR repository's files...
+[0/6] Reviewing .SRCINFO...
+[0/6] Reviewing .SRCINFO, .gitignore...
+[0/6] Reviewing .SRCINFO, .gitignore, PKGBUILD...
+LLM auditresponse for .SRCINFO:
+<security_assessment>
+<decision>SAFE</decision>
+<details>
+The .SRCINFO file is a metadata file for the AUR package `mcaselector`. It declares the package description, version, dependencies, and source files with associated checksums. All source URLs point to the maintainer's official GitHub releases (github.com/Querz/mcaselector). Checksums are provided for all sources (no `SKIP` values). There is no executable code, no obfuscation, no network requests or downloads beyond declaring the standard upstream source, and no signs of malicious or supply-chain attack indicators. The file conforms to expected AUR packaging practices.
+</details>
+<evidence>
+</evidence>
+<summary>Standard AUR metadata, no security issues.</summary>
+</security_assessment>
+
+[0/6] Reviewing .SRCINFO, .gitignore, PKGBUILD, mcaselector...
+[1/6] Reviewing .gitignore, PKGBUILD, mcaselector...
++ Reviewed .SRCINFO. Status: SAFE -- Standard AUR metadata, no security issues.
+LLM auditresponse for PKGBUILD:
+<security_assessment>
+<decision>SAFE</decision>
+<details>
+The PKGBUILD follows standard Arch packaging practices for a Java application. It downloads the official release JAR from the project's GitHub repository with a pinned version and checksums (not SKIP). The build and package functions only install files into the package directory. There are no network requests, obfuscated commands, or dangerous operations beyond normal packaging steps. No evidence of a supply-chain attack is present in this file.
+</details>
+<evidence>
+</evidence>
+<summary>Standard PKGBUILD, no malicious content found.</summary>
+</security_assessment>
+
+[2/6] Reviewing .gitignore, mcaselector...
++ Reviewed PKGBUILD. Status: SAFE -- Standard PKGBUILD, no malicious content found.
+[2/6] Reviewing .gitignore, mcaselector, mcaselector.desktop...
+LLM auditresponse for mcaselector.desktop:
+<security_assessment>
+<decision>SAFE</decision>
+<details>
+This is a standard .desktop file for the MCA Selector application. It defines the launcher metadata: name, comment, executable path, icon, and categories. There is no embedded code, no network requests, no obfuscation, and no unusual file operations. Everything is consistent with a normal AUR packaging practice.
+</details>
+<evidence></evidence>
+<summary>Standard desktop entry file, no security concerns.</summary>
+</security_assessment>
+
+[2/6] Reviewing .gitignore, mcaselector, mcaselector.desktop, mcaselector.png...
+[3/6] Reviewing .gitignore, mcaselector, mcaselector.png...
++ Reviewed mcaselector.desktop. Status: SAFE -- Standard desktop entry file, no security concerns.
+[4/6] Reviewing .gitignore, mcaselector...
+! Reviewed mcaselector.png. Status: SKIPPED -- Skipping binary file: mcaselector.png
+LLM auditresponse for .gitignore:
+<security_assessment>
+<decision>SAFE</decision>
+<details>
+This file is a standard `.gitignore` file used to exclude build artifacts and package files from version control. The patterns `pkg/`, `src/`, `*.deb`, `*.tar.zst`, and `*.jar` are all typical for an AUR package repository that compiles software and produces packages. There is no executable code, no network activity, no obfuscation, and no reference to any external resources. The file poses no security threat.
+</details>
+<evidence>
+</evidence>
+<summary>Standard .gitignore with no security issues.</summary>
+</security_assessment>
+
+[5/6] Reviewing mcaselector...
++ Reviewed .gitignore. Status: SAFE -- Standard .gitignore with no security issues.
+LLM auditresponse for mcaselector:
+<security_assessment>
+<decision>SAFE</decision>
+<details>
+This file is a standard Java launcher script for the mcaselector application. It sets a Java installation directory variable, updates PATH, and executes the system `java` binary with the package's JavaFX module paths and the installed `mcaselector.jar`. It performs no network requests, no downloads, no code obfuscation, no file writes, and no system modifications. User arguments are passed through safely using `"$@"`. The only minor observation is that the JavaFX module path is unquoted, which is a robustness and portability concern rather than evidence of malicious behavior.
+</details>
+<evidence>
+</evidence>
+<summary>Standard Java launcher script; no malicious behavior detected.</summary>
+</security_assessment>
+
+[6/6] Reviewing ...
++ Reviewed mcaselector. Status: SAFE -- Standard Java launcher script; no malicious behavior detected.
+Reviewed all the AUR repository's files.
+Audit complete! Result: No issues found
+(Skipped 1 file: mcaselector.png)
+
+API Usage Summary
+  Models: deepseek/deepseek-v4-flash
+  Prompt Tokens: 14,057
+  Completion Tokens: 3,449
+  Total Tokens: 17,506
+  Total Cost: $0.001467
+  Execution Time: 87.11 seconds
+
+Final Status: SAFE
+
+
+No issues found.
+
+
+Audit Skips:
+
+mcaselector.png: [SKIPPED] Skipping binary file: mcaselector.png

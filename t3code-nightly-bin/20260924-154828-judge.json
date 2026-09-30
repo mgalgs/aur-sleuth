@@ -1,0 +1,29 @@
+{
+  "package": "t3code-nightly-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard binary AppImage distribution from the official upstream GitHub repository. Sources are pinned with SHA256 checksums, and the build/package functions perform standard extraction and installation steps, including the expected chmod 4755 for the Electron chrome-sandbox. The apparent disagreement was caused by an API error in one model, not a genuine security concern.",
+  "disagreement_analysis": "The qwen model returned an 'inconclusive' verdict due to an HTTP 400 API error when processing the PKGBUILD, while the deepseek model successfully audited the PKGBUILD and correctly identified it as safe. There is no actual security disagreement.",
+  "coverage_issues": [
+    "qwen model failed to audit the PKGBUILD due to an HTTP 400 API error, resulting in an incomplete assessment."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "When a model encounters an API/tool error for a specific file, the orchestration layer should treat that file's audit as missing and rely on successful audits from other models, rather than letting the error dictate an 'inconclusive' package verdict.",
+    "Models correctly identified standard Electron/Chromium AppImage packaging patterns (like chmod 4755 on chrome-sandbox); this context should be maintained in system prompts to prevent future models from flagging it as a false positive."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5518,
+    "completion_tokens": 1875,
+    "cost": 0.00416576
+  },
+  "audits_judged": [
+    "20260924-151018-qwen-qwen3-235b-a22b-2507.md",
+    "20260924-151435-deepseek-deepseek-v4-flash.md",
+    "20260922-233824-openrouter-free.md"
+  ]
+}

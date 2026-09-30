@@ -1,0 +1,30 @@
+{
+  "package": "fcitx5-taigikeyboard",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Both models that successfully completed their analysis found the package safe. The PKGBUILD uses standard AUR patterns: pinned GitHub source with SHA-512 checksum, standard Rust/CMake build tooling, no suspicious network operations or code execution during sourcing. The 'inconclusive' verdict from qwen3-235b was caused solely by an API error (HTTP 400) when reviewing .gitignore, not by any security concern. The deepseek-v4-flash model reviewed all 4 files including .gitignore and found it to be a standard gitignore with no security issues. The openrouter/free report is advisory-only and does not count toward the verdict.",
+  "disagreement_analysis": "The disagreement is entirely due to a tool error, not a substantive security disagreement. qwen3-235b encountered an HTTP 400 error when auditing .gitignore, causing it to return 'inconclusive'. deepseek-v4-flash successfully reviewed the same file and found it safe. Both models agreed the PKGBUILD, LICENSE, and .SRCINFO are safe with no malicious content.",
+  "coverage_issues": [
+    "qwen3-235b failed to review .gitignore due to API error (HTTP 400 BadRequestError)"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "API errors on non-executable files (like .gitignore) should not cause package-level 'inconclusive' verdicts when other models have successfully reviewed those files",
+    "Tool should distinguish between 'inconclusive due to security uncertainty' and 'inconclusive due to tool failure' - the latter should be overridden when coverage is achieved by other models",
+    "Standard gitignore patterns (*.tar.zst, *.tar.gz, *.part, */) are benign and should be quickly classified as safe without deep analysis"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 6772,
+    "completion_tokens": 1098,
+    "cost": 0.00357248
+  },
+  "audits_judged": [
+    "20260925-112654-qwen-qwen3-235b-a22b-2507.md",
+    "20260925-112818-deepseek-deepseek-v4-flash.md",
+    "20260925-080616-openrouter-free.md"
+  ]
+}

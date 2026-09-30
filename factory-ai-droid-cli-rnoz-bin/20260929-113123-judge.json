@@ -1,0 +1,31 @@
+{
+  "package": "factory-ai-droid-cli-rnoz-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Report 2 (deepseek-v4-flash) successfully reviewed all 6 files including the .install script that Report 1 failed to audit due to API errors. The PKGBUILD downloads binaries from the project's own domain (downloads.factory.ai) with SHA-256 verification, the Python patching scripts perform legitimate binary modifications with no network activity or data exfiltration, and the .install file contains only informational echo messages. No injection patterns, no execution of fetched content, no unexpected network destinations.",
+  "disagreement_analysis": "Report 1 (qwen3-235b) returned inconclusive due to HTTP 400 API errors when auditing LICENSE and factory-ai-droid-cli-rnoz-bin.install files. Report 2 (deepseek-v4-flash) successfully reviewed all files and found them safe. Report 3 (openrouter/free) is advisory-only and had a parsing error. The disagreement is purely due to tool failures in Report 1, not substantive security concerns.",
+  "coverage_issues": [
+    "Report 1 (qwen3-235b) failed to audit LICENSE and factory-ai-droid-cli-rnoz-bin.install due to HTTP 400 errors, leaving 2 of 6 files unreviewed",
+    "Report 3 (openrouter/free) failed to parse model response for PKGBUILD, reviewed only 1 of 6 files"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "When a model encounters API errors (HTTP 400, parsing failures), the audit tool should retry with a different model or implement fallback mechanisms to ensure complete file coverage",
+    "Advisory reports with tool errors should be clearly distinguished from substantive disagreements - they represent infrastructure failures, not security concerns",
+    "The audit tool should track which files were successfully reviewed vs. failed, and prioritize re-auditing only the failed files rather than the entire package"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 7417,
+    "completion_tokens": 1214,
+    "cost": 0.00392736
+  },
+  "audits_judged": [
+    "20260929-112158-qwen-qwen3-235b-a22b-2507.md",
+    "20260929-112423-deepseek-deepseek-v4-flash.md",
+    "20260929-033738-openrouter-free.md"
+  ]
+}

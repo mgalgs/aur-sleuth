@@ -1,0 +1,27 @@
+{
+  "package": "linuxqq",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The AUR package contains standard packaging for the proprietary Linux QQ client. The PKGBUILD downloads pre-built .deb archives from Tencent's official domain with pinned SHA512 checksums, extracts them, and installs them. The wrapper script performs standard cleanup and launches the binary. No malicious code, network exfiltration, or execution of fetched content is present in the packaging scripts. The disagreement was solely due to a transient API error in the Qwen model when parsing .SRCINFO.",
+  "disagreement_analysis": "The Qwen model encountered an HTTP 400 error when auditing .SRCINFO, causing it to return an 'inconclusive' verdict for the overall package. The Deepseek model successfully audited all files and correctly identified them as safe. The disagreement is purely a result of a tool/API failure, not a difference in security assessment.",
+  "coverage_issues": [
+    "Qwen model failed to audit .SRCINFO due to an HTTP 400 API error, resulting in an inconclusive package verdict."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Transient API errors on non-executable metadata files like .SRCINFO should not force an 'inconclusive' package verdict if the PKGBUILD and other executable scripts are verified safe. The audit tool should implement retries or gracefully handle isolated metadata parsing failures."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 4999,
+    "completion_tokens": 1837,
+    "cost": 0.00395104
+  },
+  "audits_judged": [
+    "20260923-081138-qwen-qwen3-235b-a22b-2507.md",
+    "20260923-081201-deepseek-deepseek-v4-flash.md"
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "package": "omarchy-flux",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The deepseek model completed a full review of all three files (PKGBUILD, .SRCINFO, omarchy-flux.install) and found no security issues. The PKGBUILD fetches a pinned release from GitHub with SHA256 verification, uses standard make commands, and contains no malicious patterns. The .install file executes local scripts from the package's own directory, which is standard practice. The qwen model's inconclusive result was due to API errors (HTTP 400, LLMResponseError), not security concerns. The openrouter report is advisory-only and reviewed a different version (0.3.0 vs 0.6.0), making it incomparable.",
+  "disagreement_analysis": "The disagreement was caused by tool failures in the qwen model, which encountered API errors when reviewing PKGBUILD and .SRCINFO. This is not a security disagreement but a coverage gap. The deepseek model successfully reviewed all files and found them safe.",
+  "coverage_issues": [
+    "qwen model failed to complete review of PKGBUILD and .SRCINFO due to API errors (HTTP 400 BadRequestError, LLMResponseError)",
+    "openrouter/free report reviewed version 0.3.0 while other reports reviewed 0.6.0, making direct comparison invalid"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "API reliability is critical for audit tools - implement retry logic or fallback models when primary model fails",
+    "Advisory reports should be clearly separated from voting reports to avoid confusion in verdict aggregation",
+    "Version mismatches between reports should be flagged to prevent invalid comparisons",
+    "When a model fails with tool errors, the system should automatically trigger a re-audit with a different model rather than marking the package as inconclusive"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5801,
+    "completion_tokens": 1439,
+    "cost": 0.00369824
+  },
+  "audits_judged": [
+    "20260929-111242-qwen-qwen3-235b-a22b-2507.md",
+    "20260929-111257-deepseek-deepseek-v4-flash.md",
+    "20260927-031359-openrouter-free.md"
+  ]
+}

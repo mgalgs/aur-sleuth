@@ -1,0 +1,30 @@
+{
+  "package": "pam-fprint-helper",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The disagreement stems from a transient API error in the qwen model when reviewing 'pam-fprint-helper.install', which forced an 'inconclusive' package verdict. The deepseek model successfully reviewed all 5 files, including the problematic install script, and correctly identified it as containing only standard informational messages. The PKGBUILD uses standard pinned-source practices with a valid SHA256 checksum. There is no evidence of malicious injection in the packaging.",
+  "disagreement_analysis": "The qwen model failed to audit 'pam-fprint-helper.install' due to an HTTP 400 API error, resulting in an 'inconclusive' verdict. The deepseek model reviewed the same file without issue and found it safe. The openrouter model (advisory) missed 'pam-open-fprint-helper.install' entirely.",
+  "coverage_issues": [
+    "qwen model failed to review 'pam-fprint-helper.install' due to an API error (HTTP 400).",
+    "openrouter model missed reviewing 'pam-open-fprint-helper.install'."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Implement retry logic for transient API errors during individual file audits to prevent a single failure from cascading into an 'inconclusive' package verdict when other models can cover the file.",
+    "Ensure the file discovery phase reliably identifies all maintainer files, including multiple .install scripts, to prevent coverage gaps."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 7356,
+    "completion_tokens": 1456,
+    "cost": 0.0042176
+  },
+  "audits_judged": [
+    "20260928-111624-qwen-qwen3-235b-a22b-2507.md",
+    "20260928-111537-deepseek-deepseek-v4-flash.md",
+    "20260918-200319-openrouter-free.md"
+  ]
+}

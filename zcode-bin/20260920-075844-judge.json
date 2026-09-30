@@ -1,0 +1,30 @@
+{
+  "package": "zcode-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The disagreement is entirely due to tool failure, not substantive security concerns. The qwen model experienced HTTP 400 API errors when attempting to audit LICENSE and zcode.sh, resulting in an inconclusive verdict. The deepseek model successfully reviewed all four files (LICENSE, PKGBUILD, .SRCINFO, zcode.sh) and found them safe. The PKGBUILD performs standard repackaging of a prebuilt Electron application from the official upstream CDN with SHA256 checksum verification. The zcode.sh launcher script contains standard Electron launch patterns with no malicious network activity or code execution. The LICENSE is a standard MIT license. No injection patterns, no execution of fetched content, no suspicious network requests.",
+  "disagreement_analysis": "The qwen model failed to audit 2 of 4 files (LICENSE and zcode.sh) due to HTTP 400 BadRequestError from the LLM API. This tool failure caused an inconclusive verdict. The deepseek model successfully audited all files and found them safe. The disagreement is not about security reasoning but about infrastructure reliability.",
+  "coverage_issues": [
+    "qwen model experienced API errors (HTTP 400) preventing review of LICENSE and zcode.sh files"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Implement retry logic or fallback models when API calls fail with transient errors like HTTP 400",
+    "Distinguish between 'inconclusive due to tool failure' and 'inconclusive due to genuine security uncertainty' in verdict aggregation",
+    "When one model completes full coverage and finds no issues while another fails due to tool errors, the successful audit should carry decisive weight",
+    "Track API error rates per model to identify reliability issues and route around failing endpoints"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5184,
+    "completion_tokens": 1181,
+    "cost": 0.0031705600000000002
+  },
+  "audits_judged": [
+    "20260920-070859-qwen-qwen3-235b-a22b-2507.md",
+    "20260920-070909-deepseek-deepseek-v4-flash.md"
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "package": "linux-xanmod-lts-linux-bin-x64v3",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The top-level curl command fetches an RSS feed from SourceForge (the package's declared upstream) to dynamically resolve download URLs for the Xanmod kernel binaries. This is a normal AUR pattern for vendors without stable URLs. The downloaded .deb artifacts are pinned with SHA-256 checksums, closing the swap risk. No fetched content is executed, and no requests go to unrelated hosts. The qwen3 model's 'unsafe' verdict conflates packaging hygiene (network I/O at parse time) with injection risk.",
+  "disagreement_analysis": "qwen3 flagged the global-scope curl as unsafe because it performs network I/O during PKGBUILD sourcing, citing exfiltration and tracking risks. deepseek and openrouter correctly recognized this as standard AUR dynamic URL resolution from the declared upstream, with checksummed artifacts. The disagreement stems from qwen3 treating a packaging style concern as a supply-chain injection, violating the threat model's explicit guidance that 'violates packaging best practices' is not grounds for unsafe when real checksums pin the artifact.",
+  "coverage_issues": [],
+  "false_positives": [
+    "qwen3: 'Top-level curl executes on source, unsafe' \u2014 This is a normal AUR pattern for resolving dynamic upstream URLs. The curl fetches from sourceforge.net/projects/xanmod (the declared upstream), parses the RSS to build the source array, and the downloaded files are verified with SHA-256 checksums. No content is executed, no unrelated hosts are contacted. This is hygiene, not injection."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models must distinguish between 'network I/O during PKGBUILD parse time' (a hygiene/style concern) and 'executing fetched content or fetching from unrelated hosts' (the actual injection pattern). The former is not a security verdict when artifacts are checksummed.",
+    "Prompt/assessment guidance should explicitly reinforce that fetching from the package's own declared upstream to resolve download URLs is a normal AUR pattern, not a supply-chain risk, when real checksums pin the downloaded artifact.",
+    "Common failure mode: models over-index on the presence of curl/wget in global scope without evaluating whether the destination is the declared upstream and whether the fetched content is executed or merely parsed for URLs."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 6711,
+    "completion_tokens": 1718,
+    "cost": 0.00434656
+  },
+  "audits_judged": [
+    "20260921-234329-qwen-qwen3-235b-a22b-2507.md",
+    "20260921-234610-deepseek-deepseek-v4-flash.md",
+    "20260915-082222-openrouter-free.md"
+  ]
+}

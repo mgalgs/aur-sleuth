@@ -1,0 +1,33 @@
+{
+  "package": "mindustry",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD uses a standard AUR pattern for split packages: an eval loop at the end that dynamically creates package_* functions from helper functions. This is a well-known, legitimate idiom for avoiding code duplication in multi-package AUR submissions. The eval only constructs function definitions from the PKGBUILD's own code, executes no external input, and performs no network operations during sourcing. All sources point to official upstream GitHub repositories with pinned SHA256 checksums. No malicious behavior, obfuscation, or unauthorized operations detected.",
+  "disagreement_analysis": "The disagreement stems from API failures rather than genuine security concerns. qwen3-235b had HTTP 400 errors on 3 of 4 files, resulting in inconclusive. openrouter/free (advisory only) had an HTTP 429 rate limit on .SRCINFO and initially flagged the eval pattern as UNSAFE before self-correcting to SAFE. deepseek-v4-flash successfully reviewed all files and correctly identified the eval pattern as standard AUR practice. The only substantive disagreement was openrouter/free's initial false positive on the eval pattern, which it resolved in a second pass.",
+  "coverage_issues": [
+    "qwen3-235b: HTTP 400 errors prevented review of .SRCINFO, .gitignore, .nvchecker.toml",
+    "openrouter/free: HTTP 429 rate limit prevented review of .SRCINFO"
+  ],
+  "false_positives": [
+    "openrouter/free initially flagged the eval loop as UNSAFE, claiming it represents 'unbounded code execution during sourcing'. This is incorrect: the eval constructs function definitions from the PKGBUILD's own declared functions, a standard AUR idiom for split packages. The model self-corrected in a second analysis."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models can be confused by eval patterns even when they are standard AUR idioms. The audit tool should recognize common patterns like split package function generation (eval + declare -f loops) and provide context to models to prevent false positives.",
+    "API failures (HTTP 400, 429) cause inconclusive results that trigger unnecessary escalations. The tool should implement retry logic or fallback models for transient API errors.",
+    "When a model produces conflicting verdicts on the same file (as openrouter/free did with PKGBUILD), the final verdict should be used, but the reasoning path should be logged for training data to improve future model performance on edge cases."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 7529,
+    "completion_tokens": 1520,
+    "cost": 0.00435488
+  },
+  "audits_judged": [
+    "20260925-030610-qwen-qwen3-235b-a22b-2507.md",
+    "20260925-030638-deepseek-deepseek-v4-flash.md",
+    "20260922-083321-openrouter-free.md"
+  ]
+}

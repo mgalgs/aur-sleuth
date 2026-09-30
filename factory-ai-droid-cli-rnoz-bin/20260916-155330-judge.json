@@ -1,0 +1,30 @@
+{
+  "package": "factory-ai-droid-cli-rnoz-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The deepseek model successfully reviewed all 6 files and found them safe. The PKGBUILD downloads binaries from the official upstream (downloads.factory.ai) with SHA256 checksum verification. The patch scripts (patch_keybindings.py, patch_title.py) are local files with checksums that perform binary patching consistent with the package's stated purpose (keybinding rotation, title guard removal). No network requests, obfuscation, or execution of fetched content was found. The qwen model's inconclusive result was due to API errors on 4 files, not security concerns.",
+  "disagreement_analysis": "The disagreement was caused by API errors in the qwen model, which failed to review 4 files (.SRCINFO, LICENSE, patch_keybindings.py, patch_title.py) with HTTP 400 errors. The deepseek model successfully reviewed all files and found them safe. The qwen model's inconclusive result was not due to security concerns, but due to tool failures preventing coverage of the patch scripts.",
+  "coverage_issues": [
+    "qwen model had API errors (HTTP 400, BadRequestError) on 4 files: .SRCINFO, LICENSE, patch_keybindings.py, patch_title.py"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "API errors should be handled more gracefully to avoid marking entire audits as inconclusive when partial results are available",
+    "The audit tool should distinguish between 'inconclusive due to tool errors' and 'inconclusive due to genuine uncertainty' in the frontmatter",
+    "When a model has API errors on multiple files, the coverage_issues field should be populated automatically rather than relying on manual detection"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 8525,
+    "completion_tokens": 2522,
+    "cost": 0.00595616
+  },
+  "audits_judged": [
+    "20260916-152555-qwen-qwen3-235b-a22b-2507.md",
+    "20260916-152741-deepseek-deepseek-v4-flash.md",
+    "20260915-231729-openrouter-free.md"
+  ]
+}

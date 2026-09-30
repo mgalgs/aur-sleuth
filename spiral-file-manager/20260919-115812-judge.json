@@ -1,0 +1,31 @@
+{
+  "package": "spiral-file-manager",
+  "correct_verdict": "safe",
+  "confidence": "medium",
+  "reasoning": "The only complete, non-advisory report (deepseek-v4-flash) found the PKGBUILD to be a standard Rust application build with no malicious indicators. The source is pinned with sha256sum from the official GitHub repository, build uses standard cargo commands with locked/frozen flags, and installation follows normal Arch packaging patterns. The other two reports either had tool errors (qwen3-235b) or were marked advisory-only (openrouter/free), providing no valid verdict signal per the adjudication rules.",
+  "disagreement_analysis": "The apparent disagreement was between tool failures and a successful analysis. Report 1 (qwen3-235b) suffered HTTP 400 API errors on PKGBUILD and LICENSE, Report 3 (openrouter/free) had an LLMResponseError on LICENSE and was marked advisory-only. Neither provides a valid verdict signal. Report 2 (deepseek-v4-flash) completed successfully and found no issues.",
+  "coverage_issues": [
+    "qwen3-235b-a22b-2507: API errors (HTTP 400 BadRequestError) prevented review of PKGBUILD and LICENSE files",
+    "openrouter/free: LLMResponseError prevented review of LICENSE file"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Tool errors (API failures, LLM response errors) should trigger automatic retry or fallback to prevent inconclusive verdicts when the package itself may be safe",
+    "Advisory reports should be excluded from verdict calculation entirely, not just downweighted, to avoid confusion in disagreement detection",
+    "When multiple reports fail with tool errors on the same files, the audit system should recognize this as a systemic issue rather than treating each failure independently"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5637,
+    "completion_tokens": 1910,
+    "cost": 0.00424864
+  },
+  "audits_judged": [
+    "20260919-111522-qwen-qwen3-235b-a22b-2507.md",
+    "20260919-111527-deepseek-deepseek-v4-flash.md",
+    "20260919-082121-openrouter-free.md"
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "package": "salam-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Both models reviewed the PKGBUILD and found it safe. The package is a standard binary package that downloads prebuilt binaries from the official GitHub releases (github.com/SalamLang/Salam) with pinned SHA-256 checksums (no SKIP). The package() function installs binaries to /usr/lib/salam and creates a wrapper script that sets environment variables before executing the binary. No malicious patterns (eval, curl|bash, network operations during build, obfuscated code) were found. The only disagreement stems from a tool error (HTTP 400 API failure) in qwen3-235b when reviewing .SRCINFO, not from any security concern.",
+  "disagreement_analysis": "The disagreement is not substantive. Both models agreed the PKGBUILD is safe. The qwen3-235b model returned 'inconclusive' solely due to an API error (HTTP 400 BadRequestError) when attempting to audit .SRCINFO, not because of any security issue. Deepseek successfully reviewed both files and found them safe.",
+  "coverage_issues": [
+    "qwen3-235b failed to review .SRCINFO due to API error (HTTP 400), resulting in incomplete coverage"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Tool errors (API failures, timeouts) should not force an 'inconclusive' verdict when other models have successfully reviewed the same files and reached agreement. The adjudication logic should distinguish between 'no verdict due to tool failure' and 'genuine uncertainty about safety'.",
+    "When one model has a coverage gap due to tool error but another model has full coverage and finds no issues, the full-coverage model's verdict should carry decisive weight rather than being diluted by the failed model's incomplete result."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 3804,
+    "completion_tokens": 1013,
+    "cost": 0.0025139200000000002
+  },
+  "audits_judged": [
+    "20260924-030733-qwen-qwen3-235b-a22b-2507.md",
+    "20260924-030819-deepseek-deepseek-v4-flash.md"
+  ]
+}

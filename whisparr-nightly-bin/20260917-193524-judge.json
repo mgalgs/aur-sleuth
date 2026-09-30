@@ -1,0 +1,30 @@
+{
+  "package": "whisparr-nightly-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Two of three reports (deepseek-v4-flash and openrouter/free) successfully audited all 9 files and found them safe. The qwen3-235b report was marked inconclusive solely due to API errors (HTTP 400) when auditing whisparr.install and whisparr.tmpfiles, not due to actual security concerns. The successfully audited files show a standard AUR binary package: PKGBUILD fetches pinned tarballs from official GitHub releases with SHA256 checksums, .install script only prints informational messages via echo, systemd units are properly hardened, and tmpfiles config creates standard symlinks within the app's data directory. No code injection, no execution of fetched content, no suspicious network activity.",
+  "disagreement_analysis": "The disagreement was caused by tool failure, not substantive security analysis. The qwen3-235b model encountered HTTP 400 BadRequestError when attempting to audit whisparr.install and whisparr.tmpfiles, forcing an inconclusive verdict. The deepseek-v4-flash model successfully audited these same files and found them benign (install script only echoes messages; tmpfiles creates standard symlinks). The openrouter/free advisory report corroborates this finding.",
+  "coverage_issues": [
+    "qwen3-235b-a22b-2507 failed to audit whisparr.install and whisparr.tmpfiles due to LLM API errors (HTTP 400 BadRequestError), resulting in incomplete coverage"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "API errors during file audit should trigger automatic retry or fallback to another model rather than marking the entire package inconclusive when other files were successfully audited",
+    "When a report ends in tool errors for specific files, the adjudication system should check if other reports successfully audited those files before convening a re-audit",
+    "The inconclusive verdict should be reserved for genuine analytical uncertainty, not infrastructure failures - tool errors should be tracked separately as coverage_issues"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 11750,
+    "completion_tokens": 1167,
+    "cost": 0.00525376
+  },
+  "audits_judged": [
+    "20260917-191603-qwen-qwen3-235b-a22b-2507.md",
+    "20260917-191642-deepseek-deepseek-v4-flash.md",
+    "20260917-122956-openrouter-free.md"
+  ]
+}

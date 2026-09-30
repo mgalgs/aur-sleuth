@@ -1,0 +1,34 @@
+{
+  "package": "mindustry",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD uses a standard AUR pattern for split packages: a for-loop with eval that dynamically creates package_* functions by combining template functions via declare -f. This executes at parse time but only defines functions - it does not execute their bodies. The function bodies (which contain installation logic) only run during the package() phase. All sources are pinned to specific GitHub tags with SHA-256 checksums. No malicious code injection, unauthorized network operations, or data exfiltration detected. The successful review by deepseek-v4-flash correctly identified this pattern as safe.",
+  "disagreement_analysis": "The disagreement was triggered by API failures, not security concerns. qwen3-235b failed with HTTP 400 errors when reviewing PKGBUILD and .gitignore, resulting in inconclusive. openrouter/free (advisory) was rate-limited (HTTP 429) on .SRCINFO. Only deepseek-v4-flash successfully completed the full review and correctly identified the package as safe. The openrouter/free model initially flagged the eval pattern as UNSAFE (claiming it executes function bodies at parse time), then self-corrected to SAFE in a second look - demonstrating confusion about bash function definition vs execution semantics.",
+  "coverage_issues": [
+    "qwen3-235b: API errors (HTTP 400) prevented review of PKGBUILD and .gitignore",
+    "openrouter/free: Rate limit (HTTP 429) prevented review of .SRCINFO"
+  ],
+  "false_positives": [
+    "openrouter/free initial assessment: Incorrectly claimed eval with declare -f executes function bodies at parse time. This is a misunderstanding of bash semantics - eval with declare -f only defines functions, it does not execute them. The model self-corrected in its second look."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "API reliability is critical - two of three models failed due to API errors (400, 429), leaving only one successful review. Consider implementing retry logic or fallback models.",
+    "The eval + declare -f pattern for split packages is a common AUR idiom that confuses models. Training data or prompts should clarify that this pattern only defines functions at parse time, it does not execute function bodies.",
+    "Models need better understanding of bash function definition vs execution semantics. The distinction between 'defining a function' and 'calling a function' is crucial for accurate security assessment.",
+    "Advisory reports can show valuable self-correction behavior, but waste tokens on initial false positives. Consider prompting models to be more conservative with eval patterns in AUR contexts."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 7705,
+    "completion_tokens": 1576,
+    "cost": 0.00448288
+  },
+  "audits_judged": [
+    "20260922-191420-qwen-qwen3-235b-a22b-2507.md",
+    "20260922-191513-deepseek-deepseek-v4-flash.md",
+    "20260922-083321-openrouter-free.md"
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "package": "radarr",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package consists of standard AUR packaging files (PKGBUILD, systemd units, sysusers/tmpfiles configs, and metadata). All successfully reviewed files contain no malicious code, command substitutions, or suspicious network activity. The 'inconclusive' verdicts from other models were solely due to transient API errors and rate limits, not actual security concerns.",
+  "disagreement_analysis": "The disagreement is entirely caused by tool failures (HTTP 400, 429, and parsing errors) in the qwen and openrouter models, which prevented them from completing the audit. The deepseek model successfully reviewed all files and correctly identified them as safe.",
+  "coverage_issues": [
+    "qwen model failed to audit radarr.tmpfiles due to an HTTP 400 API error.",
+    "openrouter model failed to audit PKGBUILD, radarr.service, radarr.install, and radarr.tmpfiles due to API errors, rate limits, and parsing failures."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Transient API errors (e.g., HTTP 400, 429) on trivial configuration files like radarr.tmpfiles should not block a 'safe' verdict if the core packaging files (PKGBUILD, .install) are successfully audited and found safe.",
+    "The audit tool should implement automatic retries for rate-limited (429) or transiently failing API requests before marking a file or package as inconclusive.",
+    "Free-tier router models (like openrouter/free) may be too unstable for reliable auditing and should be avoided or heavily retried."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 11470,
+    "completion_tokens": 1737,
+    "cost": 0.00589376
+  },
+  "audits_judged": [
+    "20260917-114048-qwen-qwen3-235b-a22b-2507.md",
+    "20260917-114512-deepseek-deepseek-v4-flash.md",
+    "20260917-081021-openrouter-free.md"
+  ]
+}

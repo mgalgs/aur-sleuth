@@ -1,0 +1,32 @@
+{
+  "package": "leht-git",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The only valid, non-advisory audit report (deepseek) correctly assessed the PKGBUILD as a standard, safe VCS package. The 'inconclusive' verdicts from the other models were entirely due to tool errors (HTTP 400 API failure for qwen, and a content safety filter false positive causing a parse error for openrouter), not actual security concerns. The package contains no malicious injections.",
+  "disagreement_analysis": "The disagreement stems from tool failures rather than analytical differences. The qwen model experienced an API error, and the openrouter model triggered a content safety filter (flagging 'Unauthorized Advice, Illegal Activity' on a benign PKGBUILD), leading to a parse failure. Only the deepseek model successfully completed the evaluation.",
+  "coverage_issues": [
+    "qwen model failed to audit PKGBUILD due to an HTTP 400 API error.",
+    "openrouter model failed to parse the PKGBUILD decision due to a content safety filter false positive."
+  ],
+  "false_positives": [
+    "openrouter model's content safety filter incorrectly flagged the benign PKGBUILD as 'unsafe' (Unauthorized Advice, Illegal Activity), causing a parse error."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Implement retry logic for transient API errors (e.g., HTTP 400) to prevent them from causing inconclusive verdicts.",
+    "Add handling for content safety filter false positives; when a model outputs a safety refusal instead of the expected XML/JSON format, the tool should recognize it as a filter trigger rather than a parse failure, and potentially retry with a different model or prompt."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5155,
+    "completion_tokens": 2133,
+    "cost": 0.00437984
+  },
+  "audits_judged": [
+    "20260928-191924-qwen-qwen3-235b-a22b-2507.md",
+    "20260928-191909-deepseek-deepseek-v4-flash.md",
+    "20260928-160547-openrouter-free.md"
+  ]
+}

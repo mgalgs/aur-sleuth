@@ -1,0 +1,32 @@
+{
+  "package": "discord-canary",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD downloads prebuilt binaries from official Discord domains and pins the main tarball checksum. Removing the upstream postinst.sh from the pkgdir is a standard AUR practice to disable upstream post-install hooks (like telemetry or auto-updaters) and is not an injection. SKIP checksums on license HTML files are a known packaging workaround. No malicious code, network exfiltration, or unrelated hosts are present.",
+  "disagreement_analysis": "Disagreement stems from transient API errors (Qwen failed on PKGBUILD, Openrouter failed on .SRCINFO) and Openrouter's initial false positive regarding the removal of postinst.sh, which it later self-corrected. Deepseek correctly identified the package as safe.",
+  "coverage_issues": [
+    "Qwen API failed on PKGBUILD",
+    "Openrouter API failed to parse .SRCINFO"
+  ],
+  "false_positives": [
+    "Openrouter initially flagged 'rm postinst.sh' as malicious concealment. Removing upstream post-install scripts from pkgdir is standard AUR hygiene to prevent unwanted upstream system modifications."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models may falsely flag the removal of upstream post-install scripts (e.g., rm postinst.sh) as malicious concealment rather than standard AUR packaging hygiene to disable upstream hooks.",
+    "Transient API errors and parsing failures lead to inconclusive verdicts; the tool needs better retry logic or fallback mechanisms for LLM calls."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 7333,
+    "completion_tokens": 1524,
+    "cost": 0.0042972800000000005
+  },
+  "audits_judged": [
+    "20260917-155610-qwen-qwen3-235b-a22b-2507.md",
+    "20260917-155657-deepseek-deepseek-v4-flash.md",
+    "20260913-075214-openrouter-free.md"
+  ]
+}

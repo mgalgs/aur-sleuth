@@ -1,0 +1,30 @@
+{
+  "package": "omp-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard binary distribution that downloads pinned release artifacts from the official upstream GitHub repository (github.com/can1357/oh-my-pi) with SHA256 checksums. The package() function installs the binary and runs it with a temporary HOME to generate shell completions, which is expected functionality for this type of package. No injection patterns, no unexpected network destinations, no obfuscation, and no execution of fetched content beyond the package's stated purpose.",
+  "disagreement_analysis": "The disagreement was caused by a tool error, not substantive disagreement. Report 1 (qwen3-235b) failed with HTTP 400 BadRequestError when auditing the PKGBUILD, resulting in an inconclusive verdict. Report 2 (deepseek-v4-flash) successfully audited both files and correctly identified the package as safe. Report 3 (openrouter/free) is marked advisory:true and does not count as a vote. The only valid vote is deepseek's 'safe' verdict with sound reasoning.",
+  "coverage_issues": [
+    "qwen3-235b model experienced HTTP 400 error when auditing PKGBUILD, resulting in no verdict for that file"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Tool errors (HTTP 400, timeouts) should trigger automatic retry or fallback to prevent inconclusive results when the package itself is straightforward",
+    "Models correctly distinguish between expected binary execution (generating completions from a checksum-verified upstream binary) and injection patterns - this reasoning should be reinforced in prompts",
+    "Advisory reports from free-tier models provide useful context but should not be counted toward verdict agreement"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 4987,
+    "completion_tokens": 1118,
+    "cost": 0.00302688
+  },
+  "audits_judged": [
+    "20260928-190802-qwen-qwen3-235b-a22b-2507.md",
+    "20260928-190817-deepseek-deepseek-v4-flash.md",
+    "20260927-081633-openrouter-free.md"
+  ]
+}

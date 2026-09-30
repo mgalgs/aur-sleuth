@@ -1,0 +1,30 @@
+{
+  "package": "ttfx",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard Rust build with pinned sources, valid checksums, and normal cargo commands. The 'inconclusive' verdicts from the other models were caused by transient API errors (HTTP 400 and parse failures) rather than actual security concerns. The model that successfully audited the PKGBUILD found it to be completely benign.",
+  "disagreement_analysis": "The disagreement was caused by tool and API errors in the qwen and openrouter models when attempting to fully evaluate the PKGBUILD. The deepseek model successfully parsed and evaluated the PKGBUILD, finding no malicious code or supply chain risks.",
+  "coverage_issues": [
+    "qwen/qwen3-235b-a22b-2507 failed to audit the PKGBUILD due to an HTTP 400 API error.",
+    "openrouter/free failed to parse the PKGBUILD audit response."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Implement retry logic or fallback mechanisms for transient LLM API errors (e.g., HTTP 400, parse failures) to prevent marking a package as inconclusive when the initial top-level scope check already passed.",
+    "When multiple models fail due to tool errors but one succeeds and finds the file safe, the successful audit should be sufficient to resolve the package as safe without requiring a re-audit."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 6430,
+    "completion_tokens": 1783,
+    "cost": 0.00433984
+  },
+  "audits_judged": [
+    "20260927-072230-qwen-qwen3-235b-a22b-2507.md",
+    "20260927-072244-deepseek-deepseek-v4-flash.md",
+    "20260927-031131-openrouter-free.md"
+  ]
+}

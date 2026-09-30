@@ -1,0 +1,30 @@
+{
+  "package": "mindustry",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package contains standard AUR packaging files (PKGBUILD, .SRCINFO, .gitignore, .nvchecker.toml) with no malicious content. The PKGBUILD uses a common eval pattern for generating split-package functions, which operates only on locally defined helper functions (_package_common, _package_mindustry, etc.) and does not execute untrusted code. All sources point to official upstream GitHub repositories with pinned SHA256 checksums. The disagreement was caused by API errors in the qwen model, not by genuine security concerns.",
+  "disagreement_analysis": "The qwen model encountered HTTP 400 errors when attempting to audit .gitignore and PKGBUILD during the full review phase, resulting in an 'inconclusive' verdict. However, its initial PKGBUILD audit (before the full review) found the file SAFE. The deepseek model successfully reviewed all files and found them safe. The openrouter/free report is advisory-only and doesn't count as a vote. The disagreement is purely technical (API failures) rather than substantive.",
+  "coverage_issues": [
+    "qwen model failed to complete full audit due to HTTP 400 errors on .gitignore and PKGBUILD files"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "API errors during file review should not override successful initial PKGBUILD audits - the tool should distinguish between 'could not review' and 'found security issues'",
+    "The eval pattern for generating split-package functions is a common AUR idiom that models should be explicitly trained to recognize as safe when it operates only on locally-defined functions",
+    "When a model encounters API errors, the tool should retry or fall back to a different model rather than marking the entire audit as inconclusive if other files were successfully reviewed"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 6524,
+    "completion_tokens": 1289,
+    "cost": 0.0037376
+  },
+  "audits_judged": [
+    "20260919-111432-qwen-qwen3-235b-a22b-2507.md",
+    "20260919-111429-deepseek-deepseek-v4-flash.md",
+    "20260914-115254-openrouter-free.md"
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "package": "visual-studio-code-insiders-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard binary wrapper for VS Code Insiders, fetching pinned artifacts from Microsoft's official CDN with valid checksums. The only disagreements in the reports stem from transient LLM API errors (HTTP 400, empty responses) in two of the three models, not from actual security concerns. The model that successfully completed the audit found all files, including the PKGBUILD, .install script, and launcher wrapper, to be safe and standard.",
+  "disagreement_analysis": "The disagreement is purely an artifact of tool failures. qwen3-235b failed with an HTTP 400 error on the .install file, and openrouter/free failed with an empty response on the PKGBUILD. deepseek-v4-flash successfully audited all files and found no issues, making the 'inconclusive' verdicts invalid reflections of package safety.",
+  "coverage_issues": [
+    "qwen/qwen3-235b-a22b-2507 failed to audit visual-studio-code-insiders-bin.install due to an HTTP 400 API error.",
+    "openrouter/free failed to audit PKGBUILD on the second pass due to an empty LLM response."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Implement retry logic or fallback mechanisms for transient LLM API errors (like HTTP 400 or empty responses) to prevent a single file's failure from rendering the entire package audit inconclusive.",
+    "Distinguish between 'inconclusive due to security ambiguity' and 'inconclusive due to tool/API failure' in the final verdict reporting to avoid triggering unnecessary escalation audits."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 8140,
+    "completion_tokens": 1601,
+    "cost": 0.00465408
+  },
+  "audits_judged": [
+    "20260916-150840-qwen-qwen3-235b-a22b-2507.md",
+    "20260916-150900-deepseek-deepseek-v4-flash.md",
+    "20260915-231339-openrouter-free.md"
+  ]
+}

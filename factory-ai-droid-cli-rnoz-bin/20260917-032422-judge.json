@@ -1,0 +1,30 @@
+{
+  "package": "factory-ai-droid-cli-rnoz-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Two models reviewed all files and found no security issues. The package downloads binaries from the stated upstream (downloads.factory.ai) with SHA256 checksum verification, preventing substitution attacks. The Python patching scripts (patch_title.py, patch_keybindings.py) operate only on local files with no network activity or data exfiltration. The .install script contains only informational echo statements. All behaviors align with the package's stated purpose of distributing Factory AI's CLI with binary patches for optimization.",
+  "disagreement_analysis": "The disagreement was caused by a tool error, not a security finding. Report 1 (qwen3-235b) returned inconclusive because the LLM API failed with HTTP 400 when reviewing patch_keybindings.py. Report 2 (deepseek-v4-flash) successfully reviewed the same file and found it safe. Report 3 (openrouter/free, advisory only) also reviewed all files and found them safe. The coverage gap was filled by the other models, revealing unanimous agreement on safety.",
+  "coverage_issues": [
+    "Report 1 (qwen3-235b) failed to review patch_keybindings.py due to LLM API error (HTTP 400 BadRequestError)"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "When a model fails to review a file due to a tool error (API timeout, HTTP error), the audit system should automatically retry or flag the gap for other models to cover, rather than returning inconclusive",
+    "Advisory reports should be clearly distinguished from voting reports in the UI to avoid confusion about disagreement",
+    "Version mismatches between reports (0.219.0 vs 0.221.0) should be flagged as potential coverage issues, even for advisory reports"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 9238,
+    "completion_tokens": 1648,
+    "cost": 0.0050656
+  },
+  "audits_judged": [
+    "20260917-032016-qwen-qwen3-235b-a22b-2507.md",
+    "20260917-032132-deepseek-deepseek-v4-flash.md",
+    "20260915-231729-openrouter-free.md"
+  ]
+}

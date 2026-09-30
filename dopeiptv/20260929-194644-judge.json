@@ -1,0 +1,29 @@
+{
+  "package": "dopeiptv",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD is a standard Python package build fetching from a pinned git tag with a valid sha256sum. The build and package functions use standard python tools without any suspicious network operations or code execution. The .SRCINFO is standard auto-generated metadata. The disagreements were solely caused by API and parsing errors when evaluating the .SRCINFO file in two of the reports, not by actual security concerns.",
+  "disagreement_analysis": "The 'inconclusive' verdicts from qwen and openrouter were caused by tool errors (HTTP 400 BadRequestError and parsing failure) when auditing the .SRCINFO file, not by any malicious content. The deepseek model successfully audited both files and correctly found them safe.",
+  "coverage_issues": [
+    "qwen and openrouter models failed to evaluate .SRCINFO due to API and parsing errors, resulting in missing verdict signals for that file."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "The audit tool should handle API or parsing errors for non-executable metadata files like .SRCINFO more gracefully. If the primary PKGBUILD is safe and no other files exist, a failure on .SRCINFO should not necessarily fail the entire audit.",
+    "Since .SRCINFO is auto-generated from PKGBUILD and contains no executable code, the tool could consider skipping its audit or deprioritizing it if PKGBUILD is already deemed safe, to save tokens and avoid unnecessary API failures."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 4782,
+    "completion_tokens": 1516,
+    "cost": 0.00347072
+  },
+  "audits_judged": [
+    "20260929-193304-qwen-qwen3-235b-a22b-2507.md",
+    "20260929-193303-deepseek-deepseek-v4-flash.md",
+    "20260920-032204-openrouter-free.md"
+  ]
+}

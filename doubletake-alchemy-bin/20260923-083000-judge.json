@@ -1,0 +1,30 @@
+{
+  "package": "doubletake-alchemy-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Standard -bin package downloading prebuilt binaries from official GitHub releases with pinned SHA-256 checksums. PKGBUILD contains only variable definitions and a standard package() function with no executable code at global scope. No .install hooks, no patches, no suspicious network activity or code execution. The inconclusive verdict from qwen was due to an API error (HTTP 400), not a security finding.",
+  "disagreement_analysis": "The disagreement stems from a tool error in the qwen report (HTTP 400 BadRequestError when auditing .SRCINFO), which caused it to return inconclusive. The deepseek report successfully audited all files and found them safe. The openrouter/free report is advisory-only and doesn't count toward the verdict. There is no actual security disagreement.",
+  "coverage_issues": [
+    "qwen report failed to audit .SRCINFO due to API error (HTTP 400), resulting in inconclusive verdict"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Tool errors (API failures, timeouts) should trigger automatic retry or fallback to alternative models to prevent inconclusive verdicts",
+    "When one model fails due to tool error, the audit system should recognize this as a coverage gap rather than a security disagreement",
+    "Standard -bin packages with pinned checksums from official upstream sources are low-risk and should be processed efficiently"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5881,
+    "completion_tokens": 1182,
+    "cost": 0.0033948800000000003
+  },
+  "audits_judged": [
+    "20260923-080931-qwen-qwen3-235b-a22b-2507.md",
+    "20260923-081037-deepseek-deepseek-v4-flash.md",
+    "20260922-201137-openrouter-free.md"
+  ]
+}

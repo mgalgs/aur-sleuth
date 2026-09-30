@@ -1,0 +1,32 @@
+{
+  "package": "softmaker-office-2026-bin",
+  "correct_verdict": "safe",
+  "confidence": "medium",
+  "reasoning": "The qwen model flagged a discrepancy: the PKGBUILD declares a .tgz source with checksums but package() extracts office2026.tar.lzma which isn't in the source array. While this is a real packaging anomaly, it fails the threat model test. A maintainer injecting malicious code would not create a broken package that fails to build\u2014makepkg would error when the file doesn't exist. This is either a typo (wrong filename) or a broken package, neither of which serves an attacker's purpose. The declared source has valid checksums, and no code executes fetched content or contacts unauthorized hosts. The other two models correctly identified this as standard binary packaging with no malicious indicators.",
+  "disagreement_analysis": "The qwen model detected a filename mismatch between declared source (.tgz) and extracted file (.tar.lzma) and classified it as a supply-chain vulnerability. The deepseek model reviewed the same PKGBUILD but treated it as standard binary packaging without noting the discrepancy. The disagreement stems from different interpretations: qwen saw an integrity verification bypass, while deepseek saw normal packaging. The openrouter advisory also marked it safe. The qwen finding is a false positive because a broken build serves no attacker purpose.",
+  "coverage_issues": [
+    "qwen model had API errors (HTTP 400) for LICENSES/0BSD.txt and planmaker-2026.desktop, resulting in inconclusive verdicts for those files"
+  ],
+  "false_positives": [
+    "PKGBUILD 'unlisted archive' finding: The filename mismatch between declared source and extracted file is a packaging error or typo, not a supply-chain attack. A broken package that fails to build provides no benefit to an attacker. The threat model requires that injected code 'serve no purpose the package claims'\u2014a non-functional package serves no purpose at all, including malicious ones."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models should distinguish between packaging errors (typos, broken builds) and actual supply-chain attacks. A discrepancy that causes build failure is not an attack vector\u2014attackers need packages to install successfully.",
+    "When a PKGBUILD references a file not in the source array, the model should check whether this could be a prepare()/build() transformation before flagging as unsourced. If no transformation exists, it's likely a broken package, not an injection.",
+    "The threat model test 'does it serve no purpose the package claims?' should be applied more rigorously. Packaging hygiene issues that break functionality are not security vulnerabilities."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 17686,
+    "completion_tokens": 4806,
+    "cost": 0.0118112
+  },
+  "audits_judged": [
+    "20260928-232624-qwen-qwen3-235b-a22b-2507.md",
+    "20260928-232645-deepseek-deepseek-v4-flash.md",
+    "20260928-201720-openrouter-free.md"
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "package": "monique",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The qwen report is a tool error (HTTP 400 API failure) and carries no verdict signal. The deepseek report is the only valid signal: it reviewed both PKGBUILD and .SRCINFO, found standard Python packaging with pinned GitHub release source and SHA-256 checksum, and identified no injection patterns. The polkit rule for SDDM Xsetup is a legitimate display manager configuration feature, not an injection. No malicious code, no execution of fetched content, no fetching from unrelated hosts.",
+  "disagreement_analysis": "The disagreement is artificial: qwen3-235b failed with HTTP 400 errors on both files, producing no verdict. deepseek-v4-flash successfully reviewed both files and returned SAFE. There is no substantive disagreement between valid analyses.",
+  "coverage_issues": [
+    "qwen/qwen3-235b-a22b-2507: API request failed (HTTP 400 BadRequestError) for both PKGBUILD and .SRCINFO - tool error, no verdict signal"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Tool errors (API failures, timeouts) should be clearly distinguished from substantive inconclusive verdicts in the frontmatter to avoid triggering unnecessary escalation audits",
+    "When one model errors out completely and another returns a clean SAFE with detailed reasoning on the same files, the system should recognize this as sufficient signal rather than flagging disagreement"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 3413,
+    "completion_tokens": 1021,
+    "cost": 0.00239904
+  },
+  "audits_judged": [
+    "20260925-151408-qwen-qwen3-235b-a22b-2507.md",
+    "20260925-151432-deepseek-deepseek-v4-flash.md"
+  ]
+}

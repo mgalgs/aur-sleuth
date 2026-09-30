@@ -1,0 +1,30 @@
+{
+  "package": "hermes-agent",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The source tarball is protected by a pinned SHA256 checksum, which closes the risk of a supply-chain swap attack. The mismatch between pkgver (0.21.4) and the source tag (v2026.9.21) is a packaging hygiene issue, not a malicious injection. The tag date matches the audit date (2026-09-21), indicating a date-based versioning scheme. Deepseek correctly identified this, while Qwen hallucinated a security risk.",
+  "disagreement_analysis": "Qwen flagged the version mismatch as a malicious bait-and-switch, failing to recognize that the tag date matches the current audit date and that the pinned checksum prevents any payload substitution. Deepseek correctly assessed that the pinned checksum mitigates the swap risk and the mismatch is merely a hygiene issue.",
+  "coverage_issues": [
+    "qwen3-235b-a22b-2507 failed to audit PKGBUILD and .gitignore due to HTTP 400 API errors, leaving the primary build script unaudited."
+  ],
+  "false_positives": [
+    "Qwen's UNSAFE verdict on .SRCINFO: The 'future-dated' tag v2026.9.21 matches the audit date (2026-09-21), indicating date-based versioning. Furthermore, the pinned sha256sum closes the swap risk, making any version mismatch a hygiene issue rather than an injection."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models may misinterpret date-based tags (CalVer) as 'future-dated' spoofing if the date exceeds their training data cutoff. The audit prompt should explicitly clarify that pinned checksums close the supply-chain swap risk, rendering version/tag mismatches a hygiene issue rather than a security vulnerability.",
+    "Implement retry logic or fallback models for LLM API errors (e.g., HTTP 400) to prevent coverage gaps in critical files like the PKGBUILD."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5891,
+    "completion_tokens": 2763,
+    "cost": 0.00542176
+  },
+  "audits_judged": [
+    "20260921-232146-qwen-qwen3-235b-a22b-2507.md",
+    "20260921-232233-deepseek-deepseek-v4-flash.md"
+  ]
+}

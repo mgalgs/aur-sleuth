@@ -1,0 +1,29 @@
+{
+  "package": "visual-studio-code-insiders-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard binary wrapper for VS Code Insiders. The PKGBUILD downloads official binaries from Microsoft with pinned SHA-256 checksums. The install script only prints informational messages, and the launcher script reads user-local config. There are no supply-chain injection vectors. The 'inconclusive' result from qwen was due to transient API errors, not security concerns.",
+  "disagreement_analysis": "The disagreement was triggered by qwen returning 'inconclusive' due to HTTP 400 API errors when auditing .SRCINFO and the .install script. deepseek successfully audited all files and returned 'safe'. Since qwen's failure was a tool error, it carries no verdict signal, leaving deepseek's 'safe' verdict as the only valid assessment.",
+  "coverage_issues": [
+    "qwen failed to review .SRCINFO and visual-studio-code-insiders-bin.install due to LLM API errors (HTTP 400)."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "The audit tool should implement retries or fallback mechanisms for transient LLM API errors (e.g., HTTP 400) to prevent incomplete file reviews and spurious 'inconclusive' package verdicts.",
+    "Models correctly identified that unquoted variable expansions in user-config-driven launcher scripts are not supply-chain risks; this context should be reinforced in prompts to prevent future models from flagging them as false positives."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 7720,
+    "completion_tokens": 1864,
+    "cost": 0.004856320000000001
+  },
+  "audits_judged": [
+    "20260918-030131-qwen-qwen3-235b-a22b-2507.md",
+    "20260918-030135-deepseek-deepseek-v4-flash.md",
+    "20260917-080831-openrouter-free.md"
+  ]
+}

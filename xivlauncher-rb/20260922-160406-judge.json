@@ -1,0 +1,30 @@
+{
+  "package": "xivlauncher-rb",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The only fully successful audit (deepseek-v4-flash) reviewed all 6 maintainer files and found no malicious code. The PKGBUILD uses a standard VCS source with a pinned tag, and the build/install steps are routine for a .NET application. The wrapper script simply sets an environment variable and launches the binary. The other reports resulted in 'inconclusive' solely due to tool/API errors (HTTP 400s and parsing failures), not because of any security concerns. The advisory report also found no issues.",
+  "disagreement_analysis": "The disagreement was caused entirely by tool and API failures in the other models (HTTP 400 errors for qwen, parsing errors for openrouter/free), not by genuine security ambiguities. The single fully successful model correctly identified the package as safe.",
+  "coverage_issues": [
+    "qwen/qwen3-235b-a22b-2507 failed with HTTP 400 errors on .gitignore, .SRCINFO, and xivlauncher-rb.",
+    "openrouter/free failed to parse model responses for 0BSD and XIVLauncher.desktop."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Distinguish tool/API failures from security inconclusiveness: The audit tool should flag HTTP 400s and parsing errors as infrastructure failures rather than mixing them into the security verdict.",
+    "Free-tier model routing: The openrouter/free router selected models that failed to follow the required output schema, causing parsing errors. Enforce stricter output formatting or use more capable models for parsing."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 8493,
+    "completion_tokens": 2004,
+    "cost": 0.00528288
+  },
+  "audits_judged": [
+    "20260922-153031-qwen-qwen3-235b-a22b-2507.md",
+    "20260922-153129-deepseek-deepseek-v4-flash.md",
+    "20260905-233450-openrouter-free.md"
+  ]
+}

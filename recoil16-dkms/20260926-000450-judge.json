@@ -1,0 +1,30 @@
+{
+  "package": "recoil16-dkms",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The only valid vote comes from deepseek-v4-flash, which successfully reviewed all files including recoil16.install and found no malicious behavior. The other models failed to evaluate recoil16.install due to API and parsing errors, which are tool failures rather than security findings. The install script performs standard hardware management tasks (sysfs writes, udev cleanup) consistent with the package's stated purpose.",
+  "disagreement_analysis": "The disagreement was caused by tool errors in two of the models (an HTTP 400 error and a parsing error) when evaluating recoil16.install, leading to inconclusive verdicts. The third model successfully parsed and evaluated the file, finding it safe.",
+  "coverage_issues": [
+    "qwen/qwen3-235b-a22b-2507 failed to evaluate recoil16.install due to an HTTP 400 API error.",
+    "openrouter/free failed to evaluate recoil16.install due to a parsing error."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Implement retry logic for LLM API calls to prevent transient HTTP 400 errors from causing inconclusive package verdicts.",
+    "Improve prompt parsing robustness to handle slight variations in model output formats, preventing parse errors from invalidating a file review."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 6778,
+    "completion_tokens": 1806,
+    "cost": 0.00448064
+  },
+  "audits_judged": [
+    "20260925-233725-qwen-qwen3-235b-a22b-2507.md",
+    "20260925-233727-deepseek-deepseek-v4-flash.md",
+    "20260925-202713-openrouter-free.md"
+  ]
+}

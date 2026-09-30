@@ -1,0 +1,31 @@
+{
+  "package": "command-code",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD downloads from official sources (registry.npmjs.org with sha512sums, nodejs.org for CachyOS fallback) with no evidence of malicious injection. The CachyOS Node.js fallback is a transparent workaround from the official Node.js distribution site, not a supply-chain risk. All executable logic is contained in package() with --ignore-scripts preventing upstream post-install hooks. No top-level code execution, no fetching from unrelated hosts, no obfuscation.",
+  "disagreement_analysis": "The disagreement is artifactual, not substantive. Qwen returned 'inconclusive' due to an HTTP 400 API error when reviewing .SRCINFO, not due to security concerns. Openrouter/free (advisory-only, doesn't count as a vote) had a parse error on LICENSE. Deepseek correctly reviewed all files and returned 'safe'. All models that successfully reviewed the PKGBUILD agreed it contains standard AUR practices with no malicious behavior.",
+  "coverage_issues": [
+    "Qwen: .SRCINFO review failed with HTTP 400 API error, causing inconclusive verdict despite PKGBUILD being safe",
+    "Openrouter/free: LICENSE review failed with parse error, causing inconclusive verdict"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Tool errors (API failures, parse errors) should not produce 'inconclusive' security verdicts when the actual security-relevant files were successfully reviewed and found safe. The audit system should distinguish between 'inconclusive due to tool error' and 'inconclusive due to genuine security uncertainty'.",
+    "Models correctly identified the CachyOS Node.js fallback pattern as legitimate. This pattern (downloading from official upstream without checksum pinning for build-time workarounds) should be documented as a known-safe pattern to prevent future false positives.",
+    "When multiple models agree on 'safe' for the PKGBUILD (the primary attack surface), tool errors on metadata files (.SRCINFO, LICENSE) should not override the substantive security analysis."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 6082,
+    "completion_tokens": 1433,
+    "cost": 0.00378048
+  },
+  "audits_judged": [
+    "20260929-111847-qwen-qwen3-235b-a22b-2507.md",
+    "20260929-111833-deepseek-deepseek-v4-flash.md",
+    "20260929-033656-openrouter-free.md"
+  ]
+}

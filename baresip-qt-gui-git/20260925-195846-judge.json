@@ -1,0 +1,29 @@
+{
+  "package": "baresip-qt-gui-git",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The disagreement is entirely due to a tool error in the first report, which failed to evaluate the PKGBUILD because of an HTTP 400 API error. The second report successfully reviewed all files and correctly identified the package as a standard, safe VCS AUR package. The third report is advisory and does not count as a vote. The PKGBUILD uses standard git+ sourcing and SKIP checksums, which are normal for -git packages and do not constitute a malicious injection by the maintainer.",
+  "disagreement_analysis": "The first model (qwen) crashed with an HTTP 400 error when attempting to review the PKGBUILD, resulting in an 'inconclusive' verdict. The second model (deepseek) successfully analyzed the PKGBUILD and found it safe. The disagreement is a tool failure, not a genuine difference in security assessment.",
+  "coverage_issues": [
+    "qwen/qwen3-235b-a22b-2507 failed to review the PKGBUILD due to an HTTP 400 API error, leaving a coverage gap that triggered the escalation."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Handle LLM API errors (like HTTP 400) by retrying the request or falling back to the initial PKGBUILD audit result, rather than marking the file as inconclusive and triggering an unnecessary escalation.",
+    "Ensure that standard VCS packaging patterns (git+ URLs, SKIP checksums, mutable branches) are consistently recognized as safe and not flagged as hygiene issues that could blur the verdict boundary."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5976,
+    "completion_tokens": 1760,
+    "cost": 0.0041651200000000005
+  },
+  "audits_judged": [
+    "20260925-151632-qwen-qwen3-235b-a22b-2507.md",
+    "20260925-151603-deepseek-deepseek-v4-flash.md",
+    "20260925-122747-openrouter-free.md"
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "package": "cybervis",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD contains standard build instructions to download a C source file and compile it with gcc. There is no execution of fetched content, no obfuscated commands, and no malicious build hooks. The use of an unpinned source (SKIP) and a raw GitHub URL are packaging hygiene concerns, not supply-chain injections. The second model correctly identified this and audited the PKGBUILD successfully.",
+  "disagreement_analysis": "The first model resulted in 'inconclusive' due to an HTTP 400 API error when auditing the PKGBUILD. It also initially produced a false positive on the .SRCINFO regarding hygiene concerns (unpinned source, raw URL) before self-correcting. The second model successfully audited the PKGBUILD and found no malicious code.",
+  "coverage_issues": [
+    "qwen/qwen3-235b-a22b-2507 failed to audit the PKGBUILD due to an HTTP 400 API error."
+  ],
+  "false_positives": [
+    "qwen's initial .SRCINFO assessment flagged the unpinned source and raw GitHub URL as a supply-chain risk, which is a packaging hygiene issue, not an injection."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models frequently confuse packaging hygiene (e.g., unpinned sources, raw GitHub URLs, SKIP checksums) with supply-chain injection. Prompts should explicitly decouple these concepts to prevent false positives.",
+    "API errors on critical files like PKGBUILD should trigger automatic retries or fallback mechanisms to prevent unnecessary inconclusive verdicts."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 4187,
+    "completion_tokens": 2240,
+    "cost": 0.00420704
+  },
+  "audits_judged": [
+    "20260920-152316-qwen-qwen3-235b-a22b-2507.md",
+    "20260920-152308-deepseek-deepseek-v4-flash.md"
+  ]
+}

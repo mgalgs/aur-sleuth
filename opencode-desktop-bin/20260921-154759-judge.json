@@ -1,0 +1,28 @@
+{
+  "package": "opencode-desktop-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Both models agree the PKGBUILD is safe. It downloads a prebuilt .deb from the official upstream domain with pinned checksums and repackages it, including a standard Electron shim. The only disagreement was due to a transient API error in the first model when auditing .SRCINFO, which the second model successfully audited and cleared.",
+  "disagreement_analysis": "The first model returned 'inconclusive' solely because of an HTTP 400 API error when auditing .SRCINFO. The second model successfully audited .SRCINFO and found it safe. There is no actual security disagreement between the models' reasoning.",
+  "coverage_issues": [
+    "Report 1 failed to audit .SRCINFO due to an LLM API error (HTTP 400)."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Transient API errors for non-executable metadata files like .SRCINFO should not force an overall 'inconclusive' package verdict if the executable PKGBUILD is audited and deemed safe.",
+    "Models correctly recognize standard Electron -bin repackaging patterns (extracting .deb, replacing bundled Electron with system Electron via shim) as safe when checksums are pinned and sources are from the official domain."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 4999,
+    "completion_tokens": 1315,
+    "cost": 0.00328288
+  },
+  "audits_judged": [
+    "20260921-150214-qwen-qwen3-235b-a22b-2507.md",
+    "20260921-150139-deepseek-deepseek-v4-flash.md"
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "package": "assistant",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD performs a standard binary repackage of a vendor-supplied .deb file with a pinned MD5 checksum. The download is over HTTPS from what appears to be the vendor's own domain (a Russian Punycode domain). The package() function only extracts and installs files from the .deb, including a systemd service, which is normal for applications requiring background execution. There is no evidence of code injection: no execution of fetched content, no fetching from unrelated hosts, no obfuscated payloads. The concerns raised by the qwen model (Punycode domain, MD5 weakness, binary blob) are packaging hygiene issues, not injection indicators. Per the threat model, 'violates packaging best practices' is never grounds for unsafe by itself.",
+  "disagreement_analysis": "The qwen model flagged the Punycode domain (xn--80akicokc0aablc.xn--p1ai) as 'obfuscated' and treated the binary repackage pattern as a supply-chain risk. This conflates suspicious appearance with evidence of injection. The deepseek model correctly recognized this as a standard vendor binary repackage with pinned integrity. The disagreement stems from qwen's overreaction to: (1) Punycode domains (which are legitimate for internationalized domain names), (2) binary repackages (common in AUR for proprietary software), and (3) MD5 checksums (a hygiene concern, not an injection vector when pinned and downloaded over HTTPS).",
+  "coverage_issues": [],
+  "false_positives": [
+    "Binary blob from obfuscated domain: The Punycode domain is likely the legitimate vendor's domain for this Russian software product. Suspicion alone is not evidence of injection.",
+    "Systemd service install: Normal for applications requiring background execution; not an injection indicator.",
+    "MD5 is cryptographically broken: True but irrelevant to injection detection. The checksum is pinned and the download is over HTTPS, preventing swap attacks."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models must distinguish between packaging hygiene concerns (weak checksums, binary repackages, unusual domains) and actual injection evidence (executing fetched content, fetching from unrelated hosts).",
+    "Punycode/internationalized domain names should not be automatically flagged as malicious without evidence they are not the vendor's domain.",
+    "Binary repackages with pinned checksums downloaded over HTTPS should be considered safe unless there is positive evidence of injection, not merely suspicion about the source.",
+    "The audit tool should reinforce that 'supply-chain risk' from binary packages is a general concern, not an injection finding, unless the package fetches from a host it has no stated relationship with."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 7049,
+    "completion_tokens": 2275,
+    "cost": 0.00516768
+  },
+  "audits_judged": [
+    "20260927-073631-qwen-qwen3-235b-a22b-2507.md",
+    "20260927-073915-deepseek-deepseek-v4-flash.md"
+  ]
+}
