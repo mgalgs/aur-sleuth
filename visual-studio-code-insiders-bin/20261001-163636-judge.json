@@ -1,0 +1,30 @@
+{
+  "package": "visual-studio-code-insiders-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard AUR binary repackaging of official Microsoft VSCode Insiders. All sources point to the legitimate Microsoft CDN (vscode.download.prss.microsoft.com) with SHA256 checksums pinning the artifacts. The PKGBUILD contains no executable code in global scope. The .install script only prints informational messages. The wrapper script (visual-studio-code-insiders-bin.sh) reads user config and execs the installed binary - standard launcher behavior. No injection patterns, no suspicious network requests, no obfuscated code.",
+  "disagreement_analysis": "The 'inconclusive safe' disagreement was caused by a tool error, not a security finding. The qwen/qwen3-235b-a22b-2507 model failed with HTTP 400 BadRequestError when attempting to audit visual-studio-code-insiders-bin.sh, resulting in an inconclusive verdict. The deepseek/deepseek-v4-flash model successfully reviewed the same file and correctly identified it as a benign launcher wrapper. The openrouter/free report (advisory: true) also confirmed safety but doesn't count as a vote.",
+  "coverage_issues": [
+    "qwen/qwen3-235b-a22b-2507: API error (HTTP 400) prevented review of visual-studio-code-insiders-bin.sh - tool failure, not security finding"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Tool errors (API failures, timeouts) should not produce 'inconclusive' security verdicts - they should be flagged as coverage gaps and either retried or excluded from the final verdict calculation",
+    "When one model fails due to tool error and another successfully reviews the same files, the successful review should carry the verdict weight rather than defaulting to inconclusive",
+    "The audit system should distinguish between 'could not analyze' (tool failure) and 'analyzed but uncertain' (genuine security ambiguity) - these require different handling"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 8414,
+    "completion_tokens": 1214,
+    "cost": 0.0042464
+  },
+  "audits_judged": [
+    "20261001-150736-qwen-qwen3-235b-a22b-2507.md",
+    "20261001-150713-deepseek-deepseek-v4-flash.md",
+    "20260930-203806-openrouter-free.md"
+  ]
+}
