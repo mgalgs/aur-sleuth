@@ -1,0 +1,32 @@
+{
+  "package": "ruffle-demo-nightly",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "All models that successfully reviewed the PKGBUILD found it to be safe. The package is a standard AUR VCS package that builds Ruffle (Flash emulator) from the official GitHub repository using standard tooling (cargo, npm). No malicious code, suspicious network operations, or data exfiltration patterns were detected. The disagreements between reports were caused by tool errors (API failures, parsing failures) rather than genuine security concerns. The .gitignore and .SRCINFO files are non-executable metadata files with no security implications.",
+  "disagreement_analysis": "The disagreement was caused by tool errors, not security concerns. Qwen's audit failed on .gitignore due to an HTTP 400 API error, resulting in an inconclusive verdict despite finding the PKGBUILD safe. Openrouter/free (advisory only) failed to parse its own output for .SRCINFO, outputting 'User Safety: unsafe' in an unexpected format. Deepseek successfully reviewed all files and correctly identified the package as safe, noting minor packaging quirks (duplicate source line, sha256sums for git source) but correctly classifying them as hygiene issues rather than security threats.",
+  "coverage_issues": [
+    "Qwen model experienced API failure (HTTP 400) when reviewing .gitignore, causing inconclusive verdict",
+    "Openrouter/free model output format was inconsistent, causing parsing failure for .SRCINFO review"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Tool errors (API failures, parsing failures) should not cause the entire audit to be marked inconclusive when the security-relevant files (PKGBUILD) have been successfully reviewed and found safe",
+    "Non-executable files like .gitignore should be handled gracefully even if the model fails to review them, as they have no security implications for AUR packages",
+    "Models should be prompted to output consistent, parseable formats to avoid parsing failures that lead to inconclusive results",
+    "Packaging quirks (duplicate source lines, checksums for VCS sources) should be clearly distinguished from security threats in model reasoning to avoid confusion"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 6268,
+    "completion_tokens": 1398,
+    "cost": 0.0037952000000000003
+  },
+  "audits_judged": [
+    "20261003-071048-qwen-qwen3-235b-a22b-2507.md",
+    "20261003-071106-deepseek-deepseek-v4-flash.md",
+    "20260929-080653-openrouter-free.md"
+  ]
+}
