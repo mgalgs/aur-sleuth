@@ -1,0 +1,30 @@
+{
+  "package": "t3code-nightly-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard AUR binary package that downloads a pinned AppImage and LICENSE file from the official upstream GitHub repository (pingdotgg/t3code) with SHA-256 checksums. The PKGBUILD contains no dangerous top-level code, no suspicious network operations, and follows normal AppImage packaging patterns (extraction, installation to /opt, SUID on chrome-sandbox which is standard for Chromium-based apps). The only disagreement arose from a tool error in the qwen model, not from security concerns.",
+  "disagreement_analysis": "The qwen model encountered an HTTP 400 API error when reviewing the PKGBUILD, resulting in an inconclusive verdict for that file. The deepseek model successfully reviewed both files and found them safe. The openrouter report is advisory-only and does not count as a vote. The disagreement is purely due to a tool failure, not substantive security analysis.",
+  "coverage_issues": [
+    "qwen model failed to review PKGBUILD due to API error (HTTP 400 BadRequestError)"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Tool errors (API failures, timeouts) should be clearly distinguished from security-based inconclusive verdicts in the final result",
+    "When a model fails due to infrastructure errors, the audit system should either retry or clearly flag the coverage gap rather than marking the entire package as inconclusive",
+    "Standard Chromium SUID sandbox patterns (chrome-sandbox 4755) are well-recognized by models and should not trigger false positives"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5315,
+    "completion_tokens": 1307,
+    "cost": 0.00337376
+  },
+  "audits_judged": [
+    "20261003-230534-qwen-qwen3-235b-a22b-2507.md",
+    "20261003-230556-deepseek-deepseek-v4-flash.md",
+    "20261003-080427-openrouter-free.md"
+  ]
+}
