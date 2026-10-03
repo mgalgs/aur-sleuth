@@ -1,0 +1,30 @@
+{
+  "package": "poc-hello",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard Go application with pinned upstream source (GitHub tarball), SHA-256 checksum verification, and normal build/package functions. No executable code in global scope, no suspicious network activity, no obfuscation, no .install hooks. The 'disagreement' is purely a tool error (API failure on .SRCINFO), not a security concern.",
+  "disagreement_analysis": "The qwen model returned 'inconclusive' solely due to an HTTP 400 API error when reviewing .SRCINFO, not due to any security finding. The PKGBUILD was correctly assessed as safe. The deepseek model successfully reviewed both files and found them safe. The openrouter/free report is advisory-only but also found everything safe. There is no genuine security disagreement.",
+  "coverage_issues": [
+    "qwen model failed to review .SRCINFO due to API error (HTTP 400 BadRequestError), resulting in inconclusive verdict despite no security concerns"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Tool errors (API failures, timeouts) on non-security-critical files like .SRCINFO should not block a final verdict when the security-relevant files (PKGBUILD) are successfully reviewed and found safe",
+    "The audit tool should distinguish between 'incomplete review due to tool error' and 'inconclusive due to security uncertainty' - these require different handling",
+    ".SRCINFO is a metadata-only file with no executable code; failures to review it should be noted but not override successful PKGBUILD audits"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 4929,
+    "completion_tokens": 1211,
+    "cost": 0.00312736
+  },
+  "audits_judged": [
+    "20261003-031314-qwen-qwen3-235b-a22b-2507.md",
+    "20261003-031311-deepseek-deepseek-v4-flash.md",
+    "20261003-002645-openrouter-free.md"
+  ]
+}
