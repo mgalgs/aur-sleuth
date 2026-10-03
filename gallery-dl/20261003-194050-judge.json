@@ -1,0 +1,30 @@
+{
+  "package": "gallery-dl",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The deepseek model successfully reviewed all maintainer files (PKGBUILD, .SRCINFO, .nvchecker.toml) and found no malicious injections. The PKGBUILD uses standard build commands and fetches source from the official upstream repository with proper signature and checksum verification. The other two models returned inconclusive solely due to output truncation and parsing errors, not security findings.",
+  "disagreement_analysis": "The disagreement is entirely due to model output failures. The qwen and openrouter models failed to generate parseable or complete XML responses for the PKGBUILD, resulting in 'inconclusive' verdicts. The deepseek model correctly parsed and evaluated the files without issue.",
+  "coverage_issues": [
+    "qwen model truncated its response, failing to provide a complete security assessment for the PKGBUILD.",
+    "openrouter model failed to format the decision tags correctly, causing a parsing error for the PKGBUILD."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Implement robust XML parsing with fallbacks or regex extraction to handle truncated or slightly malformed model outputs, preventing unnecessary inconclusive verdicts.",
+    "Ensure system prompts strongly enforce the required output schema to avoid parsing failures that trigger false disagreements and escalation workflows."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 4796,
+    "completion_tokens": 1530,
+    "cost": 0.0034931199999999997
+  },
+  "audits_judged": [
+    "20261003-190808-qwen-qwen3-235b-a22b-2507.md",
+    "20261003-190813-deepseek-deepseek-v4-flash.md",
+    "20260919-160343-openrouter-free.md"
+  ]
+}
