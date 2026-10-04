@@ -1,0 +1,29 @@
+{
+  "package": "hypergrep",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The only disagreement stems from a tool error (HTTP 400) in the qwen model when reviewing hypergrep-arch.patch, rendering its inconclusive verdict void. The deepseek model successfully reviewed the patch and correctly identified it as containing standard, benign build configuration changes (removing -march=native, updating include paths, and using pkg-config). All other files (PKGBUILD, .SRCINFO, .gitignore) are standard and safe. The openrouter report is advisory and corroborates the safety of the patch.",
+  "disagreement_analysis": "The qwen model failed to audit hypergrep-arch.patch due to an LLM API error (HTTP 400 BadRequestError), resulting in an inconclusive package verdict. The deepseek model successfully audited the same file and found it to be a standard, safe packaging patch. The disagreement is purely an artifact of a transient API failure, not a difference in security assessment.",
+  "coverage_issues": [
+    "qwen/qwen3-235b-a22b-2507 failed to review hypergrep-arch.patch due to an HTTP 400 API error."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Implement retry logic or fallback mechanisms for individual file audits when an LLM API request fails, preventing a single file error from cascading into an inconclusive package verdict.",
+    "Ensure that transient API errors (like HTTP 400/500) are logged as coverage issues rather than influencing the final security verdict of the package."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 7137,
+    "completion_tokens": 1507,
+    "cost": 0.0042128
+  },
+  "audits_judged": [
+    "20261002-232652-qwen-qwen3-235b-a22b-2507.md",
+    "20261002-232647-deepseek-deepseek-v4-flash.md",
+    "20261002-202020-openrouter-free.md"
+  ]
+}

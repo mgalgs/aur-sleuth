@@ -1,0 +1,31 @@
+{
+  "package": "comfy-desktop",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The disagreement is between 'inconclusive' (qwen3-235b) and 'safe' (deepseek-v4-flash). The inconclusive result is due to an API error (HTTP 400) when reviewing comfy-desktop.sh, not a substantive security concern. The deepseek model successfully reviewed all 7 files including comfy-desktop.sh, correctly identifying it as a standard Electron launch script with a placeholder variable replaced during build. The PKGBUILD follows standard AUR patterns: versioned tarball from official GitHub repo with SHA-256 checksums, pnpm with frozen lockfile, and routine cleanup of platform-specific node modules. No injection patterns, no unauthorized network requests, no obfuscated code.",
+  "disagreement_analysis": "The disagreement is a tool failure, not a substantive security disagreement. qwen3-235b encountered an HTTP 400 BadRequestError when auditing comfy-desktop.sh, forcing an inconclusive verdict. deepseek-v4-flash successfully reviewed the same file and found it to be a benign Electron launch script. The third report (openrouter/free) is advisory-only, failed to parse its response, and reviewed only 1 of 7 files, so it carries no verdict signal.",
+  "coverage_issues": [
+    "qwen3-235b: API error (HTTP 400) prevented review of comfy-desktop.sh",
+    "openrouter/free: Only reviewed PKGBUILD (1 of 7 files), failed to parse model response"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "API errors on individual files should not force package-level inconclusive verdicts when other models successfully review those files",
+    "Advisory reports that fail to parse should be excluded from disagreement calculations entirely",
+    "Tool should track which specific files caused inconclusive results and prioritize re-auditing only those files rather than the entire package"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 7045,
+    "completion_tokens": 1187,
+    "cost": 0.00377376
+  },
+  "audits_judged": [
+    "20261002-231212-qwen-qwen3-235b-a22b-2507.md",
+    "20261002-231225-deepseek-deepseek-v4-flash.md",
+    "20261001-165704-openrouter-free.md"
+  ]
+}

@@ -1,0 +1,130 @@
+---
+package: recoil16ctl
+pkgver: 1.4.0
+pkgrel: 1
+result: safe
+model: deepseek/deepseek-v4-flash
+provider: custom
+aur_sleuth_rev: e76320400488b1dad2302211f4f5cfaf8522c9b1
+prompt_tokens: 12815
+completion_tokens: 3834
+total_tokens: 16649
+cost: 0.00160873482
+execution_time: 121.64
+files_reviewed: 4
+files_skipped: 0
+maintainer_files: 4
+source_fetch: not_attempted
+upstream_files: 0
+upstream_named_files: 0
+unpinned_sources: 0
+injection_attempts: 0
+date: 2026-09-30T19:32:38Z
+file_verdicts:
+  - file: .gitignore
+    status: safe
+    summary: Standard AUR .gitignore, no malicious content.
+  - file: recoil16ctl.install
+    status: safe
+    summary: Routine package install/removal cleanup; no malicious behavior detected.
+  - file: PKGBUILD
+    status: safe
+    summary: Standard Rust PKGBUILD with pinned checksum; no malicious or suspicious behavior found.
+  - file: .SRCINFO
+    status: safe
+    summary: Pinned, checksummed upstream tarball with normal metadata; no suspicious behavior.
+---
+
+Materializing recoil16ctl from local mirror...
+Materialized recoil16ctl
+Analyzing recoil16ctl AUR package with deepseek/deepseek-v4-flash
+Performing initial audit of PKGBUILD to ensure that we can safely run `makepkg`
+LLM auditresponse for PKGBUILD:
+ <security_assessment>
+<decision>SAFE</decision>
+<details>
+The PKGBUILD contains only standard top-level variable assignments, array definitions, and function definitions. No top-level command substitution, network fetch, or code execution occurs when `makepkg --printsrcinfo` sources the file. The potentially interesting operations (`cargo fetch`, `cargo build`, `cargo test`, and install commands) are inside `prepare()`, `build()`, `check()`, and `package()`, which are not executed by `--printsrcinfo`. The source URL points to the package's own upstream GitHub repository and the checksum is a fixed value, not `SKIP`. No malicious top-level behavior is present.
+</details>
+<evidence></evidence>
+<summary>Top-level PKGBUILD is safe; dangerous commands only run in functions not executed here.</summary>
+</security_assessment>
+
++ Initial PKGBUILD audit complete -- Top-level PKGBUILD is safe; dangerous commands only run in functions not executed here.
+Reviewing the 4 file(s) in the AUR repository.
+Reviewing the AUR repository's files...
+[0/4] Reviewing .SRCINFO...
+[0/4] Reviewing .SRCINFO, .gitignore...
+[0/4] Reviewing .SRCINFO, .gitignore, PKGBUILD...
+LLM auditresponse for .gitignore:
+<security_assessment>
+<decision>SAFE</decision>
+<details>
+This is a standard AUR .gitignore file that hides all files except the PKGBUILD, the install script, .SRCINFO, and itself. It contains no executable code, no network requests, no file operations, and no hidden logic. It is purely a git tracking configuration and poses no security risk.
+</details>
+<evidence></evidence>
+<summary>Standard AUR .gitignore, no malicious content.</summary>
+</security_assessment>
+
+[1/4] Reviewing .SRCINFO, PKGBUILD...
++ Reviewed .gitignore. Status: SAFE -- Standard AUR .gitignore, no malicious content.
+[1/4] Reviewing .SRCINFO, PKGBUILD, recoil16ctl.install...
+LLM auditresponse for recoil16ctl.install:
+<security_assessment>
+<decision>SAFE</decision>
+<details>
+The install script only prints informational messages during post_install and removes package-owned udev rules during post_remove. Removing charge-limit and charge-profile udev rules is standard cleanup for this type of hardware-control package, and reloading udev afterward is a normal post-uninstall step. There is no network activity, obfuscation, credential access, or execution of untrusted content. The script stays within the package's own configuration scope and does not modify unrelated system files beyond the udev rules it is responsible for.
+</details>
+<evidence>
+</evidence>
+<summary>Routine package install/removal cleanup; no malicious behavior detected.</summary>
+</security_assessment>
+
+[2/4] Reviewing .SRCINFO, PKGBUILD...
++ Reviewed recoil16ctl.install. Status: SAFE -- Routine package install/removal cleanup; no malicious behavior detected.
+LLM auditresponse for PKGBUILD:
+<security_assessment>
+<decision>SAFE</decision>
+<details>
+This PKGBUILD is a standard Rust/Cargo package build for `recoil16ctl`. It downloads a tagged tarball from the package&apos;s own GitHub repository, verifies a pinned SHA-256 checksum, fetches locked Cargo dependencies, builds with `cargo build --frozen --release`, runs tests, and installs the compiled binary plus shell completions and a KDE shortcut file into the package directory.
+
+No suspicious network endpoints, obfuscated commands, encoded payloads, or dangerous file operations were found. Commands such as `cargo fetch`, `cargo build`, `cargo test`, and `install` are all normal packaging operations for a Rust project. The `RUSTUP_TOOLCHAIN=stable` environment setting is a routine way to select a stable Rust toolchain. The completions are generated by the built binary into `$pkgdir`, which is standard behavior and does not modify the live system.
+
+The only minor observation is that the package relies on upstream tag/tarball availability and Rust dependency resolution, but this is normal for AUR packages and does not constitute malicious behavior. There is no evidence of code injection, data exfiltration, or supply-chain attack.
+</details>
+<evidence></evidence>
+<summary>Standard Rust PKGBUILD with pinned checksum; no malicious or suspicious behavior found.</summary>
+</security_assessment>
+
+[3/4] Reviewing .SRCINFO...
++ Reviewed PKGBUILD. Status: SAFE -- Standard Rust PKGBUILD with pinned checksum; no malicious or suspicious behavior found.
+LLM auditresponse for .SRCINFO:
+<security_assessment>
+<decision>SAFE</decision>
+<details>
+This .SRCINFO describes a Rust tool (recoil16ctl) built with cargo. The source is a pinned tarball from the project's own GitHub repository (https://github.com/amad3v/recoil16ctl/archive/refs/tags/v1.4.0.tar.gz) with a pinned sha256 checksum (be9f6952...), so the tarball is integrity-protected. Dependencies (glibc, libgcc, cargo, plus optdepends for DKMS drivers and KDE/GPU tooling) are consistent with the package's stated functionality.
+
+There is no obfuscated code, no encoded commands, no unexpected network hosts, no curl/wget piping to a shell, and no file operations outside the standard makepkg workflow. The only reference to an install script is the normal `install = recoil16ctl.install` field; the contents of that script are not present in this file, but its existence alone is standard AUR practice and not a red flag.
+
+The metadata is ordinary, reproducible packaging for a pinned upstream release. No evidence of supply-chain tampering was found in this file.
+</details>
+<evidence>
+</evidence>
+<summary>Pinned, checksummed upstream tarball with normal metadata; no suspicious behavior.</summary>
+</security_assessment>
+
+[4/4] Reviewing ...
++ Reviewed .SRCINFO. Status: SAFE -- Pinned, checksummed upstream tarball with normal metadata; no suspicious behavior.
+Reviewed all the AUR repository's files.
+Audit complete! Result: No issues found
+API Usage Summary
+  Models: deepseek/deepseek-v4-flash
+  Prompt Tokens: 12,815
+  Completion Tokens: 3,834
+  Total Tokens: 16,649
+  Total Cost: $0.001609
+  Execution Time: 121.64 seconds
+
+Final Status: SAFE
+
+
+No issues found.

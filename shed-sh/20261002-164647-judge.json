@@ -1,0 +1,32 @@
+{
+  "package": "shed-sh",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is safe. The disagreement stems solely from qwen3-235b flagging `verbump.sh` as unsafe due to its use of `#!/usr/bin/env shed` and the `vice` command. However, `verbump.sh` is a maintainer helper script not executed during `makepkg` (build/install), placing it outside the threat model. Furthermore, `shed` and `vice` are simply the package's own ecosystem tools. qwen3-235b was also confused by HTML entities (`&quot;`) in the evidence, which are artifacts of the audit tool's output formatting, not actual obfuscation.",
+  "disagreement_analysis": "qwen3-235b incorrectly flagged `verbump.sh` as a supply-chain risk because it uses an interpreter (`shed`) and command (`vice`) it did not recognize, failing to realize they belong to the package's own ecosystem. It also failed to apply the rule that maintainer scripts not referenced by PKGBUILD functions are out of scope. The other models correctly identified it as a benign version-bumping helper.",
+  "coverage_issues": [
+    "qwen3-235b failed to review `.gitignore` due to an LLM API error (HTTP 400)."
+  ],
+  "false_positives": [
+    "qwen3-235b flagged `verbump.sh` as unsafe. It is a maintainer script not executed during `makepkg`, and its use of `shed`/`vice` is just the package's own tooling. The model was also confused by HTML entities (`&quot;`) in the evidence."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models need to recognize maintainer helper scripts (e.g., `verbump.sh`, `bump.sh`) and exclude them from the execution threat model unless they are sourced or executed by PKGBUILD functions.",
+    "Models should infer that a package's own binary or scripting language (e.g., `shed` for `shed-sh`) may legitimately be used as an interpreter for its own maintainer scripts.",
+    "The audit tool should decode HTML entities (like `&quot;`) before passing evidence to the model to prevent the model from misinterpreting them as obfuscation or encoding errors."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 9177,
+    "completion_tokens": 2300,
+    "cost": 0.0058806399999999995
+  },
+  "audits_judged": [
+    "20261002-161405-qwen-qwen3-235b-a22b-2507.md",
+    "20261002-161402-deepseek-deepseek-v4-flash.md",
+    "20260928-122533-openrouter-free.md"
+  ]
+}

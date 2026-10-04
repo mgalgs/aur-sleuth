@@ -1,0 +1,31 @@
+{
+  "package": "stably-orca-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Report 2 successfully audited all four files and found them safe. Report 1's inconclusive verdict stems solely from an API error (HTTP 400) during the full PKGBUILD audit, but its initial PKGBUILD audit (checking for dangerous top-level code) succeeded and was safe. Report 3 is advisory and does not count toward the verdict. All successful audits agree: the PKGBUILD is a standard AppImage package with pinned checksums and no malicious code, stably-orca.sh is a transparent wrapper script, and the desktop/SRCINFO files are standard metadata. No injection patterns were detected.",
+  "disagreement_analysis": "The disagreement is artificial: Report 1's inconclusive status is caused by a tool error (API failure), not a security finding. Report 2 completed all audits successfully and found the package safe. Report 1's initial PKGBUILD audit also succeeded and was safe, providing additional confirmation. The tool error does not indicate malicious code.",
+  "coverage_issues": [
+    "Report 1: API error (HTTP 400) prevented full PKGBUILD audit, though initial audit succeeded",
+    "Report 3: Parse error on stably-orca.sh response (advisory report, excluded from verdict)"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "When a full file audit fails due to tool errors (API failures, parse errors), the system should check if an initial audit of that file succeeded and use that result to avoid unnecessary inconclusive verdicts",
+    "Tool errors should be clearly distinguished from security findings in the final verdict logic; an API failure is not evidence of malicious code",
+    "Consider implementing retry logic or automatic fallback to initial audit results when full audits fail due to transient errors"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 6630,
+    "completion_tokens": 2591,
+    "cost": 0.00543808
+  },
+  "audits_judged": [
+    "20261002-230658-qwen-qwen3-235b-a22b-2507.md",
+    "20261002-230721-deepseek-deepseek-v4-flash.md",
+    "20260929-031947-openrouter-free.md"
+  ]
+}

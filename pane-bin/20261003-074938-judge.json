@@ -1,0 +1,29 @@
+{
+  "package": "pane-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The disagreement is caused by a metadata mismatch between the `url` field (dcouple/Pane) and the `source` URL (greenfield-inc/Pane). Deepseek flagged this as a supply-chain attack, but the source artifact is pinned with a SHA-256 checksum. As per the threat model, when a real checksum pins the downloaded artifact, the swap risk is closed. Metadata mismatches or packaging hygiene issues are not injections. Qwen correctly identified this as safe.",
+  "disagreement_analysis": "Deepseek overreacted to a URL organization mismatch, classifying it as a supply-chain attack despite the source being pinned with a SHA-256 checksum. Qwen correctly recognized this as a common fork/transfer pattern and not an injection, noting the checksum pins the artifact.",
+  "coverage_issues": [],
+  "false_positives": [
+    "Deepseek's 'unsafe' verdict based on URL mismatch between `url` and `source` fields. This is a metadata inconsistency, not an injection, and the pinned SHA-256 checksum prevents unverified artifact swaps."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models frequently false-positive on metadata mismatches (e.g., `url` vs `source` domain/org differences) in `-bin` packages. The prompt should explicitly clarify that if the source artifact is pinned with a checksum, a mismatch between the declared homepage and the actual download URL is a packaging hygiene issue, not a security injection.",
+    "Reinforce that a pinned checksum closes the swap risk, and 'supply chain attack' findings based solely on URL discrepancies without evidence of unpinned execution or checksum bypass are false positives."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 6384,
+    "completion_tokens": 2483,
+    "cost": 0.00522112
+  },
+  "audits_judged": [
+    "20261003-072053-qwen-qwen3-235b-a22b-2507.md",
+    "20261003-072217-deepseek-deepseek-v4-flash.md",
+    "20261002-121458-openrouter-free.md"
+  ]
+}

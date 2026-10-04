@@ -1,0 +1,29 @@
+{
+  "package": "eon-git",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package contains only standard AUR VCS packaging files (PKGBUILD, .SRCINFO, .gitignore). The PKGBUILD uses legitimate upstream GitHub sources, standard VCS checksum skipping, and normal build/install routines without any malicious top-level code or suspicious network activity. The disagreement was solely due to a transient API error on the non-executable .gitignore file in one model, which does not constitute a real security gap.",
+  "disagreement_analysis": "The qwen model returned 'inconclusive' because it encountered an HTTP 400 API error when auditing the .gitignore file. The deepseek model successfully audited the same file and correctly identified it as a standard, non-executable configuration file. Since .gitignore cannot contain executable payloads or injections, the API error does not represent a genuine security coverage gap.",
+  "coverage_issues": [
+    "qwen model failed to audit .gitignore due to an API error (HTTP 400). However, this file is non-executable and poses no injection risk, so it is not a meaningful security coverage gap."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Transient API errors on non-executable files (e.g., .gitignore, .SRCINFO) should not force an overall 'inconclusive' verdict if the core executable files (PKGBUILD, .install) have been successfully audited and found safe. The tool should weigh a file's executable potential when deciding if a missing audit blocks the final verdict.",
+    "Models correctly recognize standard AUR VCS patterns (SKIP checksums, local submodule remapping in prepare()) and do not falsely flag them as supply-chain risks."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 6603,
+    "completion_tokens": 2148,
+    "cost": 0.0048624
+  },
+  "audits_judged": [
+    "20261003-031151-qwen-qwen3-235b-a22b-2507.md",
+    "20261003-031148-deepseek-deepseek-v4-flash.md",
+    "20261003-002538-openrouter-free.md"
+  ]
+}

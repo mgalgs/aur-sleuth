@@ -1,0 +1,30 @@
+{
+  "package": "linux-xanmod-lts-linux-bin-x64v3",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD fetches an RSS feed from SourceForge (the package's declared upstream) to dynamically resolve download URLs, then pins the downloaded artifacts with sha256sums. This is a normal AUR pattern for vendors without stable URLs. The curl call fetches metadata, not executable content, and the checksums close the swap risk. No fetched content is executed, and no unrelated hosts are contacted.",
+  "disagreement_analysis": "qwen3-235b flagged the top-level curl execution during PKGBUILD sourcing as unsafe, conflating network activity at parse-time with injection risk. It failed to recognize that: (1) the curl fetches metadata from the declared upstream (SourceForge), not arbitrary content; (2) the fetched data is parsed with xmllint to extract URLs, not executed; (3) the actual downloaded artifacts are pinned with sha256sums, closing the swap risk. deepseek-v4-flash correctly identified this as standard packaging practice with proper checksum verification.",
+  "coverage_issues": [],
+  "false_positives": [
+    "qwen3-235b: Top-level curl execution during PKGBUILD sourcing - This is a normal AUR pattern for resolving dynamic URLs from upstream RSS feeds. The curl fetches metadata (not executable content) from the declared upstream, and downloaded artifacts are pinned with checksums. This violates no injection pattern."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models need clearer guidance distinguishing 'network activity during sourcing' from 'executing fetched content'. Fetching metadata from declared upstream to resolve URLs is safe when checksums pin the artifacts.",
+    "The audit tool should explicitly test: does the PKGBUILD execute fetched content, or fetch from unrelated hosts? If neither, dynamic URL resolution with checksums is safe.",
+    "qwen3-235b over-indexed on 'principle of least surprise' and 'non-determinism' rather than the actual injection threat model. Prompts should emphasize that packaging hygiene concerns are not verdict grounds."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5951,
+    "completion_tokens": 1240,
+    "cost": 0.00349152
+  },
+  "audits_judged": [
+    "20261003-233214-qwen-qwen3-235b-a22b-2507.md",
+    "20261003-233243-deepseek-deepseek-v4-flash.md",
+    "20260926-165133-openrouter-free.md"
+  ]
+}

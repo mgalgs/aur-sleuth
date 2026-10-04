@@ -1,0 +1,27 @@
+{
+  "package": "grub-theme-parabola",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is safe. The disagreement stems from the Qwen model flagging a placeholder checksum ('md5sums=(123)') in 'gen.sh'. However, 'gen.sh' is a maintainer helper script used to generate the PKGBUILD and is never executed during the 'makepkg' build or install process. The DeepSeek model correctly identified this context, recognizing that the actual PKGBUILD fetches sources securely and the helper script poses no execution risk.",
+  "disagreement_analysis": "Qwen treated a dummy checksum inside an unreferenced maintainer script as a supply-chain vulnerability, failing to recognize that the script is not executed during packaging. DeepSeek correctly understood the script's role as a development tool.",
+  "coverage_issues": [],
+  "false_positives": [
+    "Qwen flagged 'gen.sh' for 'md5sums=(123)'. This is a maintainer helper script not executed during 'makepkg', so its internal placeholders do not affect package security."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Audit models must distinguish between build-time scripts (executed by makepkg) and maintainer helper scripts (used to update/generate the PKGBUILD). Placeholders or dummy values in unreferenced maintainer scripts should not be flagged as supply-chain risks."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5376,
+    "completion_tokens": 2023,
+    "cost": 0.00430976
+  },
+  "audits_judged": [
+    "20261003-153042-qwen-qwen3-235b-a22b-2507.md",
+    "20261003-153023-deepseek-deepseek-v4-flash.md"
+  ]
+}

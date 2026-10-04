@@ -1,0 +1,29 @@
+{
+  "package": "waylyrics-layer-shell-git",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD contains standard, safe AUR packaging logic for a Rust VCS package with no malicious top-level execution or suspicious build steps. The only disagreement stems from an API error in the qwen model when processing .SRCINFO, which is a non-executable metadata file. The deepseek model successfully audited all files and found no issues.",
+  "disagreement_analysis": "The qwen model returned 'inconclusive' due to an HTTP 400 API error on .SRCINFO, not a security finding. The deepseek model returned 'safe' after reviewing all files. The openrouter report is advisory. There is no substantive security disagreement.",
+  "coverage_issues": [
+    "qwen model failed to audit .SRCINFO due to an API error (HTTP 400 BadRequestError)"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "An API failure on a non-executable metadata file (like .SRCINFO) should not override a 'safe' verdict for the executable PKGBUILD; the tool should gracefully degrade or retry rather than failing the entire audit.",
+    "Implement automatic retries for transient LLM API errors to ensure complete file coverage without manual intervention."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 7761,
+    "completion_tokens": 1716,
+    "cost": 0.00468
+  },
+  "audits_judged": [
+    "20261001-112958-qwen-qwen3-235b-a22b-2507.md",
+    "20261001-112951-deepseek-deepseek-v4-flash.md",
+    "20261001-061844-openrouter-free.md"
+  ]
+}

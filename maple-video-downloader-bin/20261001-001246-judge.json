@@ -1,0 +1,31 @@
+{
+  "package": "maple-video-downloader-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Both substantive reports agree the PKGBUILD is a standard prebuilt binary package: it downloads a tarball and LICENSE from the project's own GitHub releases with pinned SHA-256 checksums, installs the binary to /opt, creates a wrapper script and desktop files via heredocs, and performs no suspicious network operations or code execution. The inconclusive verdicts were caused solely by API/LLM errors (HTTP 400 on .SRCINFO, empty LLM response), not by any security findings. The advisory report (openrouter/free) had a tool error and carries no verdict weight.",
+  "disagreement_analysis": "The disagreement is not substantive. Report 1 (qwen3) successfully reviewed PKGBUILD and .gitignore as safe but failed on .SRCINFO due to an HTTP 400 API error, forcing an overall inconclusive result. Report 2 (deepseek-v4-flash) successfully reviewed all three files and found them safe. Report 3 (openrouter/free) is advisory-only and failed with an empty LLM response. The actual security analysis from both working models is in full agreement.",
+  "coverage_issues": [
+    "qwen3-235b: .SRCINFO review failed with HTTP 400 BadRequestError, leaving one file unreviewed",
+    "openrouter/free: PKGBUILD review failed with LLMResponseError (empty response), and only 1 of 3 files was attempted"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "When a non-critical file (like .SRCINFO) fails due to API error but the PKGBUILD is successfully reviewed and found safe, the overall verdict should not be forced to inconclusive. The tool should weight PKGBUILD review success more heavily than metadata file failures.",
+    "API errors (HTTP 400, empty LLM responses) should be retried or gracefully degraded rather than poisoning the entire audit verdict. A tool error is not a security finding.",
+    "Advisory reports with tool errors should be excluded earlier in the pipeline to avoid confusion in disagreement analysis."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5011,
+    "completion_tokens": 1333,
+    "cost": 0.00330976
+  },
+  "audits_judged": [
+    "20260930-233740-qwen-qwen3-235b-a22b-2507.md",
+    "20260930-234424-deepseek-deepseek-v4-flash.md",
+    "20260930-203515-openrouter-free.md"
+  ]
+}

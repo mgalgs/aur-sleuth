@@ -1,0 +1,32 @@
+{
+  "package": "docker-credential-atcr-git",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD and .SRCINFO contain standard Go packaging logic and metadata. The only flagged issue by the Deepseek model was the source URL pointing to `tangled.org` instead of a hallucinated `atcr.io`. Given the `did:plc:` path in the URL, this is a standard AT Protocol git repository structure, making `tangled.org` the legitimate upstream host for this project. There is no injected malicious code in the packaging scripts.",
+  "disagreement_analysis": "Deepseek flagged the source URL as pointing to an 'untrusted domain' based on the hallucinated assumption that the official project domain is `atcr.io`. The other models either correctly identified it as a valid VCS source or failed to parse the PKGBUILD due to tool errors/truncation.",
+  "coverage_issues": [
+    "Qwen model truncated its response during the full PKGBUILD review, resulting in an inconclusive file verdict.",
+    "Openrouter model failed to parse the LLM response for PKGBUILD and REUSE.toml, resulting in inconclusive file verdicts."
+  ],
+  "false_positives": [
+    "Deepseek flagged `tangled.org` as an untrusted domain unrelated to the 'official' `atcr.io`. This is a hallucination; `tangled.org` hosting a `did:plc:` path is the legitimate upstream structure for AT Protocol projects."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models may hallucinate 'official' upstream domains based on package names (e.g., assuming `atcr.io` for `atcr-git`) and flag legitimate alternative git hosts as supply-chain attacks.",
+    "Ensure models recognize `did:plc:` and similar decentralized identifiers as valid upstream paths for specific ecosystems (like AT Protocol) rather than treating them as obfuscation or untrusted hosts."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 8057,
+    "completion_tokens": 2561,
+    "cost": 0.00585632
+  },
+  "audits_judged": [
+    "20261003-073131-qwen-qwen3-235b-a22b-2507.md",
+    "20261003-073207-deepseek-deepseek-v4-flash.md",
+    "20261003-003506-openrouter-free.md"
+  ]
+}
