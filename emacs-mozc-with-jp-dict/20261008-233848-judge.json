@@ -1,0 +1,29 @@
+{
+  "package": "emacs-mozc-with-jp-dict",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The only file flagged as unsafe, `build-all.sh`, is a maintainer convenience script for local testing and is not invoked by any PKGBUILD functions or `.install` hooks during `makepkg`. The actual build files (PKGBUILDs, patches, install hooks) are standard and contain no malicious injections.",
+  "disagreement_analysis": "Qwen flagged `build-all.sh` for using `gpg` to decrypt a password for `sudo`, but failed to recognize it as an out-of-scope maintainer script not executed by `makepkg`. Deepseek encountered API errors on `build-all.sh` and `update.sh`, leading to an inconclusive verdict.",
+  "coverage_issues": [
+    "Deepseek API failed to return a valid response for `build-all.sh` and `update.sh`."
+  ],
+  "false_positives": [
+    "`build-all.sh`: Flagged for credential misuse, but it is a maintainer script not executed during `makepkg` or installation, thus out of scope for AUR injection threats."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models must distinguish between files executed during `makepkg`/`.install` and standalone maintainer/CI scripts in the repository root. Out-of-scope maintainer scripts should be automatically ignored or marked safe unless explicitly sourced by the PKGBUILD."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 14289,
+    "completion_tokens": 2020,
+    "cost": 0.007158080000000001
+  },
+  "audits_judged": [
+    "20261008-232738-qwen-qwen3-235b-a22b-2507.md",
+    "20261008-233416-deepseek-deepseek-v4-flash.md"
+  ]
+}
