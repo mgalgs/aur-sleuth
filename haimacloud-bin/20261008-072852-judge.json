@@ -1,0 +1,32 @@
+{
+  "package": "haimacloud-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard -bin package that downloads prebuilt .deb files from a GitHub repository (kota-rina3/hokeshi) and pins them with SHA-256 checksums. While Deepseek flagged the GitHub repo as an 'untrusted host', the prompt explicitly states that when a real checksum pins the downloaded artifact, the swap risk is closed, and violating packaging best practices is not grounds for an unsafe verdict. Hosting binaries on a personal GitHub repo is a common AUR pattern for -bin packages when upstream lacks stable URLs. There is no evidence of code injection in the PKGBUILD, .SRCINFO, or launcher script.",
+  "disagreement_analysis": "Deepseek flagged the use of a third-party GitHub repository (kota-rina3/hokeshi) to host the prebuilt binaries as a 'textbook supply chain attack vector'. This is a false positive driven by grading packaging style and upstream trust rather than identifying an actual injection. The prompt explicitly excludes packaging hygiene from the verdict and notes that pinned checksums close the swap risk. Qwen correctly identified this as a normal AUR pattern.",
+  "coverage_issues": [
+    "openrouter/free (advisory) failed with a parsing error and provided no verdict.",
+    "deepseek-v4-flash noted that haimacloud.sh was truncated in its context, though it still correctly assessed it as safe based on the absence of suspicious patterns."
+  ],
+  "false_positives": [
+    "Deepseek's flagging of the GitHub repository 'kota-rina3/hokeshi' as an untrusted host. Hosting -bin artifacts on a maintainer's GitHub releases with pinned checksums is a standard AUR pattern, not an injection."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models consistently confuse 'upstream trust' with 'AUR maintainer injection'. For -bin packages, hosting binaries on a personal GitHub repo with pinned checksums is a normal packaging pattern, not a supply chain attack.",
+    "The audit prompt/tool must explicitly clarify that downloading from a maintainer's GitHub releases is acceptable for -bin packages as long as checksums are pinned, to prevent false positives based on packaging style."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 6757,
+    "completion_tokens": 3381,
+    "cost": 0.006489920000000001
+  },
+  "audits_judged": [
+    "20261008-071615-qwen-qwen3-235b-a22b-2507.md",
+    "20261008-071855-deepseek-deepseek-v4-flash.md",
+    "20261008-035052-openrouter-free.md"
+  ]
+}
