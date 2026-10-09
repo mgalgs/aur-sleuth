@@ -1,0 +1,37 @@
+{
+  "package": "ryujinx-bin",
+  "correct_verdict": "safe",
+  "confidence": "low",
+  "reasoning": "Both models failed to complete full PKGBUILD review due to tool errors (HTTP 400 API error and malformed response), but all successfully reviewed files (.SRCINFO, .gitignore, .nvchecker.toml) show no security concerns. The package follows standard AUR patterns for binary packages: sources from official domain (git.ryujinx.app) with SHA-256 checksums, standard dependencies, and no suspicious network activity. Initial PKGBUILD gate check confirmed no dangerous top-level code or command substitutions at global scope. No malicious indicators found in any reviewed content.",
+  "disagreement_analysis": null,
+  "coverage_issues": [
+    "PKGBUILD full review failed in Report 1 due to HTTP 400 API error",
+    "PKGBUILD review failed in Report 2 because model did not receive file content",
+    "PKGBUILD functions (prepare, build, package) not reviewed by either model",
+    "Report 2 only reviewed 1 of 4 files due to early failure"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": true,
+  "re_audit_focus": [
+    "PKGBUILD full review including prepare(), build(), and package() functions",
+    "Verify install commands in package() function only install expected binaries and assets"
+  ],
+  "learnings": [
+    "Implement retry logic with exponential backoff for transient API errors (HTTP 400/500)",
+    "Add validation to ensure file content is successfully passed to models before audit",
+    "Detect malformed responses early and retry with adjusted parameters",
+    "For binary packages, prioritize reviewing package() function to verify only expected files are installed",
+    "Consider fallback to simpler models when primary model fails repeatedly"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 4080,
+    "completion_tokens": 2269,
+    "cost": 0.004209920000000001
+  },
+  "audits_judged": [
+    "20261009-111228-qwen-qwen3-235b-a22b-2507.md",
+    "20261009-111222-deepseek-deepseek-v4-flash.md"
+  ]
+}
