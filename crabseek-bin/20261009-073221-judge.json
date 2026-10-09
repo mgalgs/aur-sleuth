@@ -1,0 +1,32 @@
+{
+  "package": "crabseek-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard AUR binary package that downloads a pinned release from the official GitHub repository (github.com/aronkv/crabseek) with SHA-256 checksum verification. The PKGBUILD contains no dangerous top-level code, only standard variable assignments and routine packaging functions (prepare/package). The .SRCINFO confirms the pinned source and checksum. The .nvchecker.toml is a benign version monitoring config. The .gitignore is standard. No evidence of malicious injection, suspicious network operations, or unverified code execution. The disagreement is purely due to tool errors (HTTP 400 and parsing failures), not security concerns.",
+  "disagreement_analysis": "The disagreement is caused by tool errors, not security findings. Report 1 (qwen) failed with HTTP 400 on .gitignore, Report 3 (openrouter) failed to parse .SRCINFO response. Report 2 (deepseek) completed successfully with SAFE verdict. All models that successfully analyzed files found them safe. The package follows standard AUR binary packaging practices with proper source pinning and checksum verification.",
+  "coverage_issues": [
+    "Report 1 (qwen): .gitignore audit failed with HTTP 400 BadRequestError",
+    "Report 3 (openrouter): .SRCINFO audit failed with parsing error"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Tool errors (HTTP failures, parsing errors) should not override successful security analysis from other models when the successful analysis is comprehensive",
+    "When multiple models review the same files and one completes successfully while others fail due to tool errors, the successful verdict should be weighted appropriately",
+    "Standard binary packages with pinned sources, checksums, and no top-level code execution should be recognized as low-risk patterns",
+    "The audit tool should implement retry logic or fallback mechanisms for transient API errors to reduce inconclusive results"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 7001,
+    "completion_tokens": 1237,
+    "cost": 0.0038236800000000003
+  },
+  "audits_judged": [
+    "20261009-072329-qwen-qwen3-235b-a22b-2507.md",
+    "20261009-072317-deepseek-deepseek-v4-flash.md",
+    "20261009-041207-openrouter-free.md"
+  ]
+}
