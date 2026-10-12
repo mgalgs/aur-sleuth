@@ -1,0 +1,32 @@
+{
+  "package": "kytyps5-nightly-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard AUR binary package (-bin) that downloads prebuilt releases from the project's own official GitHub repository (KytyPS5/KytyPS5). All sources are pinned with SHA-256 checksums, preventing artifact substitution. The PKGBUILD contains no command substitutions, eval, or execution of fetched content at global scope. The .gitlab-ci.yml is a standard AUR automation pipeline that fetches release metadata from GitHub's API, verifies checksums, and pushes updates via SSH with pinned host keys. No injection patterns detected: no execution of downloaded code, no fetching from unrelated hosts, no obfuscation. The wrapper script behavior (creating per-user directories and symlinks) is documented upstream behavior for an emulator requiring a writable working directory.",
+  "disagreement_analysis": "The disagreement was caused by tool errors, not reasoning differences. Report 1 (qwen3-235b) failed to parse .SRCINFO due to truncated/malformed model response. Report 3 (openrouter/free) failed to parse PKGBUILD decision. Report 2 (deepseek-v4-flash) successfully completed all file reviews and found no issues. The two inconclusive results were due to parsing failures, not security concerns.",
+  "coverage_issues": [
+    "Report 1 (qwen3-235b): .SRCINFO audit failed due to truncated model response",
+    "Report 3 (openrouter/free): PKGBUILD audit failed due to unparseable model response"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Tool errors (response truncation, parsing failures) should be distinguished from security findings - they indicate infrastructure issues, not package risks",
+    "Advisory reports with parsing errors provide no signal and should be excluded from verdict calculation",
+    "Standard -bin packages with pinned checksums and upstream-only sources are low-risk; models should recognize this pattern quickly without needing exhaustive analysis",
+    "CI/CD automation scripts (.gitlab-ci.yml) that only fetch metadata and push to AUR via SSH with pinned keys are standard practice and not injection vectors"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 10004,
+    "completion_tokens": 1310,
+    "cost": 0.00487808
+  },
+  "audits_judged": [
+    "20261012-190906-qwen-qwen3-235b-a22b-2507.md",
+    "20261012-190915-deepseek-deepseek-v4-flash.md",
+    "20261009-195332-openrouter-free.md"
+  ]
+}
