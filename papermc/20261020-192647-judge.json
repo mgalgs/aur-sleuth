@@ -1,0 +1,29 @@
+{
+  "package": "papermc",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD uses a standard AUR pattern to dynamically resolve the download URL by querying the official PaperMC API and parsing the JSON response with jq. It does not execute the fetched content. Furthermore, the actual downloaded artifacts are pinned with SHA-512 checksums, closing any swap risk. The Qwen model's flag is a false positive based on packaging style/hygiene rather than a genuine injection risk.",
+  "disagreement_analysis": "Qwen flagged the top-level curl+jq command substitution as unsafe because it executes network requests during sourcing, treating it as a supply-chain risk. Deepseek correctly identified this as a normal AUR pattern for vendors without stable URLs and noted that the final artifacts are checksummed, mitigating the risk.",
+  "coverage_issues": [
+    "qwen/qwen3-235b-a22b-2507 only reviewed the PKGBUILD and skipped the other 3 maintainer files (README.md, papermc.install, .SRCINFO)."
+  ],
+  "false_positives": [
+    "Qwen's flag on top-level curl+jq command substitution. Fetching a URL from the package's own API and parsing it without executing the response is a normal AUR pattern, and the downloaded artifacts are checksummed."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models frequently flag dynamic URL resolution (e.g., curl/grep/jq at the top level of a PKGBUILD) as unsafe due to network execution during sourcing. The audit tool should explicitly instruct models that resolving URLs from official upstream APIs without executing the response is a standard, safe AUR pattern, provided the final artifacts are checksummed."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5101,
+    "completion_tokens": 1872,
+    "cost": 0.00402848
+  },
+  "audits_judged": [
+    "20261020-190642-qwen-qwen3-235b-a22b-2507.md",
+    "20261020-190710-deepseek-deepseek-v4-flash.md"
+  ]
+}
