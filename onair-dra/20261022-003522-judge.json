@@ -1,0 +1,31 @@
+{
+  "package": "onair-dra",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The only valid voting model (deepseek-v4-flash) correctly identified the package as safe, noting standard AUR packaging with pinned sources and checksums. The qwen model failed due to API errors (HTTP 404), which carries no verdict signal. The openrouter model is advisory and also concluded safe after an initial false positive. The PKGBUILD uses standard practices with verified checksums and no malicious execution.",
+  "disagreement_analysis": "The disagreement was triggered by the qwen model returning 'inconclusive' due to API failures (HTTP 404), not due to actual security concerns. The deepseek model correctly assessed the package as safe.",
+  "coverage_issues": [
+    "qwen/qwen3-235b-a22b-2507 failed to audit both .SRCINFO and PKGBUILD due to LLM API HTTP 404 errors."
+  ],
+  "false_positives": [
+    "openrouter/free initially flagged .SRCINFO for having multiple sha256sums entries, misinterpreting standard AUR array syntax in .SRCINFO as orphaned or conflicting checksums. It corrected this on a second look."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "API errors (e.g., HTTP 404) resulting in 'inconclusive' file verdicts should be handled as tool failures rather than security inconclusiveness to prevent false disagreement escalations.",
+    "Models frequently misunderstand .SRCINFO array syntax (repeated keys like 'sha256sums = ...'). Prompts or pre-processing should clarify that repeated keys in .SRCINFO represent array elements from the PKGBUILD, not orphaned or conflicting data."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5674,
+    "completion_tokens": 1917,
+    "cost": 0.00426944
+  },
+  "audits_judged": [
+    "20261022-001215-qwen-qwen3-235b-a22b-2507.md",
+    "20261022-001136-deepseek-deepseek-v4-flash.md",
+    "20261021-210443-openrouter-free.md"
+  ]
+}
