@@ -1,0 +1,32 @@
+{
+  "package": "waterfox",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The top-level curl command fetches HTML from the package's own declared upstream GitHub repository (https://github.com/BrowserWorks/waterfox) to extract a commit hash for the l10n subrepository. This is explicitly allowed by the threat model: 'A PKGBUILD that resolves its download URL by fetching the package's own declared upstream page, parsing it with grep/sed and executing none of it, is a normal AUR pattern for vendors without stable URLs. When a real checksum pins the downloaded artifact, the swap risk is closed.' The extracted commit hash is used only to construct a source URL, and the downloaded tarball is verified with a checksum. No code is executed from the fetched content, no data is exfiltrated, and the fetch is from the project's own upstream.",
+  "disagreement_analysis": "The qwen model incorrectly flagged the top-level curl command as unsafe, treating it as a supply-chain risk. It failed to recognize that: (1) the curl fetches from the package's own declared upstream repository, (2) the fetched content is parsed with grep to extract a commit hash (not executed), and (3) this is explicitly permitted by the threat model as a normal AUR pattern. The qwen model conflated 'unconventional packaging' with 'malicious injection.' The deepseek and openrouter models correctly identified this as safe, noting the fetch is from the project's own upstream and the result is only used as a download reference.",
+  "coverage_issues": [
+    "qwen model only reviewed 1 file (PKGBUILD) while other models reviewed all 5 maintainer files. However, since PKGBUILD is the primary file of concern and was reviewed by all models, this did not affect the verdict."
+  ],
+  "false_positives": [
+    "qwen model's 'unsafe' verdict for the top-level curl command: This is a false positive because the threat model explicitly allows fetching from the package's own declared upstream page to resolve download URLs. The curl fetches from https://github.com/BrowserWorks/waterfox (the project's own repo), parses HTML with grep to extract a commit hash (no execution), and the resulting source is checksum-verified. This is standard AUR packaging for projects without stable release URLs, not malicious injection."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models need better training on the distinction between 'unconventional but allowed packaging patterns' and 'malicious injection.' The threat model explicitly permits fetching from the package's own upstream to resolve URLs, but models may still flag this as suspicious.",
+    "Audit prompts should more explicitly highlight that 'violates packaging best practices' is never grounds for unsafe verdict when the threat model explicitly allows the pattern.",
+    "Models should be trained to recognize that curl|grep patterns that extract metadata (commit hashes, version strings) from upstream pages are normal AUR patterns when the fetched content is not executed and the resulting source is checksum-verified."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 8188,
+    "completion_tokens": 1622,
+    "cost": 0.00469632
+  },
+  "audits_judged": [
+    "20261030-071535-qwen-qwen3-235b-a22b-2507.md",
+    "20261030-071600-deepseek-deepseek-v4-flash.md",
+    "20261028-115742-openrouter-free.md"
+  ]
+}
