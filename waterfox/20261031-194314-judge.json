@@ -1,0 +1,31 @@
+{
+  "package": "waterfox",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The top-level curl command in the PKGBUILD is a standard AUR pattern for resolving a dynamic URL from the package's own declared upstream repository (GitHub). It fetches an HTML page, extracts a 40-character git commit hash using grep (not executing any fetched content), and uses it to construct a source URL. The actual downloaded l10n tarball is verified by a hardcoded SHA256 checksum, which closes the swap risk per the threat model. This is not an injection pattern\u2014it serves a legitimate packaging purpose (pinning l10n submodule commits) and fetches only from the package's own upstream. The qwen model's concern about 'uncontrolled network dependency' and 'violates security best practices' is explicitly excluded from the unsafe verdict by the threat model guidelines.",
+  "disagreement_analysis": "The qwen model flagged the top-level curl as unsafe because it executes during PKGBUILD sourcing, calling it an 'uncontrolled network dependency' that 'violates security best practices.' The deepseek and openrouter models correctly recognized this as a standard AUR pattern for dynamic URL resolution from the package's own upstream, noting that the fetched content is not executed and the downloaded artifact is checksum-verified. The disagreement stems from conflating packaging hygiene violations with actual injection risks.",
+  "coverage_issues": [],
+  "false_positives": [
+    "qwen's 'Top-level curl fetches untrusted data during sourcing' finding is a false positive. This is a normal AUR pattern for vendors without stable URLs, fetching from the package's own upstream repository, not executing fetched content, and the downloaded artifact is checksum-verified. The prompt explicitly states that 'violates packaging best practices' is never grounds for unsafe."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models must distinguish between 'violates best practices' and 'is unsafe.' The threat model explicitly excludes hygiene concerns from the unsafe verdict.",
+    "Models should recognize that fetching from a package's own declared upstream repository to resolve dynamic URLs (e.g., parsing GitHub pages for commit hashes) is a standard AUR pattern, not an injection.",
+    "When evaluating network fetches, models should check whether the downloaded artifact is checksum-verified. If it is, the swap risk is closed and the fetch is safe.",
+    "Models should avoid flagging operations that serve a legitimate packaging purpose (e.g., resolving l10n submodule commits) as malicious without evidence of actual injection or exfiltration."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 7743,
+    "completion_tokens": 2095,
+    "cost": 0.00515936
+  },
+  "audits_judged": [
+    "20261031-193207-qwen-qwen3-235b-a22b-2507.md",
+    "20261031-193221-deepseek-deepseek-v4-flash.md",
+    "20261028-115742-openrouter-free.md"
+  ]
+}
