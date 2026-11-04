@@ -1,0 +1,30 @@
+{
+  "package": "tor-browser-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The disagreement stems from the qwen model flagging a dynamic checksum fetch from the official Tor Project upstream as unsafe due to network activity at parse time. However, the threat model explicitly excludes packaging hygiene violations. Since the PKGBUILD only parses the fetched checksum file and does not execute it, and it fetches from the legitimate upstream, it is not a malicious injection. The deepseek model correctly identified this as a hygiene issue and returned a safe verdict.",
+  "disagreement_analysis": "The qwen model conflated a violation of AUR packaging best practices (network side-effects during metadata parsing) with a supply-chain injection. The deepseek model correctly applied the threat model boundary, recognizing that fetching checksums from the official upstream without executing the content is a hygiene concern, not a security vulnerability.",
+  "coverage_issues": [
+    "The qwen model only reviewed the PKGBUILD and ignored all other maintainer files, including the install scriptlet and launcher wrapper."
+  ],
+  "false_positives": [
+    "Top-level curl in checksum assignment: Fetching checksums from the official upstream at parse time is a packaging hygiene issue, not a malicious injection, because the fetched content is parsed for checksums and not executed."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models must clearly distinguish between network side-effects at parse time (packaging hygiene) and the execution of fetched content (actual injection).",
+    "Reinforce the instruction that fetching metadata or checksums from the declared upstream host is a known AUR pattern and should not trigger an unsafe verdict unless the fetched payload is executed."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 6751,
+    "completion_tokens": 2399,
+    "cost": 0.005231039999999999
+  },
+  "audits_judged": [
+    "20261104-040605-qwen-qwen3-235b-a22b-2507.md",
+    "20261104-040617-deepseek-deepseek-v4-flash.md"
+  ]
+}
