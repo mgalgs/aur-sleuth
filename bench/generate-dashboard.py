@@ -298,9 +298,17 @@ def count_aur_updates(path, now=None):
     for a number the page states as fact.
     """
     import gzip
+    # The dump is 124k objects for one integer, and a dict per package is most
+    # of the memory parsing it costs: the publish stage was OOMKilled here.
+    # The hook turns every object into a 1-tuple of its LastModified as it is
+    # parsed. JSON never yields a tuple, so "was a dict" is still decidable
+    # afterwards, and a bare number in the list is not mistaken for a package.
+    # Decoding before parsing keeps what the text-mode read accepted: UTF-8
+    # only, and a BOM is still an error.
     try:
-        with gzip.open(path, "rt", encoding="utf-8") as f:
-            packages = json.load(f)
+        with gzip.open(path, "rb") as f:
+            packages = json.loads(f.read().decode("utf-8"),
+                                  object_hook=lambda d: (d.get("LastModified"),))
     except (OSError, ValueError, EOFError):
         return None
     if not isinstance(packages, list):
@@ -308,7 +316,7 @@ def count_aur_updates(path, now=None):
     cutoff = (now or datetime.now(timezone.utc)).timestamp() - 86400
     count = 0
     for p in packages:
-        if isinstance(p, dict) and safe_float(p.get("LastModified"), 0) >= cutoff:
+        if isinstance(p, tuple) and safe_float(p[0], 0) >= cutoff:
             count += 1
     return count
 

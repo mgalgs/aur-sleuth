@@ -61,6 +61,34 @@ check("missing file -> None", gd.count_aur_updates(os.path.join(tmp, "nope.gz"),
 check("not gzip -> None", gd.count_aur_updates(write("plain.json", "[]"), now) is None)
 check("not a list -> None", gd.count_aur_updates(write_gz("obj.json.gz", {"a": 1}), now) is None)
 check("empty dump -> 0", gd.count_aur_updates(write_gz("empty.json.gz", []), now) == 0)
+# Only objects are packages. A bare timestamp, a list holding a package, or a
+# package nested inside another one's field is not counted, however recent.
+odd = write_gz("odd.json.gz", [
+    {"Name": "a", "LastModified": t - 60},             # the one package
+    t - 60,                                            # a bare number
+    [{"Name": "b", "LastModified": t - 60}],           # a list, not an object
+    {"Name": "c", "LastModified": {"LastModified": t - 60}},
+    None,
+])
+check("non-dict entries are not counted", gd.count_aur_updates(odd, now) == 1)
+with open(dump, "rb") as f:
+    whole = f.read()
+truncated = write("trunc.json.gz", "")
+with open(truncated, "wb") as f:
+    f.write(whole[: len(whole) // 2])
+check("truncated gzip -> None", gd.count_aur_updates(truncated, now) is None)
+flipped = write("crc.json.gz", "")
+with open(flipped, "wb") as f:
+    f.write(whole[:-8] + bytes(b ^ 0xFF for b in whole[-8:-4]) + whole[-4:])
+check("bad gzip checksum -> None", gd.count_aur_updates(flipped, now) is None)
+bom = os.path.join(tmp, "bom.json.gz")
+with gzip.open(bom, "wb") as f:
+    f.write(b"\xef\xbb\xbf[]")
+check("UTF-8 BOM -> None, as before", gd.count_aur_updates(bom, now) is None)
+latin = os.path.join(tmp, "latin.json.gz")
+with gzip.open(latin, "wb") as f:
+    f.write(b'[{"Name": "\xe9"}]')
+check("not UTF-8 -> None", gd.count_aur_updates(latin, now) is None)
 
 # --- read_daily_budget: one number out of an untrusted file ------------------
 check("budget read as a float",
