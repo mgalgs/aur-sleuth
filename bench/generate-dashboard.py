@@ -418,39 +418,143 @@ def build_coverage(pkg_summaries, by_date, now, updates_per_day=None,
     return coverage
 
 
-def load_reports():
-    """Read all reports from the audit-reports branch."""
-    file_list = git("ls-tree", "-r", REPORTS_BRANCH, "--name-only").strip().split("\n")
+def _git_cmd():
+    return ["git", "--git-dir", GIT_DIR] if GIT_DIR else ["git"]
 
+
+# A byte git C-quotes in a plain `ls-tree` (core.quotepath's default). The
+# loader used to read paths from that listing and `git show` each one, so a
+# quoted path never resolved and its file was never read. Paths only hostile
+# code would write -- no AUR package name has any of these -- and still
+# skipped, so the same branch builds the same files.
+_QUOTED_PATH_BYTE = re.compile(rb'[\x00-\x1f"\\\x7f-\xff]')
+_OBJECT_ID = re.compile(rb"[0-9a-f]{40}|[0-9a-f]{64}")
+
+
+def _report_blobs():
+    """(path, object id) for every blob on the reports branch, in tree order.
+
+    `ls-tree -z` gives each path verbatim. The ids are what is later fed to
+    `cat-file --batch`; the paths never are. The audit stage, which runs
+    hostile code, chose them, and that protocol is one line per request.
+    """
+    result = subprocess.run(
+        _git_cmd() + ["ls-tree", "-r", "-z", REPORTS_BRANCH],
+        capture_output=True, timeout=30,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"git ls-tree -r -z {REPORTS_BRANCH}: "
+                           f"{result.stderr.decode('utf-8', 'replace').strip()}")
+    for entry in result.stdout.split(b"\0"):
+        meta, tab, path = entry.partition(b"\t")
+        fields = meta.split()
+        if not tab or len(fields) != 3 or fields[1] != b"blob":
+            continue
+        if not _OBJECT_ID.fullmatch(fields[2]) or _QUOTED_PATH_BYTE.search(path):
+            continue
+        yield path.decode("ascii"), fields[2]
+
+
+class _BlobReader:
+    """One `git cat-file --batch` for the whole branch, read one object at a
+    time: a process per path was most of the stage's eight minutes, and the
+    output is never held beyond the object being parsed."""
+
+    def __enter__(self):
+        self.proc = subprocess.Popen(
+            _git_cmd() + ["cat-file", "--batch"],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+        )
+        return self
+
+    def __exit__(self, *exc):
+        self.proc.stdin.close()
+        self.proc.stdout.close()
+        self.proc.wait()
+
+    def read(self, oid):
+        """The blob's text as `git show` gave it, or None where that failed."""
+        self.proc.stdin.write(oid + b"\n")
+        self.proc.stdin.flush()
+        header = self.proc.stdout.readline().split()
+        if len(header) != 3 or header[0] != oid:
+            if not header or header[-1] != b"missing":
+                raise RuntimeError(f"git cat-file --batch: unexpected reply {header!r}")
+            return None
+        data = self.proc.stdout.read(int(header[2]))
+        self.proc.stdout.read(1)  # the newline after every object
+        if header[1] != b"blob":
+            return None
+        # What subprocess.run(text=True) did to `git show`'s output: strict
+        # UTF-8 (a failure skipped the file) and universal newlines.
+        try:
+            text = data.decode("utf-8")
+        except UnicodeDecodeError:
+            return None
+        return text.replace("\r\n", "\n").replace("\r", "\n")
+
+
+def iter_package_reports():
+    """Each package's (name, audits, judges) from the reports branch, in turn.
+
+    Tree order keeps a package's files together -- they share its top-level
+    entry -- so a package is complete when the next one starts, and its report
+    bodies can be dropped before the next is read.
+    """
+    pkg, audits, judges = None, [], []
+    seen = set()
+    with _BlobReader() as blobs:
+        for path, oid in _report_blobs():
+            if path.startswith("_dashboard/") or path == "index.html" or path == ".nojekyll":
+                continue
+            if not (path.endswith("-judge.json") or path.endswith(".md") or path.endswith(".txt")):
+                continue
+            name = path.split("/")[0]
+            filename = path.split("/", 1)[1] if "/" in path else path
+            if name != pkg:
+                if audits or judges:
+                    yield pkg, audits, judges
+                if name in seen:
+                    raise RuntimeError(f"{REPORTS_BRANCH}: {name!r} is not contiguous in ls-tree")
+                seen.add(name)
+                pkg, audits, judges = name, [], []
+
+            raw = blobs.read(oid)
+            if raw is None:
+                continue
+            if path.endswith("-judge.json"):
+                try:
+                    data = json.loads(raw)
+                    judges.append({"package": name, "filename": filename, "data": data})
+                except (json.JSONDecodeError, KeyError):
+                    pass
+            else:
+                fm, body = parse_frontmatter(raw)
+                audits.append({
+                    "package": name,
+                    "filename": filename,
+                    "frontmatter": fm,
+                    "body": body,
+                })
+    if audits or judges:
+        yield pkg, audits, judges
+
+
+def load_reports(on_package=None):
+    """Read all reports from the audit-reports branch.
+
+    With `on_package`, each package's reports are passed to it as soon as they
+    are read, and the audits returned carry no "body": the bodies are the bulk
+    of the branch, and only the per-package files need them.
+    """
     audits = []
     judges = []
-
-    for path in file_list:
-        if path.startswith("_dashboard/") or path == "index.html" or path == ".nojekyll":
-            continue
-        try:
-            raw = git("show", f"{REPORTS_BRANCH}:{path}")
-        except Exception:
-            continue
-
-        pkg = path.split("/")[0]
-        filename = path.split("/", 1)[1] if "/" in path else path
-
-        if path.endswith("-judge.json"):
-            try:
-                data = json.loads(raw)
-                judges.append({"package": pkg, "filename": filename, "data": data})
-            except (json.JSONDecodeError, KeyError):
-                pass
-        elif path.endswith(".md") or path.endswith(".txt"):
-            fm, body = parse_frontmatter(raw)
-            audits.append({
-                "package": pkg,
-                "filename": filename,
-                "frontmatter": fm,
-                "body": body,
-            })
-
+    for pkg, pkg_audits, pkg_judges in iter_package_reports():
+        if on_package:
+            on_package(pkg, pkg_audits, pkg_judges)
+            pkg_audits = [{k: v for k, v in a.items() if k != "body"} for a in pkg_audits]
+        audits.extend(pkg_audits)
+        judges.extend(pkg_judges)
     return audits, judges
 
 
@@ -978,15 +1082,35 @@ def commit_to_branch(files):
             os.remove(tmpindex)
 
 
-def build_files(audits, judges, now=None, coverage_inputs=None, escalation_inputs=None):
-    """Everything the page reads, as {path: content}, from loaded reports."""
+def build_index_file(audits, judges, now=None, coverage_inputs=None, escalation_inputs=None):
+    """_dashboard/data.json, as {path: content}. Reads no report body."""
     now = now or datetime.now(timezone.utc)
     index_data = build_index_data(audits, judges, now, coverage_inputs, escalation_inputs)
     index_data["generated_at"] = now.strftime("%Y-%m-%dT%H:%M:%SZ")
-    files = {"_dashboard/data.json": json.dumps(index_data, separators=(",", ":"))}
-    for pkg_name, detail in build_package_details(audits, judges).items():
-        files[f"_dashboard/pkg/{pkg_name}.json"] = json.dumps(detail, separators=(",", ":"))
+    return {"_dashboard/data.json": json.dumps(index_data, separators=(",", ":"))}
+
+
+def build_package_files(audits, judges):
+    """One _dashboard/pkg/<name>.json per package, as {path: content}."""
+    return {
+        f"_dashboard/pkg/{pkg_name}.json": json.dumps(detail, separators=(",", ":"))
+        for pkg_name, detail in build_package_details(audits, judges).items()
+    }
+
+
+def build_files(audits, judges, now=None, coverage_inputs=None, escalation_inputs=None):
+    """Everything the page reads, as {path: content}, from loaded reports."""
+    files = build_index_file(audits, judges, now, coverage_inputs, escalation_inputs)
+    files.update(build_package_files(audits, judges))
     return files
+
+
+def write_files(out_dir, files):
+    for path, content in files.items():
+        full = os.path.join(out_dir, path)
+        os.makedirs(os.path.dirname(full), exist_ok=True)
+        with open(full, "w", encoding="utf-8") as f:
+            f.write(content)
 
 
 def main():
@@ -1049,7 +1173,19 @@ def main():
             GIT_DIR = opt("--git-dir")
         if opt("--ref"):
             REPORTS_BRANCH = opt("--ref")
-        audits, judges = load_reports()
+        # Each package's file is written as soon as its reports are read, and
+        # their bodies are dropped then: peak memory follows the largest
+        # package, not the branch, which only grows. Holding every body at
+        # once is what had the publish stage OOMKilled.
+        written = 0
+
+        def write_package(pkg, pkg_audits, pkg_judges):
+            nonlocal written
+            files = build_package_files(pkg_audits, pkg_judges)
+            write_files(out_dir, files)
+            written += len(files)
+
+        audits, judges = load_reports(on_package=write_package)
         # Stamped with the commit's own time, not the clock: the same commit
         # must build the same files, or every publish would make a new commit
         # for a page whose data did not change.
@@ -1058,13 +1194,10 @@ def main():
             now = datetime.fromisoformat(stamp).astimezone(timezone.utc)
         except ValueError:
             now = None
-        files = build_files(audits, judges, now, coverage_inputs, escalation_inputs)
-        for path, content in files.items():
-            full = os.path.join(out_dir, path)
-            os.makedirs(os.path.dirname(full), exist_ok=True)
-            with open(full, "w", encoding="utf-8") as f:
-                f.write(content)
-        print(f"{len(files)} file(s) from {len(audits)} audit and {len(judges)} judge report(s)",
+        files = build_index_file(audits, judges, now, coverage_inputs, escalation_inputs)
+        write_files(out_dir, files)
+        written += len(files)
+        print(f"{written} file(s) from {len(audits)} audit and {len(judges)} judge report(s)",
               file=sys.stderr)
         return
 
