@@ -72,7 +72,9 @@ STUB
 
 # Four candidates under one dear seat, priced so the estimates are round
 # numbers: 0.10, 0.20, 0.30, 0.40, cumulative 0.10, 0.30, 0.60, 1.00.
-NOW=1787400000
+# The real clock, not a fixed date: the stage asks scout.py screen-list with
+# no --now, so a fixed NOW ages the candidates out of --since-days.
+NOW="$(date +%s)"
 new_data() {
     local data="$tmp/$1"
     rm -rf "$data"
