@@ -148,10 +148,13 @@ GIT_INDEX_FILE="$tmp/index" git --git-dir="$repo" update-index --add \
 GIT_INDEX_FILE="$tmp/index" git --git-dir="$repo" update-index --add \
     --cacheinfo "100644,${evil_blob},brave-bin/20260821-1-m.md"
 evil_tree="$(GIT_INDEX_FILE="$tmp/index" git --git-dir="$repo" write-tree)"
-tampered="$(GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t \
+# data.json is stamped with its ref's commit time, so the idempotence check
+# below holds only if these commits share one; the wall clock can tick between.
+pinned="@1787400000 +0000"
+tampered="$(GIT_AUTHOR_DATE="$pinned" GIT_COMMITTER_DATE="$pinned" GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t \
     git --git-dir="$repo" commit-tree "$evil_tree" -m t)"
 
-fixed="$(GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t \
+fixed="$(GIT_AUTHOR_DATE="$pinned" GIT_COMMITTER_DATE="$pinned" GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t \
     rewrite_dashboard_html "$repo" "$tampered" 2>/dev/null)"
 got="$(git --git-dir="$repo" rev-parse "${fixed}:index.html")"
 if [[ "$got" == "$trusted" ]]; then
@@ -167,7 +170,7 @@ fi
 
 # Running again must be a no-op: the page already matches, so there is nothing
 # to rewrite and no empty commit to make.
-again="$(GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t \
+again="$(GIT_AUTHOR_DATE="$pinned" GIT_COMMITTER_DATE="$pinned" GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t \
     rewrite_dashboard_html "$repo" "$fixed" 2>/dev/null)"
 if [[ "$again" == "$fixed" ]]; then
     ok "rewriting is idempotent"
