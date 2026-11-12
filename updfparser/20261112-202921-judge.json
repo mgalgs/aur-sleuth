@@ -1,0 +1,28 @@
+{
+  "package": "updfparser",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The top-level curl command fetches a cookie from the package's declared upstream domain (forge.soutade.fr) to bypass a human verification page. While executing network requests during PKGBUILD sourcing is poor packaging hygiene, it is a known workaround for upstream anti-bot mechanisms. The fetched content is not executed, it only contacts the declared upstream domain, and the actual source artifact is pinned with a checksum. This does not meet the threshold for a malicious injection.",
+  "disagreement_analysis": "Model 1 (qwen) flagged the top-level execution of curl during PKGBUILD sourcing as a supply-chain risk, overreacting to a packaging hygiene issue. Model 2 (deepseek) correctly identified the code as an unconventional but benign workaround to fetch a cookie from the upstream domain, noting that the source checksum is pinned and no malicious actions occur.",
+  "coverage_issues": [],
+  "false_positives": [
+    "Model 1 flagged top-level curl execution as unsafe. Fetching from the declared upstream URL to resolve download parameters (like cookies) is a known AUR pattern. Unless it contacts an unrelated domain or executes the fetched content, it is a hygiene issue, not a malicious injection."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models must distinguish between 'executes at parse time' (bad practice) and 'malicious injection' (unsafe). Fetching from the declared upstream URL to resolve download parameters is a known AUR pattern and should not be flagged as unsafe.",
+    "Reinforce the rule that 'violates packaging best practices' (such as top-level network requests) is never grounds for an unsafe verdict if the action is benign, scoped to the upstream domain, and the downloaded artifact is checksum-pinned."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 4764,
+    "completion_tokens": 1534,
+    "cost": 0.0034879999999999998
+  },
+  "audits_judged": [
+    "20261112-201434-qwen-qwen3-235b-a22b-2507.md",
+    "20261112-201426-deepseek-deepseek-v4-flash.md"
+  ]
+}
