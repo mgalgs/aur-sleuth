@@ -128,6 +128,24 @@ check("a private IP is not a home-path concern", not hp(
 check("a home path whose detail is about something else is not dismissed", not hp(
     {"quote": "ssh build01.ops.acme-internal.net:/home/ci/out",
      "detail": "an internal hostname the audit ran on"}, NEEDLES))
+# A home path on a named host is still the model's to flag. Details shaped
+# like the model's own, which do name a path or a username.
+for name, quote, detail in [
+    ("host:/home path", "ssh build01.ops.acme-internal.net:/home/ci/out",
+     "a filesystem path on a named host, build01.ops.acme-internal.net"),
+    ("user@host:/home path", "mgalgs@nuc.lan:/home/mgalgs/x",
+     "the operator's username and internal machine name"),
+    ("scp to a private IP", "scp out ci@10.0.3.17:/home/ci/",
+     "a path on a private IP address host"),
+    ("URL authority", "rsync://build01.lan/home/ci/out and /home/ci/",
+     "a path in the operator's home directory"),
+    ("host only in the quote", "build01:/home/ci/out",
+     "a path in the operator's home directory"),
+    ("host only in the detail", "/home/ci/out",
+     "a home directory path on the build server"),
+]:
+    check(f"a home path on a named host is not dismissed: {name}",
+          not hp({"quote": quote, "detail": detail}, ["svc.cluster.local"]))
 check("a container path is not a home path", not hp(
     {"quote": "/data/git-store/pkg", "detail": "a filesystem path"}, NEEDLES))
 check("internal_strings splits like entrypoint.sh",

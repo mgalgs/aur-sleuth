@@ -83,6 +83,21 @@ _HOME_PATH_WORDS = re.compile(
     r"|\blogins?\b|\baccount names?\b",
     re.IGNORECASE,
 )
+# A home path on a named host is still the model's to flag: the prompt keeps
+# "a path on a named host" in its leak list. So home_path_concern() refuses
+# when the quote carries a host part -- "host:/home/...", "user@host", a URL
+# authority, an IPv4 address -- or the detail names a host, machine, server
+# or IP. Over-refusing only hands the concern back to the human reader.
+_HOST_IN_QUOTE_RE = re.compile(
+    r"[A-Za-z0-9._-]+:(?:/home/|/Users/|~)"
+    r"|@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*"
+    r"|://[^/\s]+"
+    r"|\b\d{1,3}(?:\.\d{1,3}){3}\b",
+)
+_HOST_WORDS = re.compile(
+    r"\bhost(?:s|names?)?\b|\bmachines?\b|\bservers?\b|\bIPs?\b|\bIPv[46]\b",
+    re.IGNORECASE,
+)
 # Same default as entrypoint.sh's INTERNAL_STRINGS, so the review reads the
 # needle list the publish gate greps for even when the variable is unset.
 DEFAULT_INTERNAL_STRINGS = "svc.cluster.local"
@@ -381,14 +396,19 @@ def home_path_concern(concern, needles):
 
     The same gates as email_concern(): the detail must be about a path, a
     home directory, a user name or a login, and must not name a credential
-    sitting in the same quote. And, belt and braces, a quote that carries a
-    configured needle is never dismissed.
+    sitting in the same quote. A home path on a named host is not dismissed
+    either: a quote with a host part (host:/home/..., user@host, a URL
+    authority, an IP) or a detail naming a host, machine, server or IP stays
+    the model's, as the prompt's "a path on a named host" says. And, belt and
+    braces, a quote that carries a configured needle is never dismissed.
     """
     quote = str(concern.get("quote", ""))
     detail = str(concern.get("detail", ""))
     if not _HOME_PATH_RE.search(quote):
         return False
     if not _HOME_PATH_WORDS.search(detail) or _CREDENTIAL_WORDS.search(detail):
+        return False
+    if _HOST_IN_QUOTE_RE.search(quote) or _HOST_WORDS.search(detail):
         return False
     low = quote.lower()
     if any(n.lower() in low for n in needles if n):
