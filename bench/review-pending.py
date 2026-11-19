@@ -73,6 +73,19 @@ _CREDENTIAL_WORDS = re.compile(
     r"\b(password|passwd|token|secret|api[ -]?key|bearer)\b", re.IGNORECASE,
 )
 _QUOTE_STRIP_CHARS = "<>()[]{}\"'.,;:!? \t\n\r"
+# Used by home_path_concern(): a home-directory path in a report is the
+# package's -- a maintainer's patch, a build script committed to the AUR repo
+# -- and whose home it names is undecidable here. The operator's own login is
+# decidable only as a configured needle, exactly like their email address.
+_HOME_PATH_RE = re.compile(r"(?:/home/|/Users/)[^/\s]+/|~[A-Za-z0-9._-]*/")
+_HOME_PATH_WORDS = re.compile(
+    r"\bpaths?\b|\bhome\b|\bdirector(?:y|ies)\b|\buser ?names?\b"
+    r"|\blogins?\b|\baccount names?\b",
+    re.IGNORECASE,
+)
+# Same default as entrypoint.sh's INTERNAL_STRINGS, so the review reads the
+# needle list the publish gate greps for even when the variable is unset.
+DEFAULT_INTERNAL_STRINGS = "svc.cluster.local"
 # 0 means every generated text in the sweep. The read is advisory, and a text
 # nobody read is the one a leak hides in, so the default is to read them all.
 DEFAULT_MAX_REVIEWS = 0
@@ -346,6 +359,43 @@ def email_concern(concern):
     return bool(_EMAIL_RE.search(quote))
 
 
+def internal_strings(env=None):
+    """The configured needles, AUR_SLEUTH_INTERNAL_STRINGS, split the way
+    entrypoint.sh splits them: on commas and whitespace."""
+    env = os.environ if env is None else env
+    raw = env.get("AUR_SLEUTH_INTERNAL_STRINGS") or DEFAULT_INTERNAL_STRINGS
+    return raw.replace(",", " ").split()
+
+
+def home_path_concern(concern, needles):
+    """True when the concern is about a home-directory path, and nothing else.
+
+    Every home path in a report comes from the package's own files: a
+    maintainer's patch (topdir = /home/<them>/...), a personal build script
+    committed to the AUR repo (gpg -dq ~/.ssh/...). The model cannot tell
+    whose home a path names, and raised six of seven false concerns on a
+    31,033-report sweep this way while the prompt already told it not to. The
+    operator's own login is decidable only as a needle in
+    AUR_SLEUTH_INTERNAL_STRINGS, which the publish gate checks before this
+    read runs.
+
+    The same gates as email_concern(): the detail must be about a path, a
+    home directory, a user name or a login, and must not name a credential
+    sitting in the same quote. And, belt and braces, a quote that carries a
+    configured needle is never dismissed.
+    """
+    quote = str(concern.get("quote", ""))
+    detail = str(concern.get("detail", ""))
+    if not _HOME_PATH_RE.search(quote):
+        return False
+    if not _HOME_PATH_WORDS.search(detail) or _CREDENTIAL_WORDS.search(detail):
+        return False
+    low = quote.lower()
+    if any(n.lower() in low for n in needles if n):
+        return False
+    return True
+
+
 # What a model writes when it lists something it examined and found clean,
 # instead of leaving it out. Matched on the model's own detail: it is the
 # model saying "not a leak", so it is not a concern, whatever list it is in.
@@ -480,18 +530,22 @@ people or machines that RAN these audits. Nothing else.
 A leak is text that belongs to the operator, not to the package:
 - an API key, token, password, or anything that looks like a credential
 - an internal hostname, a cluster-internal service name, a private IP address
-- a filesystem path that names the operator's own setup: a home directory
-  with a user name in it, a path on a named host. A path inside the audit
-  container itself (/data/..., /tmp/..., /opt/aur-sleuth/...) names nothing
-  private and is NOT a leak.
-- the operator's own account name or login, on its own -- not inside a path
-  or an email address, both already covered above
+- a filesystem path on a named host. A path inside the audit container
+  itself (/data/..., /tmp/..., /opt/aur-sleuth/...) names nothing private
+  and is NOT a leak.
+- the operator's own account name or login, on its own -- not inside a
+  path or an email address
 
 NOT a leak, and not your business:
 - an email address, any email address. Every one in a report belongs to
   the package's maintainer, its upstream, or a signing key's principal,
   and all of those are public already. The operator's own address, if
   they want it caught, is a needle the code checks before you run.
+- a home-directory path, any home-directory path (/home/<name>/...,
+  /Users/<name>/..., ~/..., ~<name>/...). You cannot tell whose home a path
+  names, and every one in a report comes from the package's own files. The
+  operator's own login, if they want it caught, is a needle the code checks
+  before you run.
 - credentials, hostnames, URLs, and paths that belong to the audited package --
   its PKGBUILD, its upstream project, its build scripts, its README. Those are
   public already.
@@ -559,7 +613,7 @@ Respond in JSON, no markdown fencing:
     return parsed
 
 
-def review_batches(entries, model, base_url, api_key, batch_size, workers):
+def review_batches(entries, model, base_url, api_key, batch_size, workers, needles=None):
     """Read every entry, a batch at a time, and gather what came back.
 
     One weak or failed batch must not lose the others, so each is reported
@@ -615,6 +669,8 @@ def review_batches(entries, model, base_url, api_key, batch_size, workers):
                 except Exception as exc:
                     results[i] = {"_error": str(exc)}
 
+    if needles is None:
+        needles = internal_strings()
     concerns, dismissed, errors, ok = [], [], [], 0
     for i, verdict in enumerate(results):
         if not isinstance(verdict, dict) or "_error" in verdict:
@@ -646,6 +702,10 @@ def review_batches(entries, model, base_url, api_key, batch_size, workers):
                 dismissed.append(entry)
             elif email_concern(entry):
                 entry["dismissed"] = "an email address: the package's, and the operator's are needles"
+                dismissed.append(entry)
+            elif home_path_concern(entry, needles):
+                entry["dismissed"] = ("a home-directory path: whose home is undecidable here,"
+                                      " and the operator's login is a needle")
                 dismissed.append(entry)
             elif unquoted_concern(entry, texts):
                 entry["dismissed"] = "the quote is not in the report"

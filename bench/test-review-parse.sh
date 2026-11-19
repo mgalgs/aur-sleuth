@@ -94,6 +94,48 @@ check("an address-shaped quote is not dismissed when the detail calls it a machi
       not ec({"quote": "mgalgs@nuc.lan.example",
               "detail": "the operator's username and internal machine name"}))
 
+# home_path_concern(): whose home a path names is undecidable here; the
+# operator's own login is decidable only as a configured needle. Six of seven
+# false concerns on a 31,033-report sweep were these, all from the packages'
+# own files.
+hp = rp.home_path_concern
+NEEDLES = ["svc.cluster.local", "mgalgs"]
+MODEL_DETAIL = ("The report contains a filesystem path that includes the "
+                "operator's home directory and username 'twilight'.")
+for name, quote in [
+    ("maintainer's patch (BitchX)", "topdir = /home/prophetpx/BitchX"),
+    ("maintainer's project path", "/home/twilight/Projects/gemini-api-mcp"),
+    ("maintainer's build script", "gpg -dq ~/.ssh/pass.gpg | sudo -S paru"),
+]:
+    check(f"real concern dismissed: {name}", hp({"quote": quote, "detail": MODEL_DETAIL}, NEEDLES))
+check("a macOS home path is dismissed",
+      hp({"quote": "/Users/alice/src/thing", "detail": "a user name in a path"}, NEEDLES))
+check("a ~name/ path is dismissed",
+      hp({"quote": "cp ~bob/build/out .", "detail": "the login of whoever built it"}, NEEDLES))
+for word in ("token", "password", "API key"):
+    check(f"a home path beside a {word} is not dismissed", not hp(
+        {"quote": "/home/twilight/.config/app: secret=abc123",
+         "detail": f"a {word} sitting in the operator's home directory"}, NEEDLES))
+check("a home path carrying a configured needle is not dismissed", not hp(
+    {"quote": "/home/mgalgs/aur-sleuth/data", "detail": MODEL_DETAIL}, NEEDLES))
+check("needle match ignores case", not hp(
+    {"quote": "/home/MGalgs/x", "detail": MODEL_DETAIL}, NEEDLES))
+check("an internal hostname is not a home-path concern", not hp(
+    {"quote": "api.svc-internal.example:8080",
+     "detail": "an internal hostname of the operator's cluster"}, NEEDLES))
+check("a private IP is not a home-path concern", not hp(
+    {"quote": "connected to 10.0.3.17", "detail": "a private IP address"}, NEEDLES))
+check("a home path whose detail is about something else is not dismissed", not hp(
+    {"quote": "ssh build01.ops.acme-internal.net:/home/ci/out",
+     "detail": "an internal hostname the audit ran on"}, NEEDLES))
+check("a container path is not a home path", not hp(
+    {"quote": "/data/git-store/pkg", "detail": "a filesystem path"}, NEEDLES))
+check("internal_strings splits like entrypoint.sh",
+      rp.internal_strings({"AUR_SLEUTH_INTERNAL_STRINGS": "a.lan, b.lan c.lan"})
+      == ["a.lan", "b.lan", "c.lan"])
+check("internal_strings defaults like entrypoint.sh",
+      rp.internal_strings({}) == ["svc.cluster.local"])
+
 # cleared_concern(): the model lists things it checked and found clean instead
 # of leaving them out, even though the prompt says an empty list is expected.
 # These are the verbatim `detail` fields that stopped a real publish -- one

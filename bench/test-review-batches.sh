@@ -197,6 +197,31 @@ check("the real concern still stands", len(got["concerns"]) == 1)
 check("the dismissed one carries the cleared reason", got["dismissed"][0]["dismissed"] ==
       "the model's own detail says it is not a leak")
 
+# --- home_path_concern(), end to end through review_batches -------------------
+HOME_BODY = "prepare() does: topdir = /home/prophetpx/BitchX and connects to 10.0.3.17"
+def home_paths(batch, model, base_url, api_key):
+    return {"concerns": [
+        {"package": "pkg0", "kind": "3",
+         "detail": "The report contains a filesystem path that includes the "
+                   "operator's home directory and username 'prophetpx'.",
+         "quote": "topdir = /home/prophetpx/BitchX"},
+        {"package": "pkg0", "kind": "2", "detail": "a private IP address",
+         "quote": "connects to 10.0.3.17"},
+    ], "_texts": texts(batch)}
+
+rp.ask_model = home_paths
+home_entries = [{"package": "pkg0", "model": "m", "result": "safe", "text": HOME_BODY}]
+got = rp.review_batches(home_entries, "m", "u", "k", 8, 4, needles=["svc.cluster.local"])
+check("a home-path concern is dismissed end to end", len(got["dismissed"]) == 1)
+check("the private IP still stands", len(got["concerns"]) == 1
+      and got["concerns"][0]["quote"] == "connects to 10.0.3.17")
+check("the dismissed one carries the home-path reason", got["dismissed"]
+      and got["dismissed"][0]["dismissed"] == "a home-directory path: whose home is "
+      "undecidable here, and the operator's login is a needle")
+got = rp.review_batches(home_entries, "m", "u", "k", 8, 4, needles=["prophetpx"])
+check("the same concern stands when the quote carries a needle",
+      len(got["concerns"]) == 2 and not got["dismissed"])
+
 # cleared_concern() runs first in the if/elif chain: a concern that is both
 # unquotable AND clearing-shaped must be dismissed for being cleared, not for
 # lacking a quote. Nothing else pins that ordering, so a future reordering,
