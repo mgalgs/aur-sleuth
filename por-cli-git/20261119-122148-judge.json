@@ -1,0 +1,29 @@
+{
+  "package": "por-cli-git",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The disagreement stems from the deepseek model hallucinating or misinterpreting HTML entities (e.g., &quot;) in the PKGBUILD. AUR PKGBUILDs use standard ASCII quotes. Even if the file literally contained HTML entities, bash would interpret it as a syntax error or a 'command not found' for the word 'cli', not a malicious payload. The qwen model correctly identified standard packaging practices.",
+  "disagreement_analysis": "The deepseek model flagged standard quote characters as HTML entity obfuscation, likely due to prompt encoding artifacts (the tool may have HTML-escaped the file content before passing it to the model) or hallucination. It incorrectly classified a benign syntax error as a supply-chain attack.",
+  "coverage_issues": [],
+  "false_positives": [
+    "deepseek: Claimed HTML entity obfuscation (&quot;) in PKGBUILD. This is a hallucination or prompt artifact; AUR PKGBUILDs do not use HTML entities. Even if present, it would just cause a 'command not found' error for 'cli', not a malicious injection."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Ensure file contents are passed to models as raw text without HTML escaping to prevent models from hallucinating HTML entities based on prompt artifacts.",
+    "Improve model reasoning to distinguish between benign syntax errors (like 'command not found' from malformed quotes) and actual malicious command injection."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5837,
+    "completion_tokens": 2556,
+    "cost": 0.00513952
+  },
+  "audits_judged": [
+    "20261119-120632-qwen-qwen3-235b-a22b-2507.md",
+    "20261119-120731-deepseek-deepseek-v4-flash.md",
+    "20261118-125705-openrouter-free.md"
+  ]
+}
