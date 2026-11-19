@@ -1,0 +1,31 @@
+{
+  "package": "pane-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The deepseek model flagged a mismatch between the declared url= (dcouple/Pane) and the download source (greenfield-inc/Pane), treating it as a supply chain attack. However, this is a packaging hygiene issue, not an injection. The threat model explicitly states that 'violates packaging best practices' is never grounds for unsafe, and that pinned checksums close the swap risk. The PKGBUILD contains no malicious code, no .install hooks, and the checksum is properly pinned. The URL mismatch could be due to an outdated url= field or legitimate organizational changes. The tool does not rate upstream application behavior, and there is no evidence the AUR maintainer injected malicious content.",
+  "disagreement_analysis": "The deepseek model overreacted to a URL mismatch between the declared upstream (dcouple/Pane) and the actual download source (greenfield-inc/Pane). It treated this as a classic supply chain attack indicator, but failed to recognize that: (1) the checksum is pinned, closing the swap risk per the threat model; (2) this is a packaging hygiene issue, not an injection; (3) the tool does not rate upstream application trustworthiness. The qwen model correctly identified this as standard binary packaging with verified checksums.",
+  "coverage_issues": [],
+  "false_positives": [
+    "deepseek model's URL mismatch finding: The mismatch between url= and download source is a packaging hygiene issue, not an injection. The pinned checksum closes the swap risk, and the tool explicitly excludes packaging style/hygiene from the verdict. The model conflated potential upstream trust issues with AUR maintainer injection."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models need stronger training to distinguish between packaging hygiene issues (outdated URLs, style violations) and actual malicious injections by AUR maintainers",
+    "Models should recognize that pinned checksums close the swap risk even when source URLs appear mismatched or suspicious",
+    "Models must not flag upstream application trustworthiness or potential upstream issues as injections - the tool's scope is limited to AUR packaging, not upstream vendor trust",
+    "The audit tool should provide clearer examples in prompts showing that URL mismatches with pinned checksums are hygiene issues, not unsafe verdicts"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 7122,
+    "completion_tokens": 2659,
+    "cost": 0.00568256
+  },
+  "audits_judged": [
+    "20261017-032257-qwen-qwen3-235b-a22b-2507.md",
+    "20261017-032246-deepseek-deepseek-v4-flash.md",
+    "20261016-115407-openrouter-free.md"
+  ]
+}

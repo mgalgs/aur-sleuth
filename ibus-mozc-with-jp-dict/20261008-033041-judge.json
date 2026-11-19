@@ -1,0 +1,32 @@
+{
+  "package": "ibus-mozc-with-jp-dict",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package consists of standard PKGBUILDs, an install script, and various maintainer helper scripts. The only disagreement stemmed from qwen flagging 'build-all.sh' as unsafe due to its use of a GPG-decrypted password for sudo. However, this script is a local maintainer automation tool (a wrapper that calls makepkg) and is not executed during the package build process. Per the threat model, development tooling and maintainer scripts not referenced by PKGBUILD functions are out of scope. All in-scope files (PKGBUILDs, .install, patches) are safe and follow standard packaging practices with pinned, checksummed sources.",
+  "disagreement_analysis": "qwen flagged 'build-all.sh' as a supply-chain risk because it automates sudo using a GPG-encrypted password. deepseek correctly identified it as a maintainer convenience script. The threat model explicitly excludes development tooling and maintainer scripts unless they are invoked by PKGBUILD functions. Since 'build-all.sh' is a wrapper that invokes makepkg (not the other way around), it is out of scope, making qwen's finding a false positive.",
+  "coverage_issues": [
+    "deepseek encountered a parsing error on PKGBUILD.normal, resulting in an inconclusive file verdict.",
+    "qwen encountered an API error when reviewing .SRCINFO."
+  ],
+  "false_positives": [
+    "build-all.sh: Flagged by qwen as unsafe due to automated sudo with a decrypted password. This is a local maintainer helper script for testing package variants, not executed during makepkg, and thus out of scope per the threat model."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models must distinguish between code executed during the build process (in scope) and local maintainer/development scripts (out of scope).",
+    "The presence of sudo or credential handling in a script does not constitute a supply-chain risk if the script is clearly a local automation tool (e.g., calling makepkg) and not invoked by the package build process.",
+    "Pre-filtering or stronger prompting is needed to prevent models from flagging maintainer helper scripts that exist in the repository but are not part of the packaging execution flow."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 14150,
+    "completion_tokens": 2633,
+    "cost": 0.00789824
+  },
+  "audits_judged": [
+    "20261008-032242-qwen-qwen3-235b-a22b-2507.md",
+    "20261008-032536-deepseek-deepseek-v4-flash.md"
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "package": "waterfox",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The top-level curl command fetches a commit hash from the package's own declared upstream GitHub repository to resolve a locale tarball URL. It parses the HTML with grep to extract a hex string and does not execute the fetched content. The prompt explicitly states that resolving download URLs by fetching the package's own upstream page and parsing it is a normal AUR pattern and not grounds for an unsafe verdict. There is no evidence of code injection or fetching from an unrelated host.",
+  "disagreement_analysis": "qwen flagged the top-level curl command as unsafe because it executes a network request during PKGBUILD sourcing (global scope). However, it confused the execution of the curl command itself with the execution of the fetched content. The prompt explicitly exempts fetching from the package's own upstream to resolve URLs as a normal AUR pattern. deepseek correctly identified this as a standard pattern that does not execute untrusted code or connect to untrusted hosts.",
+  "coverage_issues": [],
+  "false_positives": [
+    "qwen's finding on the top-level curl command: It incorrectly classified a standard AUR pattern (fetching a commit hash from the package's own upstream repo via curl/grep) as a supply-chain risk. The prompt explicitly states this is a normal pattern and not unsafe unless the fetched content is executed or it connects to an unrelated host."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models struggle to distinguish between 'executing a command during sourcing' (like a global variable assignment using curl) and 'executing the fetched content' (like curl | bash). The audit tool should emphasize that fetching from the declared upstream URL to resolve a version/commit is safe, even at global scope, provided the fetched text is not evaluated as code.",
+    "Reinforce the rule that 'violates packaging best practices' (such as doing dynamic resolution at global scope instead of pkgver()) is never grounds for an unsafe verdict, as it does not meet the criteria for maintainer injection."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 8102,
+    "completion_tokens": 2584,
+    "cost": 0.00590016
+  },
+  "audits_judged": [
+    "20261031-031929-qwen-qwen3-235b-a22b-2507.md",
+    "20261031-031901-deepseek-deepseek-v4-flash.md",
+    "20261028-115742-openrouter-free.md"
+  ]
+}

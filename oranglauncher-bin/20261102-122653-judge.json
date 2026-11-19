@@ -1,0 +1,28 @@
+{
+  "package": "oranglauncher-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD contains a loop in the package() function that copies a .desktop file to /home/*/Desktop. While this is a severe violation of Arch packaging guidelines (as package() should only write to $pkgdir), it is a naive attempt at desktop integration, not a malicious injection. It does not execute fetched content, exfiltrate data, or contact external hosts. Per the threat model, packaging hygiene violations are not grounds for an unsafe verdict.",
+  "disagreement_analysis": "qwen flagged the out-of-bounds file copy in package() as a malicious supply-chain risk and user autonomy violation. deepseek correctly identified it as an unusual but non-malicious packaging violation. openrouter incorrectly called it 'typical' but correctly concluded it was safe.",
+  "coverage_issues": [],
+  "false_positives": [
+    "qwen flagged the .desktop file copy to /home/*/Desktop as a malicious injection. This is a packaging hygiene violation (writing outside $pkgdir) and a bash anti-pattern, but not a security threat, as it performs no network operations, data exfiltration, or arbitrary code execution."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models must distinguish between packaging hygiene violations (e.g., writing outside $pkgdir in package()) and actual malicious injections. Naive or poorly implemented convenience scripts that violate packaging guidelines but lack malicious payloads (no network, no exfiltration, no RCE) should not trigger an UNSAFE verdict."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 9975,
+    "completion_tokens": 2480,
+    "cost": 0.0063663999999999995
+  },
+  "audits_judged": [
+    "20261102-121551-qwen-qwen3-235b-a22b-2507.md",
+    "20261102-121534-deepseek-deepseek-v4-flash.md",
+    "20261002-204234-openrouter-free.md"
+  ]
+}

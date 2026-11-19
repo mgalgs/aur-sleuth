@@ -1,0 +1,31 @@
+{
+  "package": "visual-studio-code-insiders-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "All successfully audited files show standard AUR binary packaging practices. The PKGBUILD downloads from official Microsoft CDN (vscode.download.prss.microsoft.com) with pinned SHA256 checksums, no top-level code execution. The .install script only prints informational messages. The launcher script reads user config and executes the binary. No injection patterns, no unauthorized network activity, no execution of fetched content. The disagreement stems from API errors in the qwen model, not security concerns.",
+  "disagreement_analysis": "The qwen model encountered HTTP 400 errors when auditing .gitignore and visual-studio-code-insiders-bin.install, resulting in an inconclusive verdict. The deepseek model successfully audited all 5 files and found them safe. The openrouter/free report (advisory-only) also had a parsing error on .gitignore. The disagreement is technical (API failures) rather than substantive security disagreement.",
+  "coverage_issues": [
+    "qwen model failed to audit .gitignore and visual-studio-code-insiders-bin.install due to HTTP 400 API errors",
+    "openrouter/free model failed to parse decision for .gitignore"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "API errors should trigger automatic retry or fallback to prevent inconclusive verdicts when files are likely safe",
+    "Distinguish between 'audit failed due to technical error' and 'audit found security issues' in verdict logic",
+    "Consider implementing circuit breakers for models with repeated API failures to avoid wasting resources"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 7958,
+    "completion_tokens": 1264,
+    "cost": 0.00416448
+  },
+  "audits_judged": [
+    "20261006-191411-qwen-qwen3-235b-a22b-2507.md",
+    "20261006-191443-deepseek-deepseek-v4-flash.md",
+    "20261005-193527-openrouter-free.md"
+  ]
+}

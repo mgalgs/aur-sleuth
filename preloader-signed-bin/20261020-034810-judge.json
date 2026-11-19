@@ -1,0 +1,27 @@
+{
+  "package": "preloader-signed-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The PKGBUILD uses curl and grep to fetch checksums from its own declared upstream URL. This is a recognized AUR pattern for vendors without stable URLs. The script parses the HTML to extract MD5 checksums but does not execute the fetched content, nor does it communicate with unrelated hosts. While dynamically fetching checksums from the same source as the binaries is a packaging hygiene issue (circular integrity), the threat model explicitly states that hygiene violations are not grounds for an unsafe verdict unless they involve executing fetched content.",
+  "disagreement_analysis": "The qwen model flagged the top-level curl execution during PKGBUILD sourcing as a supply-chain attack vector, conflating packaging hygiene (side-effects during metadata parsing) with malicious injection. The deepseek model initially raised the same concern but correctly self-corrected in its second pass, recognizing that fetching and parsing from the upstream URL without executing the content is a hygiene issue, not an injection.",
+  "coverage_issues": [],
+  "false_positives": [
+    "qwen model flagged top-level curl execution during sourcing as unsafe. This is a false positive because fetching from the package's own upstream page and parsing it with grep without executing the content is an explicit exception in the threat model for packaging hygiene."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models must be trained to distinguish between 'side-effects during sourcing' (packaging hygiene) and 'executing fetched content' (malicious injection). Executing network commands like curl to fetch metadata or checksums from the package's own upstream URL is a known AUR pattern and should not trigger an unsafe verdict unless the fetched content is subsequently executed or piped to a shell."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5308,
+    "completion_tokens": 1976,
+    "cost": 0.00422784
+  },
+  "audits_judged": [
+    "20261020-032012-qwen-qwen3-235b-a22b-2507.md",
+    "20261020-032056-deepseek-deepseek-v4-flash.md"
+  ]
+}

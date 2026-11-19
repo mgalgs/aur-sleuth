@@ -1,0 +1,30 @@
+{
+  "package": "ruffle-selfhosted-nightly",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Both models that successfully analyzed the PKGBUILD found it safe, identifying standard AUR packaging patterns: git source from official upstream repo (github.com/ruffle-rs/ruffle.git), conditional makedepends, standard Rust/Node.js build process, and no malicious code execution. The disagreement stems from qwen's API error on .SRCINFO (a metadata-only file with no executable code), not from any security concern. Deepseek successfully reviewed all three files and found no issues. The openrouter/free report is advisory-only and doesn't count toward the verdict.",
+  "disagreement_analysis": "The disagreement is caused by a tool error, not a security finding. Qwen's model returned HTTP 400 when auditing .SRCINFO, resulting in an inconclusive verdict. However, .SRCINFO is a generated metadata file with no executable code, so this error doesn't represent a security gap. Both models' PKGBUILD analyses were thorough and agreed the package is safe.",
+  "coverage_issues": [
+    "Qwen model failed to audit .SRCINFO due to API error (HTTP 400 BadRequestError)"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "When a model fails on a non-executable metadata file like .SRCINFO, the audit tool should not mark the entire package as inconclusive if all executable files (PKGBUILD, .install) were successfully reviewed",
+    "API errors should be distinguished from security findings - a tool failure on a metadata file shouldn't override successful analysis of the actual build scripts",
+    "The audit tool could implement retry logic or fallback models for transient API errors to avoid inconclusive verdicts due to infrastructure issues"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5904,
+    "completion_tokens": 1116,
+    "cost": 0.0033177600000000003
+  },
+  "audits_judged": [
+    "20261005-070716-qwen-qwen3-235b-a22b-2507.md",
+    "20261005-070754-deepseek-deepseek-v4-flash.md",
+    "20260929-080705-openrouter-free.md"
+  ]
+}

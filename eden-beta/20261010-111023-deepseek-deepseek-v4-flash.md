@@ -1,0 +1,138 @@
+---
+package: eden-beta
+pkgver: 0.2.1
+pkgrel: 4
+result: safe
+model: deepseek/deepseek-v4-flash
+provider: custom
+aur_sleuth_rev: e76320400488b1dad2302211f4f5cfaf8522c9b1
+prompt_tokens: 19375
+completion_tokens: 3141
+total_tokens: 22516
+cost: 0.0043595425
+execution_time: 35.05
+files_reviewed: 3
+files_skipped: 3
+maintainer_files: 6
+source_fetch: not_attempted
+upstream_files: 0
+upstream_named_files: 0
+unpinned_sources: 0
+injection_attempts: 0
+date: 2026-10-10T11:10:22Z
+file_verdicts:
+  - file: 3751.patch
+    status: skipped
+    summary: "Skipping binary file: 3751.patch"
+  - file: 7c0e993b5b.patch
+    status: skipped
+    summary: "Skipping binary file: 7c0e993b5b.patch"
+  - file: .SRCINFO
+    status: safe
+    summary: Standard AUR metadata, no malicious content.
+  - file: bd6dd7ecec.patch
+    status: skipped
+    summary: "Skipping binary file: bd6dd7ecec.patch"
+  - file: PKGBUILD
+    status: safe
+    summary: Standard AUR PKGBUILD with no suspicious activity.
+  - file: 60e1032771.patch
+    status: safe
+    summary: Legitimate patch with fuzzing tool, no malicious behavior.
+---
+
+Materializing eden-beta from local mirror...
+Materialized eden-beta
+Analyzing eden-beta AUR package with deepseek/deepseek-v4-flash
+Performing initial audit of PKGBUILD to ensure that we can safely run `makepkg`
+LLM auditresponse for PKGBUILD:
+<security_assessment>
+<decision>SAFE</decision>
+<details>
+The PKGBUILD contains only standard variable definitions in its top-level scope. The `source` array uses variable expansion (`${pkgver}`, `${_pkgver}`) to construct a download URL from the project's own Git repository (git.eden-emu.dev) — this is normal and expected. No top-level code performs network requests, executes downloaded content, runs obfuscated commands, or modifies the system. All potentially dangerous operations (patching, building, installing) are confined to the `prepare()`, `build()`, and `package()` functions, which are **not executed** during `makepkg --printsrcinfo`. Therefore, sourcing this PKGBUILD is safe for the purpose of parsing metadata.
+</details>
+<evidence></evidence>
+<summary>No dangerous top-level code; SAFE to source.</summary>
+</security_assessment>
+
++ Initial PKGBUILD audit complete -- No dangerous top-level code; SAFE to source.
+Reviewing the 6 file(s) in the AUR repository.
+Reviewing the AUR repository's files...
+[0/6] Reviewing .SRCINFO...
+[0/6] Reviewing .SRCINFO, 3751.patch...
+[0/6] Reviewing .SRCINFO, 3751.patch, 60e1032771.patch...
+[0/6] Reviewing .SRCINFO, 3751.patch, 60e1032771.patch, 7c0e993b5b.patch...
+[1/6] Reviewing .SRCINFO, 60e1032771.patch, 7c0e993b5b.patch...
+! Reviewed 3751.patch. Status: SKIPPED -- Skipping binary file: 3751.patch
+[1/6] Reviewing .SRCINFO, 60e1032771.patch, 7c0e993b5b.patch, PKGBUILD...
+[2/6] Reviewing .SRCINFO, 60e1032771.patch, PKGBUILD...
+! Reviewed 7c0e993b5b.patch. Status: SKIPPED -- Skipping binary file: 7c0e993b5b.patch
+LLM auditresponse for .SRCINFO:
+<security_assessment>
+<decision>SAFE</decision>
+<details>
+The .SRCINFO file is a metadata file for the AUR package eden-beta. It contains standard fields: pkgbase, pkgdesc, url, architecture, licenses, dependencies, sources, and checksums. The sources point to the project's own upstream Git archive (eden-emu.dev) and local patch files. All source tarballs and patches have SHA-256 checksums provided, none are set to SKIP. There are no network requests, obfuscated code, system modifications, or any unusual or dangerous commands. The file simply describes the package for AUR's build system. No evidence of malicious or supply-chain attack behavior.
+</details>
+<evidence></evidence>
+<summary>Standard AUR metadata, no malicious content.</summary>
+</security_assessment>
+
+[2/6] Reviewing .SRCINFO, 60e1032771.patch, PKGBUILD, bd6dd7ecec.patch...
+[3/6] Reviewing 60e1032771.patch, PKGBUILD, bd6dd7ecec.patch...
++ Reviewed .SRCINFO. Status: SAFE -- Standard AUR metadata, no malicious content.
+[4/6] Reviewing 60e1032771.patch, PKGBUILD...
+! Reviewed bd6dd7ecec.patch. Status: SKIPPED -- Skipping binary file: bd6dd7ecec.patch
+LLM auditresponse for PKGBUILD:
+<security_assessment>
+<decision>SAFE</decision>
+<details>
+The PKGBUILD follows standard AUR packaging practices for a Nintendo Switch emulator. The source tarball is fetched from the project&#x2019;s own upstream Git repository (git.eden-emu.dev) and verified by a SHA-256 checksum. Two patches are included with checksums as well. The build process uses cmake and ninja to compile the software, and the package installs the built binaries, a udev rules file (with a minor sed fix to prevent triggering on device removal), and license files. There are no obfuscated commands, no unexpected network requests, no execution of untrusted downloaded content, and no attempts to exfiltrate data or modify system files beyond the package&#x2019;s own scope. All operations are typical for a self-contained emulator package.
+</details>
+<evidence></evidence>
+<summary>Standard AUR PKGBUILD with no suspicious activity.</summary>
+</security_assessment>
+
+[5/6] Reviewing 60e1032771.patch...
++ Reviewed PKGBUILD. Status: SAFE -- Standard AUR PKGBUILD with no suspicious activity.
+LLM auditresponse for 60e1032771.patch:
+<security_assessment>
+<decision>SAFE</decision>
+<details>
+The patch contains code improvements and a new fuzzing tool (fuzzsettings.cpp) for testing the settings parser.  
+The fuzzing tool reads an input file, generates random values for various setting types, and writes the modified output.  
+It uses standard C++ file I/O and random number generation; there are no network requests, data exfiltration, backdoors, or execution of untrusted binaries.  
+All other modifications are normal bug fixes and type safety improvements (e.g., correcting integer ranges, adding enum clamping, updating UI settings).  
+Nothing in the patch indicates a supply chain attack or hidden malicious behavior.
+</details>
+<evidence>
+</evidence>
+<summary>Legitimate patch with fuzzing tool, no malicious behavior.</summary>
+</security_assessment>
+
+[6/6] Reviewing ...
++ Reviewed 60e1032771.patch. Status: SAFE -- Legitimate patch with fuzzing tool, no malicious behavior.
+Reviewed all the AUR repository's files.
+Audit complete! Result: No issues found
+(Skipped 3 files: 3751.patch, 7c0e993b5b.patch, bd6dd7ecec.patch)
+
+API Usage Summary
+  Models: deepseek/deepseek-v4-flash
+  Prompt Tokens: 19,375
+  Completion Tokens: 3,141
+  Total Tokens: 22,516
+  Total Cost: $0.004360
+  Execution Time: 35.05 seconds
+
+Final Status: SAFE
+
+
+No issues found.
+
+
+Audit Skips:
+
+3751.patch: [SKIPPED] Skipping binary file: 3751.patch
+
+7c0e993b5b.patch: [SKIPPED] Skipping binary file: 7c0e993b5b.patch
+
+bd6dd7ecec.patch: [SKIPPED] Skipping binary file: bd6dd7ecec.patch

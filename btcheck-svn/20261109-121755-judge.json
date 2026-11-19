@@ -1,0 +1,28 @@
+{
+  "package": "btcheck-svn",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The qwen model incorrectly claimed that command substitution (backticks) inside a shell comment is executed during parsing. In bash, comments are strictly inert and do not evaluate command substitutions. The base64-encoded string is simply an obfuscated email address in the maintainer comment, a common pattern to avoid spam scraping, and poses no execution risk. The deepseek model correctly identified this.",
+  "disagreement_analysis": "The disagreement stems from a fundamental hallucination by the qwen model regarding shell syntax. It falsely asserted that bash evaluates command substitutions inside comments, leading to a false positive for parse-time code execution. The deepseek model correctly understood that comments are inert.",
+  "coverage_issues": [],
+  "false_positives": [
+    "qwen model's claim of command injection via backticks in a comment. Bash does not execute command substitutions inside comments; they are strictly inert."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models may hallucinate fundamental shell parsing rules, such as believing comments execute command substitutions. The audit tool should incorporate a static syntax check (e.g., `bash -n` or AST parsing) to verify if flagged code actually executes, rather than relying solely on LLM reasoning for shell semantics.",
+    "Recognize obfuscated emails in maintainer comments as a common, benign AUR pattern used to prevent spam scraping, and instruct models not to flag them as execution risks when they appear after a `#`."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 4531,
+    "completion_tokens": 1619,
+    "cost": 0.00352224
+  },
+  "audits_judged": [
+    "20261109-120714-qwen-qwen3-235b-a22b-2507.md",
+    "20261109-120712-deepseek-deepseek-v4-flash.md"
+  ]
+}

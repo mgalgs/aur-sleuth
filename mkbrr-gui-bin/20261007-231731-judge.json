@@ -1,0 +1,32 @@
+{
+  "package": "mkbrr-gui-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The package is a standard AUR -bin package that downloads a pre-compiled binary from the official upstream GitHub repository (autobrr/mkbrr). The PKGBUILD contains no dangerous top-level code, the package() function uses only standard install commands, and the main binary has a pinned SHA256 checksum. The license file uses SKIP but is fetched from the same upstream repository, which is normal AUR practice. No .install hooks or other executable files are present. The disagreement was caused entirely by tool errors (HTTP 400 BadRequestError in qwen3-235b, truncated response in openrouter/free), not by substantive security concerns. The one successful audit (deepseek-v4-flash) found no issues.",
+  "disagreement_analysis": "Two of three reports failed due to tool errors: qwen3-235b encountered HTTP 400 BadRequestError when auditing PKGBUILD and .SRCINFO, and openrouter/free produced a truncated/malformed response for PKGBUILD. Only deepseek-v4-flash completed successfully and found the package safe. The disagreement is not about security findings but about audit completion.",
+  "coverage_issues": [
+    "qwen3-235b: HTTP 400 errors prevented full audit of PKGBUILD and .SRCINFO",
+    "openrouter/free: truncated response prevented full audit of PKGBUILD"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Tool errors (HTTP 400, truncated responses) should be distinguished from security findings - they indicate audit infrastructure failures, not package risks",
+    "When multiple models fail with tool errors on the same files, the system should recognize this as a tool issue and either retry or weight successful audits more heavily",
+    "The audit tool should implement retry logic for transient API errors (HTTP 400, 500, timeouts) before marking files as inconclusive",
+    "Response validation should catch truncated outputs before they cause inconclusive verdicts - the model clearly reached a SAFE decision but the response was cut off"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 6962,
+    "completion_tokens": 1651,
+    "cost": 0.00434112
+  },
+  "audits_judged": [
+    "20261007-230752-qwen-qwen3-235b-a22b-2507.md",
+    "20261007-230808-deepseek-deepseek-v4-flash.md",
+    "20260928-202454-openrouter-free.md"
+  ]
+}

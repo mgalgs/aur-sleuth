@@ -1,0 +1,33 @@
+{
+  "package": "decklink-sdk",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The top-level curl command fetches a download URL from Blackmagic Design's official API using hardcoded fake registration data. This is a normal AUR pattern for vendors without stable URLs (explicitly permitted by the threat model). The destination is the legitimate upstream, the downloaded artifact is pinned with a SHA-256 checksum, and no real user data is exfiltrated. The qwen model's concerns about timing (execution during sourcing) and hypothetical abuse scenarios are packaging style issues, not injection attacks.",
+  "disagreement_analysis": "The qwen model overreacted to an unconventional but legitimate packaging pattern. It flagged: (1) execution during sourcing as dangerous, but this is a known makepkg behavior and a style issue, not a vulnerability; (2) 'exfiltration-like' characteristics for sending hardcoded fake data to the upstream's own server, which is not actual exfiltration; (3) hypothetical abuse scenarios (if endpoint were attacker-controlled, if variables derived from system), which are not evidence of actual malice. The deepseek model correctly applied the threat model and recognized this as resolving a dynamic download URL from the legitimate upstream.",
+  "coverage_issues": [
+    "qwen model only reviewed 1 file (PKGBUILD) vs deepseek's 3 files, but this didn't affect verdict accuracy since PKGBUILD is the primary concern"
+  ],
+  "false_positives": [
+    "qwen's 'unsafe' verdict based on top-level curl execution: This is a normal AUR pattern for vendors without stable URLs. The threat model explicitly states 'Violates packaging best practices is never, by itself, grounds for unsafe.' The curl fetches from the legitimate upstream, doesn't execute fetched content, and the artifact is checksum-pinned.",
+    "qwen's 'exfiltration' claim: Sending hardcoded fake data (Arch Linux, someone@archlinux.org) to the upstream's own server is not exfiltration. No real user data leaves the system."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models must distinguish packaging style issues from security vulnerabilities. The threat model explicitly excludes 'violates packaging best practices' as grounds for unsafe.",
+    "Models should not flag hypothetical abuse scenarios as evidence of malice. The question is whether code IS malicious, not whether it COULD BE under different circumstances.",
+    "Models should recognize that sending hardcoded fake data to the upstream's own server is not exfiltration. Exfiltration requires sending real user data to an unauthorized destination.",
+    "Models should recognize that resolving dynamic download URLs from the legitimate upstream (whether via GET+grep/sed or POST+JSON) is a normal AUR pattern for vendors without stable URLs."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 5469,
+    "completion_tokens": 2558,
+    "cost": 0.00502432
+  },
+  "audits_judged": [
+    "20261015-232121-qwen-qwen3-235b-a22b-2507.md",
+    "20261015-231945-deepseek-deepseek-v4-flash.md"
+  ]
+}

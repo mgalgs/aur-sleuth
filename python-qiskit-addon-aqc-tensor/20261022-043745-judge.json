@@ -1,0 +1,32 @@
+{
+  "package": "python-qiskit-addon-aqc-tensor",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Report 2 (deepseek-v4-flash) successfully reviewed all three files (PKGBUILD, .SRCINFO, .gitignore) and found them to contain standard, safe packaging practices: pinned GitHub source tag, BLAKE2b checksums, no top-level code execution, standard Python build tooling. The 'disagreement' is not a real security disagreement but rather tool failures - Report 1 encountered HTTP 404 API errors preventing review of PKGBUILD and .SRCINFO, and Report 3 (advisory only) failed to parse the model response. Report 2's thorough analysis shows no injection risks.",
+  "disagreement_analysis": "The disagreement stems from tool/infrastructure failures, not security analysis differences. Report 1 (qwen3-235b) hit HTTP 404 errors when trying to audit PKGBUILD and .SRCINFO, resulting in inconclusive verdicts. Report 3 (openrouter/free, advisory) failed to parse the model's response format. Only Report 2 (deepseek-v4-flash) completed successfully and found the package safe with standard packaging practices.",
+  "coverage_issues": [
+    "Report 1: API HTTP 404 errors prevented review of PKGBUILD and .SRCINFO files",
+    "Report 3: Model response parsing failure, only attempted PKGBUILD review"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Distinguish between 'inconclusive due to tool error' and 'inconclusive due to security uncertainty' - API failures should trigger automatic retry rather than marking files as inconclusive",
+    "Implement retry logic for transient API errors (HTTP 404, 500, timeouts) before marking a file review as failed",
+    "Advisory reports that fail to parse should not contribute to disagreement calculations",
+    "When one report successfully completes full coverage and finds no issues, while others fail due to tool errors, the successful report should carry the verdict"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 4782,
+    "completion_tokens": 1171,
+    "cost": 0.0030291199999999997
+  },
+  "audits_judged": [
+    "20261022-040549-qwen-qwen3-235b-a22b-2507.md",
+    "20261022-040556-deepseek-deepseek-v4-flash.md",
+    "20261022-010038-openrouter-free.md"
+  ]
+}

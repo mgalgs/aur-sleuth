@@ -1,0 +1,30 @@
+{
+  "package": "immich-server",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The qwen3 model successfully reviewed all 17 files and found no malicious injections in the PKGBUILD, patches, or install hooks. The inconclusive verdicts from the other models are purely due to parsing errors (failure to output the expected XML structure), not actual security findings. The skipped checksums apply only to external geodata files, while the main source tarball is properly pinned. Patches and install scripts contain standard Arch Linux packaging adjustments.",
+  "disagreement_analysis": "The disagreement stems from output formatting failures in the cheaper models (deepseek-v4-flash and openrouter/free). These models returned plain text or incorrect tags instead of the required XML structure, causing the audit tool to mark the files as inconclusive. The qwen3 model followed the format and correctly evaluated the files as safe.",
+  "coverage_issues": [
+    "deepseek-v4-flash failed to parse immich-server.install due to an empty or invalid model response.",
+    "openrouter/free failed to parse immich-server.install, immich.tmpfiles, postgres-path.patch, and sh-serverhome.patch due to incorrect output formatting."
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "The audit tool should implement a fallback parser or retry mechanism when models output plain text safety declarations (e.g., 'User Safety: safe') instead of the expected XML tags.",
+    "Cheaper models may struggle with strict XML formatting; consider enforcing structured output via system prompts or using models with better instruction-following capabilities for strict schemas."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 18829,
+    "completion_tokens": 2222,
+    "cost": 0.00886944
+  },
+  "audits_judged": [
+    "20261009-033421-qwen-qwen3-235b-a22b-2507.md",
+    "20261009-033548-deepseek-deepseek-v4-flash.md",
+    "20261009-001151-openrouter-free.md"
+  ]
+}

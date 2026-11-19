@@ -1,0 +1,31 @@
+{
+  "package": "sonora-bin",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "Only one report (deepseek/deepseek-v4-flash) successfully completed the audit and found the package safe. The other two reports ended in tool errors (API failure for qwen3-235b, parsing error for openrouter/free) and carry no verdict signal per the rules. The successful report reviewed all 3 files (PKGBUILD, .gitignore, .SRCINFO) and found standard packaging: pinned GitHub release sources with SHA256 checksums, routine installation of prebuilt binaries and desktop files, no dangerous commands or obfuscation. This is a typical -bin package with no injection indicators.",
+  "disagreement_analysis": "The 'disagreement' was caused by tool errors, not substantive disagreement. Two models failed to complete their audits (HTTP 400 error, parsing error), leaving only one valid report. The openrouter/free report is also marked advisory:true, so it doesn't count toward agreement. There is no actual disagreement on the package's safety among models that successfully completed their reviews.",
+  "coverage_issues": [
+    "qwen3-235b: PKGBUILD review failed with HTTP 400 BadRequestError",
+    "openrouter/free: PKGBUILD review failed with parsing error; only reviewed 1 of 3 files"
+  ],
+  "false_positives": [],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Tool errors (API failures, parsing errors) should be clearly distinguished from substantive inconclusive findings in the final verdict calculation",
+    "Advisory reports (advisory:true) should be automatically excluded from disagreement detection to avoid false triggers",
+    "The audit tool should implement retry logic or fallback models when API calls fail, to reduce inconclusive results due to transient errors"
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 4789,
+    "completion_tokens": 1392,
+    "cost": 0.0033142400000000004
+  },
+  "audits_judged": [
+    "20261007-230245-qwen-qwen3-235b-a22b-2507.md",
+    "20261007-230230-deepseek-deepseek-v4-flash.md",
+    "20261002-202005-openrouter-free.md"
+  ]
+}

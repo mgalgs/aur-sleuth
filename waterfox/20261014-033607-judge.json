@@ -1,0 +1,34 @@
+{
+  "package": "waterfox",
+  "correct_verdict": "safe",
+  "confidence": "high",
+  "reasoning": "The top-level curl in the PKGBUILD fetches a commit hash from the project's own declared upstream GitHub page (github.com/BrowserWorks/waterfox) using a restrictive regex to extract a 40-character hex SHA1. This is explicitly identified in the threat model as a 'normal AUR pattern for vendors without stable URLs.' The actual downloaded artifacts are pinned with SHA-256 checksums in .SRCINFO, closing any swap risk. No code is executed from the fetched content, no data is exfiltrated, and the destination is the package's legitimate upstream. This is a packaging hygiene observation, not an injection.",
+  "disagreement_analysis": "qwen/qwen3-235b-a22b-2507 flagged the top-level curl as unsafe, citing theoretical MITM/supply-chain risks during parsing. However, this misapplies the threat model: the instructions explicitly state that fetching from the package's own upstream page to resolve a URL is a normal AUR pattern, and when artifacts are checksummed (which they are here), the swap risk is closed. The concern about 'unauthenticated network request during parsing' is a hygiene/style issue, not an injection. deepseek and openrouter correctly identified this as standard practice with no malicious behavior.",
+  "coverage_issues": [
+    "qwen only reviewed 1 file (PKGBUILD) while other models reviewed all 5 maintainer files. However, PKGBUILD is the critical file for injection detection, so this is not a significant gap for this package.",
+    "openrouter/free had a parsing error on .nvchecker.toml, resulting in INCONCLUSIVE status for that file. This is a minor version-checker config and not security-critical."
+  ],
+  "false_positives": [
+    "qwen's 'Top-level curl in variable assignment enables remote exploitation during parsing' is a false positive. The instructions explicitly classify this pattern (fetching from declared upstream to resolve URL, parsing with grep/sed, not executing fetched content) as normal AUR packaging. The actual artifacts are checksummed, closing swap risk. Theoretical MITM concerns on legitimate upstream domains do not constitute injection."
+  ],
+  "false_negatives": [],
+  "re_audit_recommended": false,
+  "re_audit_focus": [],
+  "learnings": [
+    "Models must distinguish between packaging hygiene violations and actual code injection. Fetching from a package's own declared upstream to resolve dynamic URLs is explicitly safe when artifacts are checksummed.",
+    "Theoretical supply-chain risks (MITM on legitimate upstream domains) should not be flagged as security issues when checksums pin the downloaded artifacts. The threat model focuses on injected code, not transport security.",
+    "Top-level network requests during PKGBUILD sourcing are a known AUR pattern for vendors without stable URLs. Models should recognize this as standard practice, not a vulnerability, provided no fetched content is executed and artifacts are verified.",
+    "When a model flags a pattern that the instructions explicitly classify as safe (e.g., 'resolves download URL by fetching upstream page, parsing with grep/sed'), this indicates a failure to properly apply the threat model boundaries."
+  ],
+  "_judge_usage": {
+    "model": "qwen/qwen3.7-plus",
+    "prompt_tokens": 8263,
+    "completion_tokens": 1975,
+    "cost": 0.00517216
+  },
+  "audits_judged": [
+    "20261014-030952-qwen-qwen3-235b-a22b-2507.md",
+    "20261014-031109-deepseek-deepseek-v4-flash.md",
+    "20261001-202608-openrouter-free.md"
+  ]
+}

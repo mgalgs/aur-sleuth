@@ -1,0 +1,123 @@
+---
+package: ttfx
+pkgver: 0.5.1
+pkgrel: 1
+result: safe
+model: deepseek/deepseek-v4-flash
+provider: custom
+aur_sleuth_rev: e76320400488b1dad2302211f4f5cfaf8522c9b1
+prompt_tokens: 11773
+completion_tokens: 3015
+total_tokens: 14788
+cost: 0.001620073
+execution_time: 53.38
+files_reviewed: 4
+files_skipped: 0
+maintainer_files: 4
+source_fetch: not_attempted
+upstream_files: 0
+upstream_named_files: 0
+unpinned_sources: 0
+injection_attempts: 0
+date: 2026-10-25T07:07:00Z
+file_verdicts:
+  - file: .gitignore
+    status: safe
+    summary: Standard .gitignore, no malicious content.
+  - file: .nvchecker.toml
+    status: safe
+    summary: Standard nvchecker config, no malicious content.
+  - file: .SRCINFO
+    status: safe
+    summary: Standard AUR metadata file with no security concerns.
+  - file: PKGBUILD
+    status: safe
+    summary: Standard Rust package build; no security issues.
+---
+
+Materializing ttfx from local mirror...
+Materialized ttfx
+Analyzing ttfx AUR package with deepseek/deepseek-v4-flash
+Performing initial audit of PKGBUILD to ensure that we can safely run `makepkg`
+LLM auditresponse for PKGBUILD:
+<security_assessment>
+<decision>SAFE</decision>
+<details>
+The global/top-level scope of this PKGBUILD contains only standard variable assignments (pkgname, pkgver, url, depends, source, checksums, etc.) and function definitions (prepare, build, check, package). There are no command substitutions, backtick executions, eval statements, or any other code that would execute during the sourcing phase of `makepkg --printsrcinfo`. The checksum is provided (not SKIP), which is a positive signal but ultimately out of scope for this specific safety gate. No dangerous operations occur at parse time.
+</details>
+<evidence></evidence>
+<summary>Global scope is safe for sourcing.</summary>
+</security_assessment>
+
++ Initial PKGBUILD audit complete -- Global scope is safe for sourcing.
+Reviewing the 4 file(s) in the AUR repository.
+Reviewing the AUR repository's files...
+[0/4] Reviewing .SRCINFO...
+[0/4] Reviewing .SRCINFO, .gitignore...
+[0/4] Reviewing .SRCINFO, .gitignore, .nvchecker.toml...
+LLM auditresponse for .gitignore:
+<security_assessment>
+<decision>SAFE</decision>
+<details>
+The `.gitignore` file is a standard configuration file for Git repositories. It ignores all files except those explicitly listed (`.nvchecker.toml`, `.gitignore`, `PKGBUILD`, `.SRCINFO`). This pattern is typical for AUR package repositories where only specific packaging files are tracked. There is no obfuscated code, network requests, file operations, or any indication of malicious behavior. The file is completely benign.
+</details>
+<evidence>
+</evidence>
+<summary>Standard .gitignore, no malicious content.</summary>
+</security_assessment>
+
+[1/4] Reviewing .SRCINFO, .nvchecker.toml...
++ Reviewed .gitignore. Status: SAFE -- Standard .gitignore, no malicious content.
+[1/4] Reviewing .SRCINFO, .nvchecker.toml, PKGBUILD...
+LLM auditresponse for .nvchecker.toml:
+<security_assessment>
+<decision>SAFE</decision>
+<details>
+This file is a configuration file for `nvchecker`, a tool that checks for new upstream releases. It defines a version source pointing to the GitHub repository `omacom/ttfx`, using the latest release with a version prefix `v`. No commands, downloads, or obfuscation are present. It is purely declarative and follows standard AUR maintenance practices for automated version checking.
+</details>
+<evidence>
+</evidence>
+<summary>Standard nvchecker config, no malicious content.</summary>
+</security_assessment>
+
+[2/4] Reviewing .SRCINFO, PKGBUILD...
++ Reviewed .nvchecker.toml. Status: SAFE -- Standard nvchecker config, no malicious content.
+LLM auditresponse for .SRCINFO:
+<security_assessment>
+<decision>SAFE</decision>
+<details>
+The `.SRCINFO` file is a standard metadata file for AUR packages. It contains only package description fields such as `pkgbase`, `pkgver`, `source`, and `sha256sums`. The source is fetched from the official upstream GitHub repository (`github.com/omacom/ttfx`) with a valid SHA256 checksum (not `SKIP`). There are no executable instructions, no suspicious network calls, no obfuscated code, and no deviation from normal packaging practices. This file poses no security risk.
+</details>
+<evidence>
+</evidence>
+<summary>Standard AUR metadata file with no security concerns.</summary>
+</security_assessment>
+
+[3/4] Reviewing PKGBUILD...
++ Reviewed .SRCINFO. Status: SAFE -- Standard AUR metadata file with no security concerns.
+LLM auditresponse for PKGBUILD:
+<security_assessment>
+<decision>SAFE</decision>
+<details>
+The PKGBUILD follows standard AUR packaging practices for a Rust project. The source is fetched from the official GitHub repository with a pinned version tarball and a SHA-256 checksum (not skipped). The build process uses `cargo fetch`, `cargo build --frozen`, and `cargo test` as expected. Shell completions are generated by executing the built binary from the build directory, which is a normal pattern. The package installation copies files into standard locations. There are no obfuscated commands, no unexpected network requests, no execution of untrusted code, and no deviations from typical packaging.
+</details>
+<evidence></evidence>
+<summary>Standard Rust package build; no security issues.</summary>
+</security_assessment>
+
+[4/4] Reviewing ...
++ Reviewed PKGBUILD. Status: SAFE -- Standard Rust package build; no security issues.
+Reviewed all the AUR repository's files.
+Audit complete! Result: No issues found
+API Usage Summary
+  Models: deepseek/deepseek-v4-flash
+  Prompt Tokens: 11,773
+  Completion Tokens: 3,015
+  Total Tokens: 14,788
+  Total Cost: $0.001620
+  Execution Time: 53.38 seconds
+
+Final Status: SAFE
+
+
+No issues found.
