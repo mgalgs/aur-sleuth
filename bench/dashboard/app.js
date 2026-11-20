@@ -216,7 +216,7 @@ function renderVerdict() {
     const cls = counts.look ? 'st-look' : 'st-disputed';
     const tail = unsettled
         ? ', ' + countLink('unsettled', fmtNum(unsettled) + ' still unsettled', cls) + '.'
-        : ', nothing flagged.';
+        : counts.confirmed ? ', nothing else flagged.' : ', nothing flagged.';
     document.getElementById('verdict-sub').innerHTML =
         'Out of <span class="n">' + fmtNum(total) + '</span> packages read so far' + tail;
 }
@@ -280,7 +280,11 @@ function renderGrid() {
     // fact about the pipeline nothing else on the page shows.
     const entries = Object.entries(DATA.packages || {}).sort((a, b) =>
         String(b[1].latest_date || '').localeCompare(String(a[1].latest_date || '')));
-    const shown = entries.slice(0, GRID_CAP);
+    // A flagged package is drawn however old it is: the cap trims the picture
+    // of clean history, never a finding. It keeps its place in the timeline.
+    const flagged = new Set(['confirmed', 'look', 'disputed']);
+    const shown = entries.filter(([, pkg], i) => i < GRID_CAP || flagged.has(packageState(pkg)));
+    const older = shown.length - Math.min(entries.length, GRID_CAP);
     const counts = countStates();
     const present = STATES.filter(k => counts[k] > 0);
 
@@ -297,7 +301,8 @@ function renderGrid() {
     }).join('');
 
     document.getElementById('grid-note').textContent = shown.length < entries.length
-        ? 'the ' + fmtNum(shown.length) + ' most recent of ' + fmtNum(entries.length)
+        ? 'the ' + fmtNum(GRID_CAP) + ' most recent of ' + fmtNum(entries.length)
+          + (older > 0 ? ', and ' + fmtNum(older) + ' flagged earlier' : '')
         : fmtNum(entries.length) + ' packages, newest first';
     document.getElementById('grid-legend').innerHTML =
         present.map(k => '<span><span class="sq gc-' + k + '"></span>' + escapeHtml(STATE_LABEL[k]) + '</span>').join('')
